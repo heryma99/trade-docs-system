@@ -10,6 +10,8 @@
   /** 模板明细表头别名词典：把模板里真实列名映射到数据字段 */
   var HEADER_ALIASES = {
     no:      ['NO.', 'NO', '序号', '#', '项次'],
+    boxNo:   ['CTNR NO', 'CTNR NO.', 'CTNRNO', 'CTNR', 'CARTON NO', 'CARTON#', '箱号', 'CARTON', 'CTN#'],
+    boxCount:['CTNS', 'CARTONS', '箱数', '件数', 'TYPES OF PKG', 'TYPESOFPKG', 'NO. AND TYPES OF PKG'],
     sku:     ['SKU', '款号', '商品编码', '商家编码', '货号', '规格编码', 'MODEL NO', 'MODELNO'],
     model:   ['MODEL', '型号', 'MODEL NO.', 'MODEL NO'],
     nameEn:  ['DESCRIPTION', 'DESCRIPTION OF GOODS', 'GOODS DESCRIPTION', '英文品名', '品名(英文)', '品名'],
@@ -21,6 +23,7 @@
     amount:  ['AMOUNT', '金额', 'TOTAL', 'TOTAL AMOUNT', 'TOTAL PRICE'],
     nw:      ['N.W', 'N.W.', 'NW', 'NET WEIGHT', '净重'],
     gw:      ['G.W', 'G.W.', 'GW', 'GROSS WEIGHT', '毛重'],
+    volume:  ['CBM', 'M3', 'VOL', 'MEAS', '体积', '尺码', 'MEAS\'T'],
     material:['MATERIAL', '材质', '质地'],
     brand:   ['BRAND', '品牌'],
     origin:  ['ORIGIN', '原产地', '产地', 'COUNTRY OF ORIGIN']
@@ -603,6 +606,27 @@
     // 明细区下界（供 2.5 清理残留行与 3 跳过明细区使用，必须在前面算出）
     var itemEnd = itemsRowNum === -1 ? -1 : itemsRowNum + Math.max((data.items || []).length, 1) - 1;
 
+    // 扫描模板实际明细槽位数：连续行「至少一格有 border」即视为同一明细槽
+    //   v1.4.26 修复 KEAS 类「模板已预留 10 行只第 1 行有 items.* 又被插 9 行」bug
+    //   - 仅靠 `{{items.*}}` 计数会漏掉「第 1 行有 items.* + 后续 N-1 行仅占位符+同款 border」的常见模板
+    //   - 用 border 识别更稳：明细行必有边框（表头/页脚行一般无）
+    function hasItemRowBorder(row) {
+      var ok = false;
+      row.eachCell({ includeEmpty: true }, function (cell) {
+        if (cell.border && (cell.border.top || cell.border.bottom || cell.border.left || cell.border.right)) ok = true;
+      });
+      return ok;
+    }
+    var templateSlots = 1;
+    if (itemsRowNum !== -1) {
+      while (true) {
+        var nextRow = ws.getRow(itemsRowNum + templateSlots);
+        if (!hasItemRowBorder(nextRow)) break;
+        templateSlots++;
+        if (templateSlots > 50) break; // 防御
+      }
+    }
+
     // 2) 明细区展开：先复制模板行样式与占位内容 N-1 次
     var items = data.items || [];
     if (itemsRowNum !== -1 && items.length > 0) {
@@ -611,12 +635,14 @@
       tplRow.eachCell({ includeEmpty: true }, function (cell, colNumber) {
         tplCells.push({ col: colNumber, value: cell.value, style: cell.style });
       });
-      if (items.length > 1) {
+      var slotDelta = items.length - templateSlots; // 正=需插入；负=需删除
+      if (slotDelta > 0) {
+        // 模板槽位不足 → 插入 (items.length - templateSlots) 行
         var _insertArgs = [];
-        for (var _k = 0; _k < items.length - 1; _k++) _insertArgs.push([]);
-        splices.push({ at: itemsRowNum + 1, delta: items.length - 1 });
+        for (var _k = 0; _k < slotDelta; _k++) _insertArgs.push([]);
+        splices.push({ at: itemsRowNum + 1, delta: slotDelta });
         ws.spliceRows.apply(ws, [itemsRowNum + 1, 0].concat(_insertArgs));
-        for (var i = 1; i < items.length; i++) {
+        for (var i = 1; i < slotDelta + 1; i++) {
           var newRow = ws.getRow(itemsRowNum + i);
           newRow.height = tplRow.height;
           tplCells.forEach(function (tc) {
@@ -625,6 +651,11 @@
             c.style = JSON.parse(JSON.stringify(tc.style || {}));
           });
         }
+      } else if (slotDelta < 0) {
+        // 模板槽位多于实际 items → 删除多余行（保留带边框整行→上移不影响：V1.4.15 实践已改为「保留行+清残留」，
+        //   这里若直接 spliceRows 删 N 行会导致其下 VGM/footer 上移并破坏 2.5 段原样式，故暂保留「不减行」兜底）
+        //   为避免插入/删除不对称导致版式错位，强制以 items.length 槽数为准（多删少插）—— 实测多数模板 items 数=模板槽数，无需走此分支。
+        // 暂不实现：保持现状多槽位（多余槽位 2.5 段会清掉 {{items.*}} 占位符文本，整行仍带原样式）
       }
       // 逐行填充 items：占位符优先；无占位符但有表头映射的列，按表头写值
       for (var r = 0; r < items.length; r++) {
@@ -650,6 +681,29 @@
             }
           }
         });
+      }
+      // 2.1.5) 兜底：模板预留下方明细行（如 KEAS 第 1 行有 items.* 后面 9 行仅 marks 占位符+border）
+      //        rowObj.eachCell 不会遍历「无 value 仅有 style」的格，按表头映射显式补写
+      if (Object.keys(itemHeaderMap).length > 0) {
+        for (var r2 = 0; r2 < items.length; r2++) {
+          var rowObj2 = ws.getRow(itemsRowNum + r2);
+          if (mergedMaps.subordinate[(itemsRowNum + r2) + ',' + 1]) continue; // 合并从属格主格统一显示
+          var ctx2 = Object.assign({}, data, { items: items[r2] });
+          Object.keys(itemHeaderMap).forEach(function (colStr) {
+            var col = parseInt(colStr, 10);
+            if (mergedMaps.subordinate[(itemsRowNum + r2) + ',' + col]) return;
+            var cell2 = rowObj2.getCell(col);
+            var cur2 = cellString(cell2);
+            if (cur2 && cur2 !== '') return; // 已有内容（占位符已填）跳过
+            var field2 = itemHeaderMap[col];
+            if (!field2) return;
+            var v2 = getPath(ctx2, 'items.' + field2);
+            if (v2 === undefined || v2 === null || v2 === '') v2 = getPath(ctx2, field2);
+            if (v2 !== undefined && v2 !== null && v2 !== '') {
+              cell2.value = (typeof v2 === 'number') ? v2 : String(v2);
+            }
+          });
+        }
       }
       // 2.2) 列宽自适应：按 items 各字段最长值（中文字符按 2 倍宽估算）动态加宽
       //   itemHeaderMap 映射的列，避免长字符溢出覆盖相邻列；wrapText 关掉放末尾（避免 ④ 还原 alignment 被覆盖）。
