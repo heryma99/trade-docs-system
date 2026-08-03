@@ -150,7 +150,8 @@
         asin: d.asin || '', fnsku: d.fnsku || sku, note: d.note || '', costPrice: d.costPrice || '',
         currency: currency, destCountry: destCountry, refId: refId,
         condition: d.condition || 'NEW', exportPrefer: d.exportPrefer || '', tradeTerm: tradeTerm,
-        batteryType: d.batteryType || '', taxNo: d.taxNo || ''
+        batteryType: d.batteryType || '', taxNo: d.taxNo || '',
+        shippingMarks: '', poNo: refId, manufacturer: d.manufacturer || ''
       };
     }
 
@@ -204,7 +205,7 @@
         pkAgg[k].qty += b.qty; pkAgg[k].nw += b.nw || 0; pkAgg[k].gw += b.gw || 0;
       });
     }
-    var totals = { qty: 0, amount: 0, nw: 0, gw: 0, boxCount: 0, volume: 0 };
+    var totals = { qty: 0, amount: 0, nw: 0, gw: 0, boxCount: 0, volume: 0, volumeWeight: 0 };
     items.forEach(function (it, idx) {
       it.no = idx + 1;
       it.amount = round(it.qty * it.price, 2);
@@ -231,9 +232,9 @@
       } else {
         it._weightSource = 'packing';
       }
-      totals.qty += it.qty; totals.amount += it.amount; totals.nw += it.nw; totals.gw += it.gw;
+      totals.qty += it.qty; totals.amount += it.amount; totals.nw += it.nw; totals.gw += it.gw; totals.volumeWeight += (Number(it.volumeWeight) || 0);
     });
-    totals.amount = round(totals.amount, 2); totals.nw = round(totals.nw, 3); totals.gw = round(totals.gw, 3);
+    totals.amount = round(totals.amount, 2); totals.nw = round(totals.nw, 3); totals.gw = round(totals.gw, 3); totals.volumeWeight = round(totals.volumeWeight, 3);
     if (packing) {
       totals.boxCount = packing.totals.boxCount;
       totals.volume = packing.totals.volume;
@@ -841,6 +842,23 @@
     }
     // ⑥ 把源模板 logo 贴回输出 workbook（预览与导出都能显示）
     addLogo(wb, ws, options.logo);
+    // ⑥.5) 合并从属格继承主格样式：ExcelJS 写回无值单元格时会丢弃其样式，导致合并块从属格
+    //      （如 Aramex I21:K22 的 J21/K21/I22/J22/K22）在「写回→重读」后丢失对齐/字体等；
+    //       把主格样式显式赋给从属格使其持久化。视觉不变（合并块本就按主格显示）。
+    (ws.model.merges || []).forEach(function (mref) {
+      var mm = parseMergeRef(mref); if (!mm) return;
+      var master = ws.getCell(mm.top, mm.left);
+      var ms = master.style; if (!ms) return;
+      for (var rr = mm.top; rr <= mm.bottom; rr++) {
+        for (var cc = mm.left; cc <= mm.right; cc++) {
+          if (rr === mm.top && cc === mm.left) continue;
+          var sc = ws.getCell(rr, cc);
+          if (!sc.style || JSON.stringify(sc.style) !== JSON.stringify(ms)) {
+            try { sc.style = JSON.parse(JSON.stringify(ms)); } catch (e) {}
+          }
+        }
+      }
+    });
     return filled;
   }
 
