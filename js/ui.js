@@ -719,7 +719,12 @@
     document.querySelectorAll('.tp-prev').forEach(function (b) {
       b.onclick = async function () {
         var t = await db.get('templates', b.dataset.id);
-        var wb = await loadWb(t.fileBuf);
+        // 方案 B：模板库预览直接显示源文件原样（含 LOGO + 样张公司名/地址），不走 normalize
+        var buf = t.previewBuf || t.fileBuf;
+        var wb = await loadWb(buf);
+        // 源文件被 ExcelJS 载入时可能已带有内嵌图，避免重复贴图
+        var hasImg = wb.worksheets[0].getImages && wb.worksheets[0].getImages().length > 0;
+        if (t.logo && t.logo.dataB64 && !hasImg) engine.addLogo(wb, wb.worksheets[0], t.logo);
         showModal('<h3>模板预览 · ' + esc(t.name) + '</h3><div style="overflow:auto">' + wbToHtml(wb) + '</div>' +
           '<div style="text-align:right;margin-top:12px"><button class="btn" onclick="TDUI.closeModal()">关闭</button></div>');
       };

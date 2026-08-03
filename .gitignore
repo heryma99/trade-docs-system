@@ -1,6 +1,7 @@
 # debug artifacts
 templates/_*.xlsx
 templates/_*.html
+tests/_*.js
 *.tmp
 
 # OS / editor

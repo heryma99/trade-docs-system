@@ -31,6 +31,18 @@
         if (!src) return;
         var dirty = false;
         if (t.builtin && !t.logo && src.logo) { t.logo = src.logo; dirty = true; }
+        // 方案 B：给缺 previewBuf 的内置模板补回源文件原样（预览直接显示 LOGO + 样张）
+        if (t.builtin && src.previewBufB64 && !t.previewBuf) {
+          try {
+            var pbin = src.previewBufB64;
+            var pbinary = (typeof atob !== 'undefined') ? atob(pbin) : Buffer.from(pbin, 'base64').toString('binary');
+            var pab2 = new ArrayBuffer(pbinary.length);
+            var pvu2 = new Uint8Array(pab2);
+            for (var pj = 0; pj < pbinary.length; pj++) pvu2[pj] = pbinary.charCodeAt(pj);
+            t.previewBuf = pab2;
+            dirty = true;
+          } catch (e) { /* ignore */ }
+        }
         if (t.builtin && src.fileBufB64 && t.mapping && !t.mapping.scanned) {
           // 映射扫描结果也补上（v1.4.14 引入的扫描缓存）
           try {
@@ -101,9 +113,16 @@
             mapping.scanned = { fields: [], itemFields: [], itemsRow: -1, itemHeaderMap: {}, sheetName: '' };
           });
           jobs.push(scanJob.then(function () {
+            // 方案 B：预览用源文件原样（含 LOGO + 样张公司名/地址），不走 normalize
+            var pbin = rt.previewBufB64 || '';
+            var pbinary = (typeof atob !== 'undefined') ? atob(pbin) : Buffer.from(pbin, 'base64').toString('binary');
+            var pab = new ArrayBuffer(pbinary.length);
+            var pvu = new Uint8Array(pab);
+            for (var pi = 0; pi < pbinary.length; pi++) pvu[pi] = pbinary.charCodeAt(pi);
             return db.put('templates', {
               id: rt.id, name: rt.name, kind: rt.kind, carrier: rt.carrier || '通用',
               status: 'active', builtin: true, fileBuf: ab,
+              previewBuf: pbin ? pab : null,
               logo: rt.logo || null,
               mapping: mapping
             });

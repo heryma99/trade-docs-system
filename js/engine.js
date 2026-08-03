@@ -491,6 +491,28 @@
     return { subordinate: subordinate, masterOf: masterOf, masterRange: masterRange };
   }
 
+  /** 把源模板 logo 贴回 workbook（预览与导出都能显示）。ws 为目标工作表。
+   *  logo = { dataB64, ext, from:{col,row}, to:{col,row} } */
+  function addLogo(wb, ws, logo) {
+    if (!logo || !logo.dataB64 || !logo.ext) return;
+    try {
+      var logoBuf;
+      if (typeof Buffer !== 'undefined') {
+        logoBuf = Buffer.from(logo.dataB64, 'base64');
+      } else if (typeof atob !== 'undefined') {
+        var binary = atob(logo.dataB64);
+        var arr = new Uint8Array(binary.length);
+        for (var ii = 0; ii < binary.length; ii++) arr[ii] = binary.charCodeAt(ii);
+        logoBuf = arr;
+      }
+      if (!logoBuf) return;
+      var imgId = wb.addImage({ buffer: logoBuf, extension: logo.ext });
+      var tl = logo.from || { col: 0, row: 0 };
+      var br = logo.to || { col: (logo.from ? logo.from.col + 2 : 2), row: (logo.from ? logo.from.row + 2 : 2) };
+      ws.addImage(imgId, { tl: tl, br: br });
+    } catch (e) {}
+  }
+
   /** 模板填充：wb已加载的模板workbook，data为buildDocData输出。原地填充。
    *  支持两种模式：① {{items.xxx}} 占位符（老模板） ② 表头识别（物流商真实模板，无占位符也可填）
    *  options.logo = { dataB64, ext, from:{col,row}, to:{col,row} } 可选，用于把源模板 logo 贴回输出 workbook */
@@ -701,23 +723,7 @@
       }
     }
     // ⑥ 把源模板 logo 贴回输出 workbook（预览与导出都能显示）
-    if (options.logo && options.logo.dataB64 && options.logo.ext) {
-      try {
-        var logoBuf;
-        if (typeof Buffer !== 'undefined') {
-          logoBuf = Buffer.from(options.logo.dataB64, 'base64');
-        } else if (typeof atob !== 'undefined') {
-          var binary = atob(options.logo.dataB64);
-          var arr = new Uint8Array(binary.length);
-          for (var ii = 0; ii < binary.length; ii++) arr[ii] = binary.charCodeAt(ii);
-          logoBuf = arr;
-        }
-        if (logoBuf) {
-          var imgId = wb.addImage({ buffer: logoBuf, extension: options.logo.ext });
-          ws.addImage(imgId, { tl: options.logo.from, br: options.logo.to });
-        }
-      } catch (e) {}
-    }
+    addLogo(wb, ws, options.logo);
     return filled;
   }
 
@@ -869,6 +875,7 @@
     amountInWords: amountInWords,
     scanTemplate: scanTemplate,
     fillTemplate: fillTemplate,
+    addLogo: addLogo,
     makeBuiltinInvoiceTemplate: makeBuiltinInvoiceTemplate,
     makeBuiltinBookingTemplate: makeBuiltinBookingTemplate,
     REQUIRED_FIELDS: REQUIRED_FIELDS
