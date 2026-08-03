@@ -469,9 +469,8 @@ async function transform(wb, t) {
     try { fs.unlinkSync(tmpPath); } catch (e) {}
     const b64 = fs.readFileSync(outPath).toString('base64');
     const entry = { id: t.id, name: t.name, kind: t.kind, carrier: t.carrier, builtin: false, fileBufB64: b64 };
-    // 方案 B：预览直接显示源文件原样（含 LOGO + 样张公司名/地址），不走 normalize/占位符流程。
-    // srcPath 即 resolveSrc 返回的源文件（.xls 为转换后的 xlsx），媒体/样张数据均保留。
-    try { entry.previewBufB64 = fs.readFileSync(srcPath).toString('base64'); } catch (e) {}
+    // 模板库预览：直接用 fileBuf（标准化后，含占位符）+ engine.addLogo 把 logo 贴回。
+    // 不再 bake 源文件本身（会让 JS 膨胀到 ~90MB 超出 git-blobs API 100MB 上限）。
     // 提取源文件 logo 图片（第一个内嵌图）供预览/导出复现
     const img = await extractFirstImage(srcPath);
     if (img) {
