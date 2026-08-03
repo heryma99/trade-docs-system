@@ -20,66 +20,98 @@
 
   /** 幂等seed：按 config.seedVer 防重复。engine/ExcelJS 用于生成内置模板。 */
   function run(db, engine, ExcelJS) {
-    return db.get('config', 'seedVer').then(function (cfg) {
-      if (cfg && cfg.value >= SEED_VER) return { seeded: false };
-      var jobs = [
-        db.bulkPut('parties', PARTIES.slice()),
-        db.bulkPut('declare_reqs', DECLARES.slice())
-      ];
-      // 飞书《申报信息》双表合并镜像（tests/build_declare_data.js 生成，js/declare_data.js 提供）。
-      // 仅新增本地缺失的 SKU，不覆盖用户已手填/已存在的申报要素。
-      var realDeclares = (typeof window !== 'undefined' && window.TD && window.TD.declareData) ? window.TD.declareData : [];
-      if (realDeclares.length) {
-        jobs.push(db.all('declare_reqs').then(function (existing) {
-          var have = {};
-          existing.forEach(function (e) { have[e.sku] = true; });
-          var toAdd = realDeclares.filter(function (r) { return !have[r.sku]; });
-          return toAdd.length ? db.bulkPut('declare_reqs', toAdd) : null;
-        }));
-      }
-      // 内置模板
-      var inv = engine.makeBuiltinInvoiceTemplate(ExcelJS);
-      var bok = engine.makeBuiltinBookingTemplate(ExcelJS);
-      jobs.push(inv.xlsx.writeBuffer().then(function (buf) {
-        return db.put('templates', {
-          id: 'tpl_builtin_invoice', name: '内置·通用商业发票模板', kind: 'invoice', carrier: '通用',
-          status: 'active', builtin: true, fileBuf: buf,
-          mapping: { required: engine.REQUIRED_FIELDS.invoice }
-        });
-      }));
-      jobs.push(bok.xlsx.writeBuffer().then(function (buf) {
-        return db.put('templates', {
-          id: 'tpl_builtin_booking', name: '内置·通用订舱单模板(BOOKING FORM)', kind: 'booking', carrier: '通用',
-          status: 'active', builtin: true, fileBuf: buf,
-          mapping: { required: engine.REQUIRED_FIELDS.booking }
-        });
-      }));
-      // 真实业务模板（tests/build_real_templates.js 生成，js/real_templates.js 提供 base64）
-      var realTpls = (typeof window !== 'undefined' && window.TD && window.TD.realTemplates) ? window.TD.realTemplates : [];
-      realTpls.forEach(function (rt) {
-        var bin = rt.fileBufB64 || '';
-        var binary = (typeof atob !== 'undefined') ? atob(bin) : Buffer.from(bin, 'base64').toString('binary');
-        var ab = new ArrayBuffer(binary.length);
-        var vu = new Uint8Array(ab);
-        for (var i = 0; i < binary.length; i++) vu[i] = binary.charCodeAt(i);
-        var mapping = { required: engine.REQUIRED_FIELDS[rt.kind] || [] };
-        // 首次 seed 时扫描模板占位符并缓存，供后续 boxMode 等逻辑使用
-        var scanJob = new ExcelJS.Workbook().xlsx.load(ab).then(function (wb) {
-          mapping.scanned = engine.scanTemplate(wb);
-        }).catch(function (e) {
-          mapping.scanned = { fields: [], itemFields: [], itemsRow: -1, itemHeaderMap: {}, sheetName: '' };
-        });
-        jobs.push(scanJob.then(function () {
+    var realTplsEarly = (typeof window !== 'undefined' && window.TD && window.TD.realTemplates) ? window.TD.realTemplates : [];
+    var byIdEarly = {};
+    realTplsEarly.forEach(function (rt) { byIdEarly[rt.id] = rt; });
+    // 先做幂等迁移：给缺 logo / 缺 mapping.scanned 的内置模板补字段（不破坏用户手填数据）。
+    var migrateJobs = db.all('templates').then(function (existing) {
+      var ups = [];
+      existing.forEach(function (t) {
+        var src = byIdEarly[t.id];
+        if (!src) return;
+        var dirty = false;
+        if (t.builtin && !t.logo && src.logo) { t.logo = src.logo; dirty = true; }
+        if (t.builtin && src.fileBufB64 && t.mapping && !t.mapping.scanned) {
+          // 映射扫描结果也补上（v1.4.14 引入的扫描缓存）
+          try {
+            var bin = src.fileBufB64;
+            var binary = (typeof atob !== 'undefined') ? atob(bin) : Buffer.from(bin, 'base64').toString('binary');
+            var ab2 = new ArrayBuffer(binary.length);
+            var vu2 = new Uint8Array(ab2);
+            for (var i2 = 0; i2 < binary.length; i2++) vu2[i2] = binary.charCodeAt(i2);
+            var wb2 = new ExcelJS.Workbook();
+            wb2.xlsx.load(ab2).then(function (wb) {
+              t.mapping.scanned = engine.scanTemplate(wb);
+              db.put('templates', t);
+            }).catch(function () { /* ignore */ });
+          } catch (e) { /* ignore */ }
+        }
+        if (dirty) ups.push(db.put('templates', t));
+      });
+      return Promise.all(ups);
+    });
+    return migrateJobs.then(function () {
+      return db.get('config', 'seedVer').then(function (cfg) {
+        if (cfg && cfg.value >= SEED_VER) return { seeded: false };
+        var jobs = [
+          db.bulkPut('parties', PARTIES.slice()),
+          db.bulkPut('declare_reqs', DECLARES.slice())
+        ];
+        // 飞书《申报信息》双表合并镜像（tests/build_declare_data.js 生成，js/declare_data.js 提供）。
+        // 仅新增本地缺失的 SKU，不覆盖用户已手填/已存在的申报要素。
+        var realDeclares = (typeof window !== 'undefined' && window.TD && window.TD.declareData) ? window.TD.declareData : [];
+        if (realDeclares.length) {
+          jobs.push(db.all('declare_reqs').then(function (existing) {
+            var have = {};
+            existing.forEach(function (e) { have[e.sku] = true; });
+            var toAdd = realDeclares.filter(function (r) { return !have[r.sku]; });
+            return toAdd.length ? db.bulkPut('declare_reqs', toAdd) : null;
+          }));
+        }
+        // 内置模板
+        var inv = engine.makeBuiltinInvoiceTemplate(ExcelJS);
+        var bok = engine.makeBuiltinBookingTemplate(ExcelJS);
+        jobs.push(inv.xlsx.writeBuffer().then(function (buf) {
           return db.put('templates', {
-            id: rt.id, name: rt.name, kind: rt.kind, carrier: rt.carrier || '通用',
-            status: 'active', builtin: true, fileBuf: ab,
-            logo: rt.logo || null,
-            mapping: mapping
+            id: 'tpl_builtin_invoice', name: '内置·通用商业发票模板', kind: 'invoice', carrier: '通用',
+            status: 'active', builtin: true, fileBuf: buf,
+            mapping: { required: engine.REQUIRED_FIELDS.invoice }
           });
         }));
-      });
-      return Promise.all(jobs).then(function () {
-        return db.put('config', { key: 'seedVer', value: SEED_VER }).then(function () { return { seeded: true }; });
+        jobs.push(bok.xlsx.writeBuffer().then(function (buf) {
+          return db.put('templates', {
+            id: 'tpl_builtin_booking', name: '内置·通用订舱单模板(BOOKING FORM)', kind: 'booking', carrier: '通用',
+            status: 'active', builtin: true, fileBuf: buf,
+            mapping: { required: engine.REQUIRED_FIELDS.booking }
+          });
+        }));
+        // 真实业务模板（tests/build_real_templates.js 生成，js/real_templates.js 提供 base64）
+        var realTpls = (typeof window !== 'undefined' && window.TD && window.TD.realTemplates) ? window.TD.realTemplates : [];
+        realTpls.forEach(function (rt) {
+          var bin = rt.fileBufB64 || '';
+          var binary = (typeof atob !== 'undefined') ? atob(bin) : Buffer.from(bin, 'base64').toString('binary');
+          var ab = new ArrayBuffer(binary.length);
+          var vu = new Uint8Array(ab);
+          for (var i = 0; i < binary.length; i++) vu[i] = binary.charCodeAt(i);
+          var mapping = { required: engine.REQUIRED_FIELDS[rt.kind] || [] };
+          // 首次 seed 时扫描模板占位符并缓存，供后续 boxMode 等逻辑使用
+          var scanJob = new ExcelJS.Workbook().xlsx.load(ab).then(function (wb) {
+            mapping.scanned = engine.scanTemplate(wb);
+          }).catch(function (e) {
+            mapping.scanned = { fields: [], itemFields: [], itemsRow: -1, itemHeaderMap: {}, sheetName: '' };
+          });
+          jobs.push(scanJob.then(function () {
+            return db.put('templates', {
+              id: rt.id, name: rt.name, kind: rt.kind, carrier: rt.carrier || '通用',
+              status: 'active', builtin: true, fileBuf: ab,
+              logo: rt.logo || null,
+              mapping: mapping
+            });
+          }));
+        });
+        return Promise.all(jobs).then(function () {
+          return db.put('config', { key: 'seedVer', value: SEED_VER }).then(function () { return { seeded: true }; });
+        });
       });
     });
   }
