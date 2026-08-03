@@ -651,6 +651,38 @@
           }
         });
       }
+      // 2.2) 列宽自适应：按 items 各字段最长值（中文字符按 2 倍宽估算）动态加宽
+      //   itemHeaderMap 映射的列，避免长字符溢出覆盖相邻列；wrapText 关掉放末尾（避免 ④ 还原 alignment 被覆盖）。
+      Object.keys(itemHeaderMap).forEach(function (colStr) {
+        var col = parseInt(colStr, 10);
+        var field = itemHeaderMap[col];
+        if (!field) return;
+        var sample = '';
+        items.forEach(function (it) {
+          var v = (it && it[field] !== undefined && it[field] !== null) ? it[field] : '';
+          var s = String(v);
+          var pxS = 0, pxSample = 0;
+          for (var kk = 0; kk < s.length; kk++) {
+            var ch = s.charCodeAt(kk);
+            pxS += ((ch >= 0x4E00 && ch <= 0x9FFF) || (ch >= 0x3000 && ch <= 0x303F) || (ch >= 0xFF00 && ch <= 0xFFEF)) ? 14 : 7;
+          }
+          for (var kk2 = 0; kk2 < sample.length; kk2++) {
+            var ch2 = sample.charCodeAt(kk2);
+            pxSample += ((ch2 >= 0x4E00 && ch2 <= 0x9FFF) || (ch2 >= 0x3000 && ch2 <= 0x303F) || (ch2 >= 0xFF00 && ch2 <= 0xFFEF)) ? 14 : 7;
+          }
+          if (pxS > pxSample) sample = s;
+        });
+        if (!sample) return;
+        var px = 0;
+        for (var k = 0; k < sample.length; k++) {
+          var ch3 = sample.charCodeAt(k);
+          px += ((ch3 >= 0x4E00 && ch3 <= 0x9FFF) || (ch3 >= 0x3000 && ch3 <= 0x303F) || (ch3 >= 0xFF00 && ch3 <= 0xFFEF)) ? 14 : 7;
+        }
+        var wsCol = ws.getColumn(col);
+        var oldW = wsCol.width || 8.43;
+        var newW = Math.max(oldW, Math.ceil(px / 7) + 2);
+        if (newW > oldW + 0.05) wsCol.width = newW;
+      });
     }
 
     // 2.5) 清理模板多余的明细占位符：itemEnd 之后若仍有 {{items.*}} 残留（模板预设行数>实际条数），
@@ -719,6 +751,19 @@
         (ws.model.merges || []).slice().forEach(function (m) { try { ws.unMergeCells(m); } catch (e) {} });
         newMerges.forEach(function (m) {
           try { ws.mergeCells(makeMergeRef(m)); } catch (e) {}
+        });
+      }
+    }
+    // ⑤.5) 明细行 wrapText 关掉（放在 ④ 还原 origStyles 之后，避免被覆盖）：
+    //   源模板 D/F/H 等列常 wrap=true，列宽刚好到边界时会强制把 "Handbag" 折成 "Handba\ng"
+    //   显示错位；关 wrap 后长字符溢出右空白列更符合订舱单观感（且第 2.2 段已加宽列避免溢出到相邻内容列）。
+    if (itemsRowNum !== -1) {
+      for (var rrW = 0; rrW < items.length; rrW++) {
+        var rrowW = ws.getRow(itemsRowNum + rrW);
+        rrowW.eachCell({ includeEmpty: true }, function (cell) {
+          if (cell.alignment && cell.alignment.wrapText) {
+            cell.alignment = Object.assign({}, cell.alignment, { wrapText: false });
+          }
         });
       }
     }

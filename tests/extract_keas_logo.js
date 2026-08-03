@@ -1,0 +1,11 @@
+const path = require('path');
+const fs = require('fs');
+const vm = require('vm');
+const realTemplatesPath = path.join(__dirname, '..', 'js', 'real_templates.js');
+const src = fs.readFileSync(realTemplatesPath, 'utf8');
+const sandbox = { window: {} };
+vm.createContext(sandbox);
+vm.runInContext(src, sandbox);
+const list = sandbox.window.TD.realTemplates;
+const keas = list.find(t => /keas/i.test(t.id) || /keas/i.test(t.name));
+console.log('KEAS found:', keas ? keas.id : 'no', '| logo ext:', keas && keas.logo ? keas.logo.ext : 'no', '| dataB64 len:', keas && keas.logo ? keas.logo.dataB64.length : 0);

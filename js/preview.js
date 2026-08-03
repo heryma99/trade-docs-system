@@ -19,7 +19,8 @@
   }
 
   // 标准 Office 主题色板（theme 索引 → 基准 hex），覆盖绝大多数默认主题模板
-  var XLSX_THEME = ['000000', 'FFFFFF', '1F4E79', 'E7E6E6', '4472C4', 'ED7D31', 'FFC000', '70AD47', '7030A0', 'C00000', 'BFBFBF', '808080'];
+  // Office 2016+ 主题语义：0=lt1 窗口背景(白) 1=dk1 窗口文字(黑) 2=lt2 3=dk2 4-8=accent1-5 9=hlink 10=folHlink 11=lt2-variant
+  var XLSX_THEME = ['FFFFFF', '000000', '1F4E79', 'E7E6E6', '4472C4', 'ED7D31', 'FFC000', '70AD47', '7030A0', 'C00000', 'BFBFBF', '808080'];
 
   function _hx(n) { n = Math.max(0, Math.min(255, Math.round(n))); return ('0' + n.toString(16)).slice(-2); }
   function _mix(hex, target, t) {
@@ -157,8 +158,10 @@
         var ext = (media.extension || 'png').toLowerCase();
         var mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/' + ext;
         // 计算像素位置：累加 col/row 之前的列宽/行高
-        function colX(idx) { var x = 0; for (var i = 1; i <= idx; i++) x += colWs[i] || 0; return x; }
-        function rowY(idx) { var y = 0; for (var i = 1; i <= idx; i++) { var rh = ws.getRow(i).height; y += rh ? Math.round(rh * 1.333) : 0; } return y; }
+        // 自动行高/列宽(ExcelJS 返回 undefined)需回退默认值，否则图片 top/height 累加为 0 → 不可见。
+        //   默认行高 ≈ 15pt × 1.333 ≈ 20px；默认列宽 ≈ 8.43 × 7 ≈ 59px
+        function colX(idx) { var x = 0; for (var i = 1; i <= idx; i++) x += colWs[i] || 59; return x; }
+        function rowY(idx) { var y = 0; for (var i = 1; i <= idx; i++) { var rh = ws.getRow(i).height; y += rh ? Math.round(rh * 1.333) : 20; } return y; }
         var r0 = im.range.tl; var r1 = im.range.br;
         var x0 = colX(r0.nativeCol); var y0 = rowY(r0.nativeRow);
         var x1 = colX(r1.nativeCol + 1); var y1 = rowY(r1.nativeRow + 1);
