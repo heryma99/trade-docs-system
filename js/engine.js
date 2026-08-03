@@ -660,7 +660,22 @@
       // 逐行填充 items：占位符优先；无占位符但有表头映射的列，按表头写值
       for (var r = 0; r < items.length; r++) {
         var rowObj = ws.getRow(itemsRowNum + r);
-        var ctx = Object.assign({}, data, { items: items[r] });
+        var itR = items[r];
+        // v1.4.27 选项A：整行无货物内容（无 nameEn/nameCn/description/sku）时整行留空，
+        //   含 B(boxCount)/I(S/O NO)/K(boxNo)/M(SEAL NO) 等均不写，仅清掉残留 {{items.*}} 占位符
+        var rowEmpty = !itR || (!itR.nameEn && !itR.nameCn && !itR.description && !itR.sku);
+        if (rowEmpty) {
+          (function () {
+            var rn = itemsRowNum + r;
+            rowObj.eachCell({ includeEmpty: true }, function (cell) {
+              if (mergedMaps.subordinate[rn + ',' + cell.col]) return;
+              var s = cellString(cell);
+              if (s && s.indexOf('{{items.') >= 0) cell.value = '';
+            });
+          })();
+          continue;
+        }
+        var ctx = Object.assign({}, data, { items: itR });
         rowObj.eachCell({ includeEmpty: true }, function (cell) {
           if (mergedMaps.subordinate[(itemsRowNum + r) + ',' + cell.col]) return; // 合并从属格由主格统一显示，不单独写值
           var s = cellString(cell);
@@ -687,8 +702,11 @@
       if (Object.keys(itemHeaderMap).length > 0) {
         for (var r2 = 0; r2 < items.length; r2++) {
           var rowObj2 = ws.getRow(itemsRowNum + r2);
+          var itR2 = items[r2];
+          // v1.4.27 选项A：空内容行（无品名）整行留空，不写任何值（占位符已在上层清空）
+          if (!itR2 || (!itR2.nameEn && !itR2.nameCn && !itR2.description && !itR2.sku)) continue;
           if (mergedMaps.subordinate[(itemsRowNum + r2) + ',' + 1]) continue; // 合并从属格主格统一显示
-          var ctx2 = Object.assign({}, data, { items: items[r2] });
+          var ctx2 = Object.assign({}, data, { items: itR2 });
           Object.keys(itemHeaderMap).forEach(function (colStr) {
             var col = parseInt(colStr, 10);
             if (mergedMaps.subordinate[(itemsRowNum + r2) + ',' + col]) return;
