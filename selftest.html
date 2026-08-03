@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>自测页 · 贸易单证系统</title>
+<style>
+  :root { --bg:#0f1420; --panel:#171d2b; --panel2:#1f2738; --line:#2b3447; --fg:#e6ebf2; --muted:#9aa6bd; --ok:#3ecf8e; --bad:#ff6b6b; --accent:#4d9fff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif; }
+  header { padding:18px 22px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  h1 { font-size:18px; margin:0; }
+  .sub { color:var(--muted); font-size:12px; }
+  main { padding:18px 22px; max-width:960px; margin:0 auto; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:10px 18px; font-size:14px; cursor:pointer; font-weight:600; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .summary { margin:14px 0; padding:14px 16px; border-radius:10px; background:var(--panel2); border:1px solid var(--line); font-weight:600; }
+  .summary.ok { border-color:var(--ok); color:var(--ok); }
+  .summary.bad { border-color:var(--bad); color:var(--bad); }
+  pre { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; height:60vh; overflow:auto; white-space:pre-wrap; word-break:break-word; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; line-height:1.5; }
+  .bar { height:6px; background:var(--panel2); border-radius:6px; overflow:hidden; margin-top:10px; }
+  .bar > i { display:block; height:100%; width:0; background:var(--accent); transition:width .2s; }
+  a.back { color:var(--accent); text-decoration:none; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>贸易单证系统 · 自测页</h1>
+    <div class="sub">模拟用户全场景测试（解析 / 校验 / 生成 / 适配器 / 端到端）。用例与 Node 端 tests/run_tests.js 同源（tests/shared_tests.js）。</div>
+  </div>
+  <a class="back" href="index.html">← 返回系统</a>
+</header>
+<main>
+  <button id="run">运行全部测试</button>
+  <div class="summary" id="summary" style="display:none"></div>
+  <div class="bar" id="barwrap" style="display:none"><i id="bar"></i></div>
+  <pre id="out">点击「运行全部测试」开始。浏览器环境将逐条执行 42 个用例并回显结果。</pre>
+</main>
+
+<script src="vendor/exceljs.min.js"></script>
+<script src="js/db.js"></script>
+<script src="js/adapters.js"></script>
+<script src="js/parser.js"></script>
+<script src="js/validator.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/exporter.js"></script>
+<script src="js/seed.js"></script>
+<script src="tests/shared_tests.js"></script>
+<script>
+(function () {
+  var btn = document.getElementById('run');
+  var out = document.getElementById('out');
+  var summary = document.getElementById('summary');
+  var bar = document.getElementById('bar');
+  var barwrap = document.getElementById('barwrap');
+  btn.addEventListener('click', function () {
+    btn.disabled = true;
+    out.textContent = '';
+    summary.style.display = 'none';
+    barwrap.style.display = 'block';
+    bar.style.width = '0%';
+    var lines = 0;
+    function log(s) { out.textContent += s + '\n'; lines++; bar.style.width = Math.min(100, Math.round(lines / 60 * 100)) + '%'; out.scrollTop = out.scrollHeight; }
+    var deps = {
+      ExcelJS: window.ExcelJS,
+      parser: TD.parser, validator: TD.validator, engine: TD.engine, adapters: TD.adapters,
+      log: log
+    };
+    TD.tests.runAll(deps).then(function (res) {
+      summary.style.display = 'block';
+      bar.style.width = '100%';
+      if (res.failed) {
+        summary.className = 'summary bad';
+        summary.textContent = '❌ 失败 ' + res.failed + ' 个 / 共 ' + (res.passed + res.failed) + '。请检查上方红色用例。';
+      } else {
+        summary.className = 'summary ok';
+        summary.textContent = '✅ 全部通过：' + res.passed + ' / ' + (res.passed + res.failed) + '。';
+      }
+      btn.disabled = false;
+    }).catch(function (e) {
+      log('致命错误: ' + (e && e.stack || e));
+      summary.style.display = 'block';
+      summary.className = 'summary bad';
+      summary.textContent = '运行异常：' + e.message;
+      btn.disabled = false;
+    });
+  });
+})();
+</script>
+</body>
+</html>

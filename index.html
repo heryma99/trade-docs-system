@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>贸易单证系统 · 发票 & BOOKING FORM</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">🧾 贸易单证系统 <span class="ver">v1.4.22 LOGO显示 + 合并单元格修复（合并从属格识别 + 源图抽取贴回）</span></div>
+  <nav id="tabs">
+    <button data-tab="orders" class="tab active">订单</button>
+    <button data-tab="packings" class="tab">装箱清单</button>
+    <button data-tab="invoice" class="tab tab-primary">生成发票</button>
+    <button data-tab="booking" class="tab tab-primary">生成订舱单</button>
+    <button data-tab="documents" class="tab">单证记录</button>
+    <button data-tab="parties" class="tab">收发货人</button>
+    <button data-tab="declares" class="tab">申报信息</button>
+    <button data-tab="templates" class="tab">模板库</button>
+    <button data-tab="settings" class="tab">设置</button>
+  </nav>
+</header>
+<main id="main"><div class="loading">正在初始化…</div></main>
+<div id="toast"></div>
+<div id="modal-mask" class="hidden"><div id="modal"></div></div>
+
+<script src="vendor/exceljs.min.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="js/db.js"></script>
+<script src="js/adapters.js"></script>
+<script src="js/parser.js"></script>
+<script src="js/validator.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/exporter.js"></script>
+<script src="js/declare_data.js"></script>
+<script src="js/seed.js"></script>
+<script src="js/real_templates.js"></script>
+<script src="js/preview.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>

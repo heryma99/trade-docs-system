@@ -1,0 +1,8 @@
+# debug artifacts
+tests/templates/_*.xlsx
+tests/templates/_*.html
+*.tmp
+
+# OS / editor
+.DS_Store
+Thumbs.db
