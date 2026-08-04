@@ -1926,6 +1926,16 @@
       await hydrateFromEmbedded();
       await _migrateBase64Templates();  // v1.4.42: 把残留 base64-string 模板还原为 ArrayBuffer
       await seed.run(db, engine, ExcelJS);
+      // v1.4.44 自愈：本地无发票模板时（清空数据/换浏览器/IDB 异常），自动从团队库拉取一次，避免「发票模板怎么又没了」反复出现。
+      // 仅在 kind==='invoice' 数量为 0 时触发，不破坏已有数据；离线/网络异常静默失败。
+      try {
+        var localTpls0 = await db.all('templates');
+        var localInv0 = localTpls0.filter(function (t) { return t && t.kind === 'invoice' && t.status === 'active'; });
+        if (localInv0.length === 0) {
+          var pr0 = await pullShared();
+          if (pr0 && pr0.ok && pr0.merged > 0) toast('本地无发票模板，已从团队库自动恢复 ' + pr0.merged + ' 条主数据', 'ok');
+        }
+      } catch (e) { /* 离线/网络异常静默 */ }
       if ((await loadSyncCfg()).auto) {
         var pr = await pullShared();
         if (pr.ok) toast('已从团队库拉取 ' + pr.merged + ' 条主数据', 'ok');
