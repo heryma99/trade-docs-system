@@ -1272,7 +1272,14 @@
       '<div><label>app_secret</label><input id="st-jst-secret" type="password" value="' + esc(jst.value.appSecret || '') + '"></div></div>' +
       '<p class="hint">当前版本以手动导入xlsx为主；填入凭证后后续版本可开通API自动拉单。</p>' +
       '<button class="btn" id="st-save-jst">保存</button></div>' +
-      '<div class="card"><h3>⚠️ 数据管理</h3>' +
+      '<div class="card"><h3>💾 数据备份与本地化</h3>' +
+      '<p class="hint">所有数据存在浏览器 IndexedDB，换浏览器 / 清缓存 / 用他人电脑会丢失。可导出为「自包含 HTML」（数据嵌入文件，双击即用）或 JSON 备份。</p>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button class="btn ok" id="st-export-html">📦 导出自包含 HTML（推荐）</button>' +
+      '<button class="btn" id="st-export-json">📤 导出 JSON 备份</button>' +
+      '<button class="btn" id="st-import-json">📥 导入 JSON 备份</button>' +
+      '</div></div>' +
+      '<div class="card"><h3>⚠️ 危险操作</h3>' +
       '<button class="btn danger" id="st-wipe">清空全部本地数据（不可恢复）</button></div>' +
       '<footer class="note">贸易单证系统 · 纯前端本地存储(IndexedDB) · 七层解耦架构 · 模板占位符引擎</footer>';
   };
@@ -1313,12 +1320,95 @@
       await seed.run(db, engine, ExcelJS);
       render();
     };
+    document.getElementById('st-export-html').onclick = exportSelfContainedHTML;
+    document.getElementById('st-export-json').onclick = exportJSON;
+    document.getElementById('st-import-json').onclick = importJSON;
   };
+
+  // ---------- 数据本地化：嵌入 HTML / 导出导入 ----------
+  function b64encodeUnicode(str) {
+    var bytes = new TextEncoder().encode(str);
+    var bin = '';
+    bytes.forEach(function (b) { bin += String.fromCharCode(b); });
+    return btoa(bin);
+  }
+  function b64decodeUnicode(str) {
+    var bin = atob(str);
+    var bytes = Uint8Array.from(bin, function (c) { return c.charCodeAt(0); });
+    return new TextDecoder().decode(bytes);
+  }
+  // 启动时：若文件内置了用户数据快照，合并写回 IndexedDB（同名 key 覆盖）
+  async function hydrateFromEmbedded() {
+    var b64 = window.__USERDATA_B64__;
+    if (!b64) return;
+    try {
+      var data = JSON.parse(b64decodeUnicode(b64));
+      var total = 0;
+      for (var i = 0; i < db.STORES.length; i++) {
+        var s = db.STORES[i], list = data[s];
+        if (list && list.length) { await db.bulkPut(s, list); total += list.length; }
+      }
+      if (total) toast('已从文件内置数据恢复 ' + total + ' 条记录', 'ok');
+    } catch (e) {
+      console.error('hydrateFromEmbedded failed', e);
+    }
+    window.__USERDATA_B64__ = null; // 防止重复写入
+  }
+  // 导出自包含 HTML：把 7 个 store 全量烘焙进一个 html 副本下载（双击即用）
+  async function exportSelfContainedHTML() {
+    var data = {};
+    for (var i = 0; i < db.STORES.length; i++) data[db.STORES[i]] = await db.all(db.STORES[i]);
+    var inject = '<' + 'script>window.__USERDATA_B64__="' + b64encodeUnicode(JSON.stringify(data)) + '";<' + '/script>';
+    var html;
+    try {
+      var res = await fetch(location.href.split('#')[0]);
+      html = await res.text();
+    } catch (e) { html = document.documentElement.outerHTML; }
+    if (html.indexOf('<!--USERDATA_SLOT-->') >= 0) html = html.split('<!--USERDATA_SLOT-->').join(inject);
+    else html = html.replace('</body>', inject + '\n</body>');
+    var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '贸易单证系统-本地版.html';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(a.href);
+    toast('已导出自包含 HTML（数据已嵌入文件，双击即用）', 'ok');
+  }
+  async function exportJSON() {
+    var data = {};
+    for (var i = 0; i < db.STORES.length; i++) data[db.STORES[i]] = await db.all(db.STORES[i]);
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '贸易单证系统-数据备份-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(a.href);
+    toast('已导出 JSON 备份', 'ok');
+  }
+  function importJSON() {
+    var inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = '.json,application/json';
+    inp.onchange = async function () {
+      var f = inp.files[0]; if (!f) return;
+      try {
+        var data = JSON.parse(await f.text());
+        var total = 0;
+        for (var i = 0; i < db.STORES.length; i++) {
+          var s = db.STORES[i], list = data[s];
+          if (list && list.length) { await db.bulkPut(s, list); total += list.length; }
+        }
+        toast('已导入 ' + total + ' 条记录（同名覆盖）', 'ok');
+        render();
+      } catch (e) { toast('导入失败: ' + e.message, 'err'); }
+    };
+    inp.click();
+  }
 
   // ---------- 初始化 ----------
   (async function init() {
     try {
       await db.open();
+      await hydrateFromEmbedded();
       await seed.run(db, engine, ExcelJS);
       render();
     } catch (e) {
