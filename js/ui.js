@@ -69,19 +69,38 @@
     if (out instanceof ArrayBuffer) return out;
     return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength);
   }
+  /**
+   * 加载工作簿（自动探测格式，兼容 .xlsx / .xls 老格式 / .csv，不依赖 fileName）
+   * magic bytes: .xlsx=PK\x03\x04 / .xls=D0\xCF\x11\xE0 (CFB) / 其它按 .csv 试
+   */
   async function loadWb(buf, fileName) {
     var fn = fileName || '';
     var ab = buf;
-    var needConvert = /\.csv$/i.test(fn) || (/\.xls$/i.test(fn) && !/\.xlsx$/i.test(fn));
-    if (needConvert) ab = await anyToXlsx(buf, fn);
+    var u8 = new Uint8Array(buf instanceof ArrayBuffer ? buf : (buf && buf.buffer ? buf.buffer : buf));
+    var isZip = u8.length >= 4 && u8[0] === 0x50 && u8[1] === 0x4B && (u8[2] === 0x03 || u8[2] === 0x05);
+    var isCfb = u8.length >= 8 && u8[0] === 0xD0 && u8[1] === 0xCF && u8[2] === 0x11 && u8[3] === 0xE0;
+    var isCsvHint = /\.csv$/i.test(fn);
+    var isOldXlsHint = /\.xls$/i.test(fn) && !/\.xlsx$/i.test(fn);
+    // 自动探测: 老 .xls 格式（CFB 头且不是 ZIP） 或 显式 .csv 提示 → 必转 .xlsx
+    var needConvert = isCsvHint || (!isZip && isCfb) || (!isZip && !isCfb && isOldXlsHint);
+    var formatGuess = isZip ? 'xlsx' : (isCfb ? 'xls-old' : (isCsvHint ? 'csv' : (isOldXlsHint ? 'xls-hint' : 'unknown')));
+    if (needConvert) {
+      try {
+        var fakeFn = fn || (isCfb ? 'upload.xls' : 'upload.csv');
+        ab = await anyToXlsx(buf, fakeFn);
+      } catch (cv) {
+        throw new Error('文件无法解析（探测为 ' + formatGuess + '，转换失败: ' + (cv.message || cv) + '）。请用 Excel/WPS 另存为 .xlsx 后再试');
+      }
+    }
     try {
       var wb = new ExcelJS.Workbook();
       await wb.xlsx.load(ab);
+      wb.__formatGuess = formatGuess; // 业务侧可选读
       return wb;
     } catch (err) {
       var msg = err.message || '';
       if (/zip|central directory|end of central/i.test(msg)) {
-        throw new Error('文件不是有效的 .xlsx（可能是 .xls 旧格式、.csv 或文件已损坏），请用 Excel/WPS 另存为 .xlsx 后再试');
+        throw new Error('文件不是有效的 .xlsx（探测格式: ' + formatGuess + '，可能是 .xls 旧格式、.csv 或文件已损坏），请用 Excel/WPS 另存为 .xlsx 后再试');
       }
       throw err;
     }
@@ -732,7 +751,9 @@
           if (!(await confirmBox('⚠️ 该模板中未扫描到任何 {{占位符}}，生成时将无法自动填充数据。仍要上传吗？'))) return;
         }
         await db.put('templates', {
-          name: name, kind: kind, carrier: carrier, status: 'active', fileBuf: buf,
+          name: name, kind: kind, carrier: carrier, status: 'active',
+          fileBuf: buf, fileName: f.name, fileSize: buf.byteLength || buf.length || 0,
+          uploadedAt: Date.now(),
           mapping: { required: engine.REQUIRED_FIELDS[kind] || [], scanned: scan }
         });
         toast('模板已上传：扫描到 ' + scan.fields.length + ' 个表头字段 + ' + scan.itemFields.length + ' 个明细字段', 'ok');
@@ -1009,7 +1030,32 @@
         w.step = 1; w.templateId = ''; w.doc = null; render();
         return;
       }
-      var wb = await loadWb(tpl.fileBuf);
+      // 早期诊断 fileBuf 格式（避免直接抛 generic 错误）
+      var _u8 = new Uint8Array(tpl.fileBuf instanceof ArrayBuffer ? tpl.fileBuf : tpl.fileBuf.buffer);
+      var _fmt = (_u8.length >= 4 && _u8[0] === 0x50 && _u8[1] === 0x4B) ? 'xlsx'
+                : (_u8.length >= 8 && _u8[0] === 0xD0 && _u8[1] === 0xCF && _u8[2] === 0x11 && _u8[3] === 0xE0) ? 'xls-old'
+                : (_u8.length && _u8[0] >= 0x20 && _u8[0] <= 0x7E) ? 'csv-or-text' : 'unknown';
+      if (_fmt === 'unknown' || _fmt === 'csv-or-text') {
+        body.innerHTML = '<div class="card vres block" style="padding:20px">' +
+          '<h3 style="margin-top:0">⚠️ 模板文件已损坏</h3>' +
+          '<p>当前选中模板 <b>' + esc(tpl.name) + '</b> 的 fileBuf 已不是有效 xlsx（探测为 <code>' + _fmt + '</code>，原始大小 ' + (tpl.fileBuf.byteLength || tpl.fileBuf.length || 0) + ' 字节）。</p>' +
+          '<p>可能原因：浏览器本地存储被异常清空、IndexedDB schema 不兼容、模板上传时网络中断等。</p>' +
+          '<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">' +
+          '<button class="btn danger" id="wz-del-bad-tpl">🗑 删除该损坏模板并回 step 1</button>' +
+          '<button class="btn ghost" id="wz-back4b">← 回到 step 1 重选模板</button>' +
+          '<button class="btn warn" id="wz-back3b">← 回到 step 3 校验核对</button>' +
+          '</div></div>';
+        document.getElementById('wz-del-bad-tpl').onclick = async function () {
+          if (!(await confirmBox('确认删除模板「' + esc(tpl.name) + '」？将回到 step 1 重选模板'))) return;
+          await db.del('templates', tpl.id);
+          toast('已删除坏模板「' + tpl.name + '」', 'ok');
+          w.step = 1; w.templateId = ''; w.doc = null; render();
+        };
+        document.getElementById('wz-back4b').onclick = function () { w.step = 1; w.templateId = ''; w.doc = null; render(); };
+        document.getElementById('wz-back3b').onclick = function () { w.step = 3; w.doc = null; render(); };
+        return;
+      }
+      var wb = await loadWb(tpl.fileBuf, tpl.fileName);
       var fillRes = engine.fillTemplate(wb, ctx.data, { logo: tpl.logo || null });
       w._wb = wb; w._data = ctx.data;
       var confirmed = w.doc && w.doc.status === 'confirmed';
@@ -1240,7 +1286,29 @@
         w.step = 1; w.templateId = ''; w.doc = null; render();
         return;
       }
-      var wb = await loadWb(tpl.fileBuf);
+      // 早期诊断 fileBuf 格式（同 invoice step=4）
+      var _u8b = new Uint8Array(tpl.fileBuf instanceof ArrayBuffer ? tpl.fileBuf : tpl.fileBuf.buffer);
+      var _fmtb = (_u8b.length >= 4 && _u8b[0] === 0x50 && _u8b[1] === 0x4B) ? 'xlsx'
+                : (_u8b.length >= 8 && _u8b[0] === 0xD0 && _u8b[1] === 0xCF && _u8b[2] === 0x11 && _u8b[3] === 0xE0) ? 'xls-old'
+                : (_u8b.length && _u8b[0] >= 0x20 && _u8b[0] <= 0x7E) ? 'csv-or-text' : 'unknown';
+      if (_fmtb === 'unknown' || _fmtb === 'csv-or-text') {
+        body.innerHTML = '<div class="card vres block" style="padding:20px">' +
+          '<h3 style="margin-top:0">⚠️ 模板文件已损坏</h3>' +
+          '<p>当前选中订舱模板 <b>' + esc(tpl.name) + '</b> 的 fileBuf 已被破坏（探测为 <code>' + _fmtb + '</code>）。</p>' +
+          '<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">' +
+          '<button class="btn danger" id="bw-del-bad-tpl">🗑 删除该损坏模板并回 step 1</button>' +
+          '<button class="btn ghost" id="bw-back4b">← 回到 step 1</button>' +
+          '</div></div>';
+        document.getElementById('bw-del-bad-tpl').onclick = async function () {
+          if (!(await confirmBox('确认删除订舱模板「' + esc(tpl.name) + '」？'))) return;
+          await db.del('templates', tpl.id);
+          toast('已删除坏模板', 'ok');
+          w.step = 1; w.templateId = ''; w.doc = null; render();
+        };
+        document.getElementById('bw-back4b').onclick = function () { w.step = 1; w.templateId = ''; w.doc = null; render(); };
+        return;
+      }
+      var wb = await loadWb(tpl.fileBuf, tpl.fileName);
       var fillRes = engine.fillTemplate(wb, ctx.data, { logo: tpl.logo || null });
       w._wb = wb;
       var confirmed = w.doc && w.doc.status === 'confirmed';
@@ -1301,7 +1369,7 @@
     async function fillDocWb(d) {
       var tpl = await db.get('templates', d.templateId);
       if (!tpl) throw new Error('关联模板已删除，无法重新生成');
-      var wb = await loadWb(tpl.fileBuf);
+      var wb = await loadWb(tpl.fileBuf, tpl.fileName);
       engine.fillTemplate(wb, d.data, { logo: tpl.logo || null });
       return wb;
     }
@@ -1364,7 +1432,11 @@
       '</div>' +
       '<p class="hint" id="sync-status"></p></div>' +
       '<div class="card"><h3>⚠️ 危险操作</h3>' +
-      '<button class="btn danger" id="st-wipe">清空全部本地数据（不可恢复）</button></div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button class="btn warn" id="st-scan-tpl">🛠 扫描并列出损坏的模板</button>' +
+      '<button class="btn danger" id="st-wipe">清空全部本地数据（不可恢复）</button>' +
+      '</div>' +
+      '<div id="tpl-scan-result" class="hint" style="margin-top:8px"></div></div>' +
       '<footer class="note">贸易单证系统 · 纯前端本地存储(IndexedDB) · 七层解耦架构 · 模板占位符引擎</footer>';
   };
   BINDERS.settings = async function () {
@@ -1395,6 +1467,39 @@
     document.getElementById('st-save-jst').onclick = async function () {
       await db.put('config', { key: 'jst', value: { appKey: val('st-jst-key'), appSecret: val('st-jst-secret') } });
       toast('聚水潭凭证已保存（API拉取功能待开通）', 'ok');
+    };
+    document.getElementById('st-scan-tpl').onclick = async function () {
+      var tpls = await db.all('templates');
+      var bad = [], ok = 0;
+      for (var i = 0; i < tpls.length; i++) {
+        var t = tpls[i];
+        var u8 = t.fileBuf ? new Uint8Array(t.fileBuf instanceof ArrayBuffer ? t.fileBuf : t.fileBuf.buffer) : new Uint8Array(0);
+        var isZip = u8.length >= 4 && u8[0] === 0x50 && u8[1] === 0x4B;
+        var isCfb = u8.length >= 8 && u8[0] === 0xD0 && u8[1] === 0xCF && u8[2] === 0x11 && u8[3] === 0xE0;
+        var sz = u8.length;
+        if (!sz || (!isZip && !isCfb)) {
+          bad.push({ id: t.id, name: t.name, kind: t.kind, size: sz, format: !sz ? 'empty' : (isCfb ? 'xls-old' : 'unknown') });
+        } else { ok++; }
+      }
+      var el = document.getElementById('tpl-scan-result');
+      if (!bad.length) {
+        el.innerHTML = '<div class="vres ok">✅ 扫描完毕：' + tpls.length + ' 个模板全部健康（' + ok + ' 个有效 xlsx/xls）</div>';
+        return;
+      }
+      el.innerHTML = '<div class="vres warn"><b>🔍 发现 ' + bad.length + ' 个损坏/格式异常模板（' + ok + ' 个健康）：</b><ul style="margin:6px 0 6px 20px">' +
+        bad.map(function (b) { return '<li><code>' + esc(b.id.slice(0, 12)) + '…</code> 「' + esc(b.name) + '」 <span class="hint">(' + esc(b.kind) + ' · ' + b.format + ' · ' + b.size + 'B)</span> ' +
+          '<button class="btn sm danger tpl-del-bad" data-id="' + esc(b.id) + '" style="margin-left:8px">🗑 删除</button></li>'; }).join('') +
+        '</ul>' +
+        '<p class="hint" style="margin-top:6px">💡 这些模板的 fileBuf 已不是有效 xlsx。点删除可让向导 step 4 不再报错（内置真实模板仍可用）；坏模板里如果有真实发票样张，请在「模板管理」重新上传（建议同时另存为标准 .xlsx）。</p>' +
+        '</div>';
+      el.querySelectorAll('.tpl-del-bad').forEach(function (btn) {
+        btn.onclick = async function () {
+          if (!(await confirmBox('确认删除损坏模板 id=' + btn.dataset.id + '？'))) return;
+          await db.del('templates', btn.dataset.id);
+          toast('已删除', 'ok');
+          document.getElementById('st-scan-tpl').click();
+        };
+      });
     };
     document.getElementById('st-wipe').onclick = async function () {
       if (!(await confirmBox('⚠️ 将清空订单/装箱清单/主数据/模板/单证记录全部本地数据，且不可恢复！确认？', true))) return;
