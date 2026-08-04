@@ -936,6 +936,28 @@
       var selNos = orders.map(function (o) { return o.orderNo; });
       var pks = await db.all('packings');
       var tpls = (await db.all('templates')).filter(function (t) { return t.kind === 'invoice' && t.status === 'active'; });
+      // v1.4.45：当发票模板为空时，在 发票生成 页渲染一个明显的红色提示卡 + 「立即恢复」按钮，
+      // 并在页面渲染时（不限 init 阶段）自动尝试一次静默远程拉取 + 拿到后立刻重渲。
+      if (tpls.length === 0) {
+        // 静默自愈：渲染时若发现无发票模板，立刻拉一次（不需要用户点）
+        try {
+          if (!window.__recovering_invoice__) {
+            window.__recovering_invoice__ = 1;
+            var prAuto = await pullShared();
+            if (prAuto && prAuto.ok) {
+              var refreshed = (await db.all('templates')).filter(function (t) { return t.kind === 'invoice' && t.status === 'active'; });
+              if (refreshed.length > 0) {
+                toast('已自动恢复 ' + refreshed.length + ' 个发票模板', 'ok');
+                render(); return;
+              }
+            }
+            window.__recovering_invoice__ = 0;
+          }
+        } catch (e) { window.__recovering_invoice__ = 0; }
+      }
+      var banner = tpls.length === 0
+        ? '<div id="wz-tpl-banner" class="card" style="border:2px solid #d97706;background:#fff8e1;padding:12px 14px;margin:0 0 12px 0"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><div style="flex:1;color:#92400e"><b>⚠ 本地无发票模板</b> —— 看起来团队共享库里的发票模板没拉下来。点击右侧按钮立即从团队库拉取。</div><button class="btn" id="wz-tpl-recover">立即恢复发票模板</button></div></div>'
+        : '';
       var pkRows = pks.map(function (p) {
         var inter = (p.orderNos || []).filter(function (n) { return selNos.indexOf(n) >= 0; });
         var hint = inter.length === selNos.length && inter.length === (p.orderNos || []).length ? '<span class="badge green">完全匹配</span>' :
@@ -945,7 +967,7 @@
           '<td>' + esc(p.fileName) + '</td><td class="mono">' + esc((p.orderNos || []).join(', ')) + '</td><td class="num">' + p.totals.boxCount + '</td><td class="num">' + p.totals.qty + '</td><td>' + hint + '</td></tr>';
       }).join('');
       var tplOpts = tpls.map(function (t) { return '<option value="' + t.id + '"' + (w.templateId === t.id ? ' selected' : '') + '>' + esc(t.name) + '（' + esc(t.carrier) + '）</option>'; }).join('');
-      body.innerHTML = '<div class="card"><h3>① 选择装箱清单（用于单号/SKU/数量强校验及重量体积）</h3>' +
+      body.innerHTML = banner + '<div class="card"><h3>① 选择装箱清单（用于单号/SKU/数量强校验及重量体积）</h3>' +
         '<table class="grid"><tr><th></th><th>文件名</th><th>关联单号</th><th>箱数</th><th>数量</th><th>与所选订单</th></tr>' +
         (pkRows || '<tr><td colspan="6" class="empty">暂无装箱清单，请先到「装箱清单」页上传</td></tr>') + '</table>' +
         '<h3 style="margin-top:16px">② 物流商 / 渠道 / 发票模板</h3><div class="form-grid">' +
@@ -954,6 +976,25 @@
         '<div><label class="req">发票模板（仅显示启用中）</label><select id="wz-tpl"><option value="">请选择</option>' + tplOpts + '</select></div></div>' +
         '<div style="margin-top:14px;display:flex;gap:8px"><button class="btn ghost" id="wz-back1">← 上一步</button><button class="btn" id="wz-next1">下一步 →</button></div></div>';
       document.getElementById('wz-back1').onclick = function () { w.step = 0; render(); };
+      // v1.4.45：发票模板空时的「立即恢复」按钮
+      var rb = document.getElementById('wz-tpl-recover');
+      if (rb) rb.onclick = async function () {
+        rb.disabled = true; rb.textContent = '正在从团队库拉取…';
+        try {
+          var pr2 = await pullShared();
+          if (pr2.ok) {
+            var got = (await db.all('templates')).filter(function (t) { return t.kind === 'invoice' && t.status === 'active'; });
+            toast('已从团队库拉取 ' + got.length + ' 个发票模板', 'ok');
+            render();
+          } else {
+            toast('拉取失败：' + pr2.error, 'err');
+            rb.disabled = false; rb.textContent = '立即恢复发票模板';
+          }
+        } catch (e) {
+          toast('拉取异常：' + e.message, 'err');
+          rb.disabled = false; rb.textContent = '立即恢复发票模板';
+        }
+      };
       document.getElementById('wz-next1').onclick = function () {
         var pk = document.querySelector('input[name="wz-pk"]:checked');
         if (!pk) { toast('必须选择装箱清单（发票强校验依赖装箱清单）', 'err'); return; }
