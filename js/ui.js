@@ -5,6 +5,7 @@
       exporter = TD.exporter, adapters = TD.adapters, seed = TD.seed;
 
   var $main = document.getElementById('main');
+  var _initSkipPull = false; // v1.4.49：watchdog 卡死时用户可手动置 true 跳过拉取
   var CARRIERS = ['通用', '亚丰', '安速', '亦邦', '合联', '艾杜克'];
   var INCOTERMS = ['FOB', 'CIF', 'CFR', 'EXW', 'DDP', 'DDU', 'DAP', 'FCA'];
   var state = { tab: 'orders', wiz: null, bwiz: null };
@@ -1912,12 +1913,18 @@
   // 拉取：公开 CDN，无需 token。与本地做三方合并（保留本地未上传的修改），并记录服务端快照为基准。
   async function pullShared() {
     var r;
+    // v1.4.49：fetch 加 8s AbortSignal.timeout，避免 raw.githubusercontent.com 国内访问不稳时 init 挂 1-5 分钟
+    var ac = new AbortController();
+    var to = setTimeout(function () { try { ac.abort(); } catch (e) {} }, 8000);
     try {
-      var res = await fetch(SYNC_CDN, { cache: 'no-store' });
+      var res = await fetch(SYNC_CDN, { cache: 'no-store', signal: ac.signal });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       r = await res.json();
     } catch (e) {
-      return { ok: false, error: '拉取失败（文件可能尚未上传）: ' + e.message };
+      var msg = (e && e.name === 'AbortError') ? '拉取超时（8s，已跳过）' : ('拉取失败（文件可能尚未上传）: ' + e.message);
+      return { ok: false, error: msg };
+    } finally {
+      clearTimeout(to);
     }
     if (!r || !r.stores) return { ok: false, error: '共享数据格式错误' };
     var base = await loadSyncBase();
@@ -2034,7 +2041,21 @@
   }
 
   // ---------- 初始化 ----------
+  // v1.4.49：init 顶层加 12s watchdog——超过 12s 还没到 render()（pullShared/seed 卡住）就显示红色提示卡
+  // + 「跳过拉取继续」按钮（手动点立即跳过 pullShared 阶段）
   (async function init() {
+    var watchdog = setTimeout(function () {
+      if ($main && $main.innerHTML.indexOf('初始化') >= 0) {
+        $main.innerHTML = '<div class="card vres block">' +
+          '<b>初始化用时较长（>12s）</b>，通常卡在「从团队库拉取主数据」这一步（国内访问 raw.githubusercontent.com 不稳）。' +
+          '<p style="margin-top:10px"><button class="btn" id="init-skip-pull">跳过拉取，继续初始化</button> ' +
+          '<button class="btn sm ghost" id="init-retry">整页重试</button></p></div>';
+        var skipBtn = document.getElementById('init-skip-pull');
+        if (skipBtn) skipBtn.onclick = function () { _initSkipPull = true; $main.innerHTML = '<div class="loading">正在初始化…</div>'; };
+        var rBtn = document.getElementById('init-retry');
+        if (rBtn) rBtn.onclick = function () { location.reload(); };
+      }
+    }, 12000);
     try {
       await db.open();
       await hydrateFromEmbedded();
@@ -2042,20 +2063,26 @@
       await seed.run(db, engine, ExcelJS);
       // v1.4.44 自愈：本地无发票模板时（清空数据/换浏览器/IDB 异常），自动从团队库拉取一次，避免「发票模板怎么又没了」反复出现。
       // 仅在 kind==='invoice' 数量为 0 时触发，不破坏已有数据；离线/网络异常静默失败。
+      // v1.4.49：pullShared 内 fetch 已加 8s AbortSignal.timeout，最坏 8s 后自动跳过
       try {
-        var localTpls0 = await db.all('templates');
-        var localInv0 = localTpls0.filter(function (t) { return t && t.kind === 'invoice' && t.status === 'active'; });
-        if (localInv0.length === 0) {
-          var pr0 = await pullShared();
-          if (pr0 && pr0.ok && pr0.merged > 0) toast('本地无发票模板，已从团队库自动恢复 ' + pr0.merged + ' 条主数据', 'ok');
+        if (_initSkipPull) { /* 用户点跳过 */ }
+        else {
+          var localTpls0 = await db.all('templates');
+          var localInv0 = localTpls0.filter(function (t) { return t && t.kind === 'invoice' && t.status === 'active'; });
+          if (localInv0.length === 0) {
+            var pr0 = await pullShared();
+            if (pr0 && pr0.ok && pr0.merged > 0) toast('本地无发票模板，已从团队库自动恢复 ' + pr0.merged + ' 条主数据', 'ok');
+          }
         }
       } catch (e) { /* 离线/网络异常静默 */ }
-      if ((await loadSyncCfg()).auto) {
+      if (!_initSkipPull && (await loadSyncCfg()).auto) {
         var pr = await pullShared();
         if (pr.ok) toast('已从团队库拉取 ' + pr.merged + ' 条主数据', 'ok');
       }
+      clearTimeout(watchdog);
       render();
     } catch (e) {
+      clearTimeout(watchdog);
       $main.innerHTML = '<div class="card vres block">初始化失败: ' + esc(e.message) + '</div>';
       console.error(e);
     }
