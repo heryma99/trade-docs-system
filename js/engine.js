@@ -259,6 +259,7 @@
       invoiceDate: meta.invoiceDate || new Date().toISOString().slice(0, 10),
       contractNo: meta.contractNo || '',
       orderNos: orderList.join(', '),
+      refId: refId,
       shipper: shipper, consignee: consignee, notify: notify,
       incoterms: meta.incoterms || '',
       paymentTerms: meta.paymentTerms || '',
@@ -362,7 +363,7 @@
   /** 解析模板表头标签 -> {party, field, line}；非收发人字段标签返回 null */
   var PARTY_RE = [
     { re: /(发件人|发货人|托运人|SHIPPER|SELLER)/i, party: 'shipper' },
-    { re: /(收货人|收件人|CONSIGNEE|BUYER)/i, party: 'consignee' },
+    { re: /(收货人|收货|收件人|收件|CONSIGNEE|BUYER)/i, party: 'consignee' },
     { re: /(通知人|NOTIFY)/i, party: 'notify' }
   ];
   function mapHeaderLabel(text) {
@@ -385,9 +386,108 @@
       if (m) { var cn = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10 }; line = cn[m[1]] || parseInt(m[1], 10) || 1; }
     }
     else if (/(联系人|CONTACT)/i.test(text)) field = 'contact';
-    else if (/(姓名|NAME)/i.test(text)) field = 'contact';
+    else if (/(姓名|NAME)/i.test(text)) field = 'name';
     if (!field) return null;
     return { party: party, field: field, line: line };
+  }
+
+  /** 通用（非收发人）字段标签 -> 数据路径。用于真实承运商模板里「运输方式 / 起运国 / 客户单号」等
+   *  未被 mapHeaderLabel(只认收发人三类) 覆盖的表头字段。path='' 表示已知但本系统无对应字段(跳过)。 */
+  var GENERAL_LABEL_RULES = [
+    { re: /运输方式/, path: 'transport' },
+    { re: /起运(国|港|地)/, path: 'pol' },
+    { re: /目的(国|港|地区|地)/, path: 'pod' },
+    { re: /(报关|清关)方式/, path: 'customsType' },
+    { re: /成交方式/, path: 'incoterms' },
+    { re: /(客户订单号|客户单号|订单号|PO\s*NUMBER|PO号|P\.O\.)/i, path: 'orderNos' },
+    { re: /参考号/, path: 'refId' },
+    { re: /(预计总件数|总包装件数|预计件数|箱数)/, path: 'totals.boxCount' },
+    { re: /(预计重量|总毛重|总重)/, path: 'totals.gw' },
+    { re: /(预计体积|总体积)/, path: 'totals.volume' },
+    { re: /(申报总价值|总申报价值)/, path: 'totals.amount' },
+    { re: /(货物品名|商品品名|^品名$)/, path: 'goodsSummary' },
+    { re: /备注/, path: 'remark' },
+    { re: /(VAT号|EORI)/, path: 'consignee.taxNo' },
+    { re: /(揽货渠道|客户渠道|服务渠道|服务$)/, path: '' } // 无对应字段，跳过
+  ];
+
+  /** 统一字段标签识别：先试收发人三类(mapHeaderLabel)，再试通用字段词典。
+   *  返回 {party, field, path, line, kind} 或 null。 */
+  function mapFieldLabel(text) {
+    if (!text || /\{\{/.test(text)) return null;
+    var p = mapHeaderLabel(text);
+    if (p) return { party: p.party, field: p.field, path: p.party + '.' + p.field, line: p.line, kind: 'party' };
+    var t = String(text).trim();
+    for (var i = 0; i < GENERAL_LABEL_RULES.length; i++) {
+      if (GENERAL_LABEL_RULES[i].re.test(t)) {
+        var path = GENERAL_LABEL_RULES[i].path;
+        if (!path) return null; // 跳过规则：模板有此标签但系统无对应字段
+        return { party: null, field: null, path: path, line: 0, kind: 'general' };
+      }
+    }
+    return null;
+  }
+
+  /** 扫描模板表头区，生成标签->字段映射(labelMap)，供填充与 UI 编辑。
+   *  itemsRowNum：明细表头行号，其之上的表头区才是字段标签所在；传 -1 时默认扫前 25 行。 */
+  function buildLabelMap(wb, itemsRowNum) {
+    var ws = wb.worksheets[0];
+    if (!ws) return [];
+    var mergedMaps = buildMergedMaps(ws);
+    var map = [];
+    var end = (itemsRowNum && itemsRowNum !== -1) ? itemsRowNum - 1 : 25;
+    end = Math.min(end, 60);
+    var seen = {};
+    for (var r = 1; r <= end; r++) {
+      var row = ws.getRow(r);
+      row.eachCell({ includeEmpty: false }, function (cell, c) {
+        // 跳过合并从属格：同一合并块只在其主格处理一次，避免把值填进标签跨度破坏版式
+        if (mergedMaps.masterOf[r + ',' + c]) return;
+        var s = _cellStr(cell);
+        if (!s || /\{\{/.test(s)) return;
+        var info = mapFieldLabel(s);
+        if (!info) return;
+        var key = r + ',' + c;
+        if (seen[key]) return;
+        seen[key] = 1;
+        map.push({ r: r, c: c, label: s, path: info.path, party: info.party, field: info.field, line: info.line, kind: info.kind, resolved: !!info.path });
+      });
+    }
+    return map;
+  }
+
+  /** 按标签映射填充表头区字段：对每个 resolved 标签，找到其右侧值格(跳过合并标签跨度/下一个标签)写入。
+   *  与 fillHeaderByLabels 互补——它只处理收发人三类，此处处理全部(含收发人，幂等不冲突)。 */
+  function fillByFieldLabels(ws, data, labelMap, mergedMaps) {
+    if (!labelMap || !labelMap.length) return;
+    var labelCols = {};
+    labelMap.forEach(function (e) { (labelCols[e.r] = labelCols[e.r] || {})[e.c] = true; });
+    var PH_TEST = /\{\{\s*([A-Za-z0-9_.]+)\s*\}\}/;
+    labelMap.forEach(function (e) {
+      if (!e.resolved || !e.path) return;
+      var val = getPath(data, e.path);
+      if (val === undefined || val === null || val === '') {
+        if (e.party && e.field === 'address' && e.line > 0 && data[e.party] && data[e.party].address) {
+          var lines = String(data[e.party].address).split(/\r?\n/);
+          val = lines[e.line - 1] || '';
+        }
+        if (val === undefined || val === null || val === '') return;
+      }
+      var spanEnd = e.c;
+      var mr = mergedMaps.masterRange[e.r + ',' + e.c];
+      if (mr) spanEnd = Math.max(spanEnd, mr.right);
+      var vStart = spanEnd + 1;
+      var target = null;
+      for (var cc = vStart; cc <= vStart + 12; cc++) {
+        if (labelCols[e.r] && labelCols[e.r][cc]) break; // 撞到下一个标签，停止
+        var tc = ws.getRow(e.r).getCell(cc);
+        var ts = _cellStr(tc);
+        if (ts) { var m = ts.match(PH_TEST); if (m && m[1] === e.path) { target = tc; break; } }
+      }
+      if (!target && !(labelCols[e.r] && labelCols[e.r][vStart])) target = ws.getRow(e.r).getCell(vStart);
+      if (!target) return;
+      target.value = (typeof val === 'number') ? val : String(val);
+    });
   }
 
   /** 模板表头识别填充：把发货人/收货人/地址/电话按模板自身表头标签写入对应单元格。
@@ -603,6 +703,13 @@
 
     // 1.5) 模板表头识别填充（发货人/收货人/地址/电话等）：取模板自身表头标签填
     fillHeaderByLabels(ws, data, itemsRowNum === -1 ? 25 : itemsRowNum, itemsRowNum);
+
+    // 1.6) 通用字段标签映射填充（运输方式/起运国/客户单号/总件数 等未被收发人三类覆盖的表头字段）
+    //      优先用模板自带的 labelMap（可 UI 编辑），否则现场扫描；对纯 {{}} 占位符模板为空的，no-op。
+    var _labelMap = (options && options.labelMap && options.labelMap.length)
+      ? options.labelMap
+      : buildLabelMap(wb, itemsRowNum);
+    fillByFieldLabels(ws, data, _labelMap, mergedMaps);
 
     // 明细区下界（供 2.5 清理残留行与 3 跳过明细区使用，必须在前面算出）
     var itemEnd = itemsRowNum === -1 ? -1 : itemsRowNum + Math.max((data.items || []).length, 1) - 1;
@@ -1009,6 +1116,9 @@
     buildDocData: buildDocData,
     amountInWords: amountInWords,
     scanTemplate: scanTemplate,
+    buildLabelMap: buildLabelMap,
+    mapFieldLabel: mapFieldLabel,
+    fillByFieldLabels: fillByFieldLabels,
     fillTemplate: fillTemplate,
     addLogo: addLogo,
     makeBuiltinInvoiceTemplate: makeBuiltinInvoiceTemplate,
