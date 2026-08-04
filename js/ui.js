@@ -1279,11 +1279,21 @@
       '<button class="btn" id="st-export-json">📤 导出 JSON 备份</button>' +
       '<button class="btn" id="st-import-json">📥 导入 JSON 备份</button>' +
       '</div></div>' +
+      '<div class="card"><h3>🔄 团队共享主数据（GitHub）</h3>' +
+      '<p class="hint">把「收发货人」和「自定义模板」上传到仓库的 <code>userdata.json</code>，团队其他人打开系统自动拉取、无需再维护。读取公开无需 token；上传需填入<strong>细粒度 PAT</strong>（仅授权本仓库、仅 Contents 读写）。</p>' +
+      '<div class="form-grid">' +
+      '<div><label>上传 Token（仅本地保存，不写进公开代码）</label><input id="sync-token" type="password" placeholder="fine-grained PAT，仅本仓库 Contents 读写"></div>' +
+      '<div><label><input type="checkbox" id="sync-auto"> 启动时自动从团队库拉取</label></div></div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">' +
+      '<button class="btn ok" id="sync-push">⬆️ 上传到团队库</button>' +
+      '<button class="btn" id="sync-pull">⬇️ 从团队库拉取</button>' +
+      '</div>' +
+      '<p class="hint" id="sync-status"></p></div>' +
       '<div class="card"><h3>⚠️ 危险操作</h3>' +
       '<button class="btn danger" id="st-wipe">清空全部本地数据（不可恢复）</button></div>' +
       '<footer class="note">贸易单证系统 · 纯前端本地存储(IndexedDB) · 七层解耦架构 · 模板占位符引擎</footer>';
   };
-  BINDERS.settings = function () {
+  BINDERS.settings = async function () {
     document.getElementById('st-save-remote').onclick = async function () {
       await db.put('config', { key: 'remote', value: { baseURL: val('st-url'), token: val('st-token') } });
       toast('远程数据源已保存', 'ok');
@@ -1323,6 +1333,27 @@
     document.getElementById('st-export-html').onclick = exportSelfContainedHTML;
     document.getElementById('st-export-json').onclick = exportJSON;
     document.getElementById('st-import-json').onclick = importJSON;
+    // ---------- 团队共享主数据 ----------
+    function setSyncStatus(t) { var el = document.getElementById('sync-status'); if (el) el.textContent = t; }
+    var scfg = await loadSyncCfg();
+    document.getElementById('sync-token').value = scfg.token || '';
+    document.getElementById('sync-auto').checked = scfg.auto;
+    document.getElementById('sync-token').onchange = async function () { var c = await loadSyncCfg(); c.token = this.value; await saveSyncCfg(c); toast('Token 已保存到本地', 'ok'); };
+    document.getElementById('sync-auto').onchange = async function () { var c = await loadSyncCfg(); c.auto = this.checked; await saveSyncCfg(c); toast(this.checked ? '已开启启动自动拉取' : '已关闭自动拉取', 'ok'); };
+    document.getElementById('sync-push').onclick = async function () {
+      var c = await loadSyncCfg();
+      setSyncStatus('上传中…');
+      var r = await pushShared(c.token);
+      setSyncStatus(r.ok ? '✅ 已上传到团队库，团队其他人刷新即可看到' : '❌ ' + r.error);
+      toast(r.ok ? '✅ 上传成功' : '❌ ' + r.error, r.ok ? 'ok' : 'err');
+    };
+    document.getElementById('sync-pull').onclick = async function () {
+      setSyncStatus('拉取中…');
+      var r = await pullShared();
+      setSyncStatus(r.ok ? '✅ 已拉取 ' + r.merged + ' 条到本地' : '❌ ' + r.error);
+      toast(r.ok ? '✅ 拉取成功 ' + r.merged + ' 条' : '❌ ' + r.error, r.ok ? 'ok' : 'err');
+      if (r.ok) render();
+    };
   };
 
   // ---------- 数据本地化：嵌入 HTML / 导出导入 ----------
@@ -1353,6 +1384,70 @@
       console.error('hydrateFromEmbedded failed', e);
     }
     window.__USERDATA_B64__ = null; // 防止重复写入
+  }
+  // ---------- 团队共享主数据（GitHub 仓库 userdata.json） ----------
+  // 共享范围：用户维护、需团队复用的主数据（收发货人 + 自定义模板）。
+  // 订单/装箱清单/单证记录属交易数据不强制共享；申报信息来自飞书也不塞（避免超 1MB 接口上限）。
+  var SYNC_STORES = ['parties', 'templates'];
+  var SYNC_REPO = 'heryma99/trade-docs-system';
+  var SYNC_BRANCH = 'main';
+  var SYNC_FILE = 'userdata.json';
+  var SYNC_CDN = 'https://cdn.jsdelivr.net/gh/' + SYNC_REPO + '@' + SYNC_BRANCH + '/' + SYNC_FILE;
+  var SYNC_API = 'https://api.github.com/repos/' + SYNC_REPO + '/contents/' + SYNC_FILE;
+  async function loadSyncCfg() {
+    var c = await db.get('config', 'sync');
+    return { token: (c && c.value && c.value.token) || '', auto: !!(c && c.value && c.value.auto) };
+  }
+  async function saveSyncCfg(cfg) {
+    await db.put('config', { key: 'sync', value: { token: cfg.token || '', auto: !!cfg.auto } });
+  }
+  // 拉取：公开 CDN，无需 token。以团队库为权威，整体覆盖本地对应 store。
+  async function pullShared() {
+    var r;
+    try {
+      var res = await fetch(SYNC_CDN, { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      r = await res.json();
+    } catch (e) {
+      return { ok: false, error: '拉取失败（文件可能尚未上传）: ' + e.message };
+    }
+    if (!r || !r.stores) return { ok: false, error: '共享数据格式错误' };
+    var merged = 0;
+    for (var i = 0; i < SYNC_STORES.length; i++) {
+      var s = SYNC_STORES[i], list = r.stores[s];
+      if (!list) continue;
+      await db.clear(s);
+      await db.bulkPut(s, list);
+      merged += list.length;
+    }
+    return { ok: true, merged: merged };
+  }
+  // 上传：用用户本地保存的细粒度 PAT 写 Contents API（团队权威源）。
+  async function pushShared(token) {
+    if (!token) return { ok: false, error: '请先在设置页填入「细粒度 PAT（仅本仓库 Contents 读写）」' };
+    var stores = {};
+    for (var i = 0; i < SYNC_STORES.length; i++) stores[SYNC_STORES[i]] = await db.all(SYNC_STORES[i]);
+    var payload = { _meta: { app: 'trade-docs-system', ver: '1.4.31', updatedAt: new Date().toISOString(), stores: SYNC_STORES }, stores: stores };
+    var json = JSON.stringify(payload);
+    if (json.length > 900 * 1024) return { ok: false, error: '数据超过 900KB（GitHub 接口上限 1MB），请减少自定义模板数量后再上传' };
+    var content = b64encodeUnicode(json);
+    var sha = null;
+    try {
+      var head = await fetch(SYNC_API + '?ref=' + SYNC_BRANCH, { headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' } });
+      if (head.ok) { var hj = await head.json(); sha = hj.sha; }
+    } catch (e) {}
+    var body = { message: 'sync: update shared master data (parties+templates)', content: content, branch: SYNC_BRANCH };
+    if (sha) body.sha = sha;
+    var res = await fetch(SYNC_API, {
+      method: 'PUT',
+      headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      var t = await res.text();
+      return { ok: false, error: '上传失败 HTTP ' + res.status + ' ' + t.slice(0, 200) };
+    }
+    return { ok: true };
   }
   // 导出自包含 HTML：把 7 个 store 全量烘焙进一个 html 副本下载（双击即用）
   async function exportSelfContainedHTML() {
@@ -1410,6 +1505,10 @@
       await db.open();
       await hydrateFromEmbedded();
       await seed.run(db, engine, ExcelJS);
+      if ((await loadSyncCfg()).auto) {
+        var pr = await pullShared();
+        if (pr.ok) toast('已从团队库拉取 ' + pr.merged + ' 条主数据', 'ok');
+      }
       render();
     } catch (e) {
       $main.innerHTML = '<div class="card vres block">初始化失败: ' + esc(e.message) + '</div>';
