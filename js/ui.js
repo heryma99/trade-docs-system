@@ -351,17 +351,28 @@
   var declarePageSize = 100;    // 每页条数：50/100/200
 
   function declareRowHtml(d) {
-    return '<tr data-sku="' + esc(d.sku) + '"><td class="mono">' + esc(d.sku) + '</td><td>' + esc(d.nameCn || '') + '</td><td>' + esc(d.nameEn || '') + '</td>' +
+    return '<tr data-sku="' + esc(d.sku) + '">' +
+      '<td class="mono">' + esc(d.sku) + '</td>' +
+      '<td class="mono">' + esc(d.styleCode || '') + '</td>' +
+      '<td>' + esc(d.goodsName || '') + '</td>' +
+      '<td>' + esc(d.shortName || '') + '</td>' +
+      '<td>' + esc(d.nameCn || '') + '</td>' +
+      '<td>' + esc(d.nameEn || '') + '</td>' +
       '<td class="mono">' + esc(d.hsCode || '') + '</td>' +
       '<td class="num">' + (d.declarePrice || '') + '</td>' +
       '<td class="mono">' + esc(d.currency || 'USD') + (d.declarePriceRaw && d.currency && d.currency !== 'USD' ? ' <span class="hint" title="原币值 ' + d.declarePriceRaw + ' ' + d.currency + '">≈' + d.declarePriceRaw + '</span>' : '') + '</td>' +
+      '<td class="num">' + (d.purchasePriceCny != null ? d.purchasePriceCny : '') + '</td>' +
+      '<td class="num">' + (d.purchasePriceCnyTax != null ? d.purchasePriceCnyTax : '') + '</td>' +
       '<td>' + esc(d.material || '') + '</td>' +
-      '<td>' + esc(d.brand || '') + '</td><td class="num">' + (d.nw || '') + '</td>' +
+      '<td>' + esc(d.soleMaterial || '') + '</td>' +
+      '<td>' + esc(d.brand || '') + '</td>' +
+      '<td>' + esc(d.category || '') + '</td>' +
+      '<td class="num">' + (d.nw || '') + '</td>' +
       '<td><button class="btn sm ghost dc-edit" data-sku="' + esc(d.sku) + '">编辑</button> <button class="btn sm danger dc-del" data-sku="' + esc(d.sku) + '">删除</button></td></tr>';
   }
   function declareMatches(d, f) {
     if (f.q) {
-      var t = [d.sku, d.nameCn, d.nameEn, d.hsCode, d.material, d.brand].join(' ').toLowerCase();
+      var t = [d.sku, d.styleCode, d.goodsName, d.shortName, d.nameCn, d.nameEn, d.hsCode, d.material, d.soleMaterial, d.brand, d.category].join(' ').toLowerCase();
       if (t.indexOf(f.q) < 0) return false;
     }
     if (f.missing) {
@@ -409,25 +420,32 @@
       '<button class="btn" id="dc-add">＋新增SKU</button>' +
       '<label class="btn ghost" style="display:inline-block">📥 从 xlsx/xls/csv 导入<input type="file" id="dc-file" accept=".xlsx,.xls,.csv" style="display:none"></label>' +
       '<button class="btn warn" id="dc-pull">🔄 并入申报主数据</button>' +
-      '<input type="text" id="dc-search" class="input" placeholder="搜索 SKU / 品名 / HS编码 / 材质 / 品牌" style="width:260px;margin-left:auto">' +
+      '<input type="text" id="dc-search" class="input" placeholder="搜索 SKU / 款式编码 / 商品名称 / 品名 / HS编码 / 材质 / 品牌 / 分类" style="width:320px;margin-left:auto">' +
       '</div>' +
       '<div id="dc-facets" class="facets"></div>' +
       '<div id="dc-count" class="hint"></div>' +
-      '<table class="grid"><thead><tr><th>SKU</th><th>中文品名</th><th>英文品名</th><th>HS编码</th><th>申报价(USD)</th><th>币种</th><th>材质</th><th>品牌</th><th>单件净重</th><th>操作</th></tr></thead><tbody id="dc-tbody"></tbody></table>' +
+      '<table class="grid"><thead><tr><th>SKU</th><th>款式编码</th><th>商品名称</th><th>商品简称</th><th>中文品名</th><th>英文品名</th><th>HS编码</th><th>申报价(USD)</th><th>币种</th><th>采购单价CNY</th><th>采购单价含税CNY</th><th>材质</th><th>鞋底材质</th><th>品牌</th><th>分类</th><th>单件净重</th><th>操作</th></tr></thead><tbody id="dc-tbody"></tbody></table>' +
       '<div id="dc-pager" class="pager"></div></div>';
   };
   function declareForm(d) {
     d = d || {};
     showModal('<h3>' + (d.sku ? '编辑' : '新增') + '申报要素</h3><div class="form-grid" style="margin-top:12px">' +
       '<div><label class="req">SKU</label><input id="dc-sku" value="' + esc(d.sku || '') + '"' + (d.sku ? ' readonly' : '') + '></div>' +
+      '<div><label>款式编码</label><input id="dc-stylecode" value="' + esc(d.styleCode || '') + '"></div>' +
+      '<div><label>商品名称</label><input id="dc-goodsname" value="' + esc(d.goodsName || '') + '"></div>' +
+      '<div><label>商品简称</label><input id="dc-shortname" value="' + esc(d.shortName || '') + '"></div>' +
       '<div><label>中文品名</label><input id="dc-namecn" value="' + esc(d.nameCn || '') + '"></div>' +
       '<div><label class="req">英文品名</label><input id="dc-nameen" value="' + esc(d.nameEn || '') + '"></div>' +
       '<div><label class="req">HS编码</label><input id="dc-hs" value="' + esc(d.hsCode || '') + '"></div>' +
       '<div><label class="req">申报价(USD)</label><input id="dc-price" type="number" step="0.01" value="' + (d.declarePrice || '') + '" title="以USD计；若下方币种非USD，保存时自动折算为USD并记原币值"></div>' +
       '<div><label>币种</label><input id="dc-cur" value="' + esc(d.currency || 'USD') + '"></div>' +
+      '<div><label>采购单价CNY</label><input id="dc-pcny" type="number" step="0.01" value="' + (d.purchasePriceCny != null ? d.purchasePriceCny : '') + '"></div>' +
+      '<div><label>采购单价含税CNY</label><input id="dc-pcnytax" type="number" step="0.01" value="' + (d.purchasePriceCnyTax != null ? d.purchasePriceCnyTax : '') + '"></div>' +
       '<div><label class="req">材质</label><input id="dc-mat" value="' + esc(d.material || '') + '"></div>' +
+      '<div><label>鞋底材质</label><input id="dc-sole" value="' + esc(d.soleMaterial || '') + '"></div>' +
       '<div><label>用途</label><input id="dc-usage" value="' + esc(d.usage || '') + '"></div>' +
       '<div><label>品牌</label><input id="dc-brand" value="' + esc(d.brand || 'NO BRAND') + '"></div>' +
+      '<div><label>分类</label><input id="dc-cat" value="' + esc(d.category || '') + '"></div>' +
       '<div><label>型号</label><input id="dc-model" value="' + esc(d.model || '') + '"></div>' +
       '<div><label>单件净重KG</label><input id="dc-nw" type="number" step="0.001" value="' + (d.nw || '') + '"></div>' +
       '<div><label>单件毛重KG</label><input id="dc-gw" type="number" step="0.001" value="' + (d.gw || '') + '"></div>' +
@@ -441,9 +459,12 @@
       var dcCur = val('dc-cur') || 'USD';
       var dcRaw = parseFloat(val('dc-price')) || 0;
       await db.put('declare_reqs', {
-        sku: sku, nameCn: val('dc-namecn'), nameEn: val('dc-nameen'), hsCode: val('dc-hs'),
+        sku: sku, styleCode: val('dc-stylecode'), goodsName: val('dc-goodsname'), shortName: val('dc-shortname'),
+        nameCn: val('dc-namecn'), nameEn: val('dc-nameen'), hsCode: val('dc-hs'),
         declarePrice: fxToUsd(dcRaw, dcCur), declarePriceRaw: dcRaw, currency: dcCur,
-        material: val('dc-mat'), usage: val('dc-usage'), brand: val('dc-brand'),
+        purchasePriceCny: parseFloat(val('dc-pcny')) || 0, purchasePriceCnyTax: parseFloat(val('dc-pcnytax')) || 0,
+        material: val('dc-mat'), soleMaterial: val('dc-sole'), usage: val('dc-usage'), brand: val('dc-brand'),
+        category: val('dc-cat'),
         model: val('dc-model') || sku, nw: parseFloat(val('dc-nw')) || 0, gw: parseFloat(val('dc-gw')) || 0,
         unit: val('dc-unit') || 'PCS', origin: val('dc-origin') || 'CN', ver: (d.ver || 0) + 1
       });
@@ -505,7 +526,7 @@
       var pageRows = matched.slice(start, start + pageSize);
       var tbody = document.getElementById('dc-tbody');
       if (!pageRows.length) {
-        tbody.innerHTML = '<tr><td colspan="10" class="empty">无匹配记录</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="17" class="empty">无匹配记录</td></tr>';
       } else {
         tbody.innerHTML = pageRows.map(declareRowHtml).join('');
       }

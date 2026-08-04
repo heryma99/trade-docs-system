@@ -66,7 +66,7 @@
       // 申报要素主数据：从本地《商品申报信息》表整表重建（window.TD.declareData，build_declare_from_xlsx.py 生成）。
       // 用独立的 declareSeedVer 触发「清空 declare_reqs + 整表重建」；仅触发一次，不碰收发货人/模板，亦不覆盖首次 seed 逻辑。
       var declareJob = db.get('config', 'declareSeedVer').then(function (dcfg) {
-        var DECLARE_VER = 2;
+        var DECLARE_VER = 3;
         if (dcfg && dcfg.value >= DECLARE_VER) return null;
         var rd = (typeof window !== 'undefined' && window.TD && window.TD.declareData) ? window.TD.declareData : [];
         return db.clear('declare_reqs').then(function () {
