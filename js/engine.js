@@ -26,12 +26,14 @@
     singleGw:['SINGLE GW', 'PER CTN G.W', 'WEIGHT/CTN', '单箱重量', '单箱毛重', 'WEIGHT PER CTN', '单箱重', '单箱重(KG)'],
     volume:  ['CBM', 'M3', 'VOL', 'MEAS', '体积', '尺码', 'MEAS\'T'],
     material:['MATERIAL', '材质', '质地'],
+    usage:   ['用途', 'USE', 'USAGE', '用途说明'],
     brand:   ['BRAND', '品牌'],
     origin:  ['ORIGIN', '原产地', '产地', 'COUNTRY OF ORIGIN'],
     // v1.4.43 海运类模板「长/宽/高/产品图片/产品性质/备注」等 per-item 字段
-    lengthCm:['LENGTH', 'L', 'L (CM)', 'L(CM)', '长', '长(CM)', '长(CM)'],
-    widthCm: ['WIDTH',  'W', 'W (CM)', 'W(CM)', '宽', '宽(CM)', '宽(CM)'],
-    heightCm:['HEIGHT', 'H', 'H (CM)', 'H(CM)', '高', '高(CM)', '高(CM)'],
+    // 注意：alias 不再放单字母 'L'/'W'/'H'（normalizeHeader 去空格后会被任意含该字母的词误命中）
+    lengthCm:['LENGTH', 'L(CM)', '长', '长CM'],
+    widthCm: ['WIDTH',  'W(CM)', '宽', '宽CM'],
+    heightCm:['HEIGHT', 'H(CM)', '高', '高CM'],
     imageUrl:['IMAGE', 'PHOTO', 'PICTURE', '图片', '产品图片', '商品图片'],
     productNature:['BATTERY TYPE', 'POWERED', 'NATURE', 'PRODUCT NATURE', '性质', '产品性质', '带电', '带磁'],
     remark:  ['REMARK', 'NOTES', 'NOTE', '备注', '说明']
@@ -188,6 +190,9 @@
         var it = makeItemCore(sku, d);
         it.boxNo = b.boxNo || ''; it.boxSpec = dims; it.dims = dims;
         it.length = b.length || ''; it.width = b.width || ''; it.height = b.height || '';
+        // v1.4.47：boxMode 直接把箱规同步给 per-item 长/宽/高/单箱重字段（模板列映射的是 lengthCm/... 而非 length）
+        it.lengthCm = b.length || ''; it.widthCm = b.width || ''; it.heightCm = b.height || '';
+        it.singleGw = Number(b.gw) || 0;
         it.volume = vol; it.volumeWeight = volW;
         it.boxCount = 1; it.ctns = 1;
         it.qty = Number(b.qty) || 0; it.amount = round(it.qty * it.price, 2);
@@ -249,6 +254,13 @@
           it.dims = ba.firstDims; it.boxSpec = ba.firstBoxSpec;
           it.volume = round(ba.volume, 6); it.volumeWeight = round(ba.volumeWeight, 3);
           it.boxNw = ba.count ? round(ba.nw / ba.count, 3) : 0;
+          // v1.4.47：非 boxMode（纯标签驱动模板未触发 boxMode）时，从第一箱尺寸兜底补 per-item 长/宽/高/单箱重，
+          // 让「长(cm)/宽(cm)/高(cm)/单箱重量」等列有值可填（避免整列空白）
+          if (!boxMode) {
+            var _m = String(ba.firstDims || '').match(/(\d+(?:\.\d+)?)\s*[×xX*]\s*(\d+(?:\.\d+)?)\s*[×xX*]\s*(\d+(?:\.\d+)?)/);
+            if (_m) { it.lengthCm = Number(_m[1]); it.widthCm = Number(_m[2]); it.heightCm = Number(_m[3]); }
+            it.singleGw = ba.count ? round(ba.gw / ba.count, 3) : 0;
+          }
         }
       } else {
         it._weightSource = 'packing';
@@ -268,7 +280,7 @@
     // 给收发人补全常用字段默认值，避免模板占位符 unresolved
     function fillPartyDefaults(p) {
       p = p || {};
-      ['name', 'company', 'address', 'city', 'state', 'zip', 'country', 'tel', 'email', 'contact', 'taxNo', 'eori'].forEach(function (k) { if (p[k] === undefined) p[k] = ''; });
+      ['name', 'company', 'warehouseCode', 'address', 'city', 'state', 'zip', 'country', 'tel', 'email', 'contact', 'taxNo', 'eori'].forEach(function (k) { if (p[k] === undefined) p[k] = ''; });
       return p;
     }
     shipper = fillPartyDefaults(shipper);
@@ -429,6 +441,7 @@
     { re: /(货物品名|商品品名|^品名$)/, path: 'goodsSummary' },
     { re: /备注/, path: 'remark' },
     { re: /(VAT号|EORI)/, path: 'consignee.taxNo' },
+    { re: /仓库代码|WAREHOUSE\s*CODE|海外仓代码|仓库编号|FBA代码/, path: 'consignee.warehouseCode' },
     { re: /(揽货渠道|客户渠道|服务渠道|服务$)/, path: '' } // 无对应字段，跳过
   ];
 
