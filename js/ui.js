@@ -766,7 +766,7 @@
           name: name, kind: kind, carrier: carrier, status: 'active',
           fileBuf: buf, fileName: f.name, fileSize: buf.byteLength || buf.length || 0,
           uploadedAt: Date.now(),
-          mapping: { required: engine.REQUIRED_FIELDS[kind] || [], scanned: scan }
+          mapping: { required: engine.REQUIRED_FIELDS[kind] || [], scanned: scan, labelMap: engine.buildLabelMap(wb, scan.itemsRow || -1) }
         });
         window.__lastTplUpload = { ok: true, name: name, kind: kind, size: (buf.byteLength || buf.length || 0), sheets: wb.worksheets.map(function (w) { return w.name; }), fields: scan.fields.length, itemFields: scan.itemFields.length, converted: !!(wb.__formatGuess && wb.__formatGuess !== 'xlsx') };
         toast('模板已上传：扫描到 ' + scan.fields.length + ' 个表头字段 + ' + scan.itemFields.length + ' 个明细字段', 'ok');
@@ -791,11 +791,58 @@
         var t = await db.get('templates', b.dataset.id);
         var wb = await loadWb(t.fileBuf);
         var scan = engine.scanTemplate(wb);
-        showModal('<h3>字段映射 · ' + esc(t.name) + '</h3>' +
-          '<h3>表头占位符 (' + scan.fields.length + ')</h3><p class="mono" style="word-break:break-all">' + scan.fields.map(esc).join('　') + '</p>' +
-          '<h3>明细占位符 (' + scan.itemFields.length + ')</h3><p class="mono">' + scan.itemFields.map(esc).join('　') + '</p>' +
-          '<h3>必填校验字段</h3><p>' + (t.mapping.required || []).map(function (r) { return '<span class="badge yellow">' + esc(r.label) + '</span> '; }).join('') + '</p>' +
-          '<div style="text-align:right;margin-top:12px"><button class="btn" onclick="TDUI.closeModal()">关闭</button></div>');
+        // 字段映射候选（数据模型字段）
+        var CAND = [
+          { p: 'invoiceNo', l: '发票号' }, { p: 'invoiceDate', l: '发票日期' }, { p: 'contractNo', l: '合同号' }, { p: 'orderNos', l: '订单号' }, { p: 'refId', l: '参考号' },
+          { p: 'shipper.name', l: '发货人名称' }, { p: 'shipper.company', l: '发货人公司' }, { p: 'shipper.address', l: '发货人地址' }, { p: 'shipper.city', l: '发货人城市' }, { p: 'shipper.state', l: '发货人省/州' }, { p: 'shipper.zip', l: '发货人邮编' }, { p: 'shipper.country', l: '发货人国家' }, { p: 'shipper.tel', l: '发货人电话' }, { p: 'shipper.email', l: '发货人邮箱' }, { p: 'shipper.taxNo', l: '发货人税号' },
+          { p: 'consignee.name', l: '收货人名称' }, { p: 'consignee.company', l: '收货人公司' }, { p: 'consignee.address', l: '收货人地址' }, { p: 'consignee.city', l: '收货人城市' }, { p: 'consignee.state', l: '收货人省/州' }, { p: 'consignee.zip', l: '收货人邮编' }, { p: 'consignee.country', l: '收货人国家' }, { p: 'consignee.tel', l: '收货人电话' }, { p: 'consignee.email', l: '收货人邮箱' }, { p: 'consignee.taxNo', l: '收货人税号' },
+          { p: 'incoterms', l: '贸易条款' }, { p: 'pol', l: '起运港' }, { p: 'pod', l: '目的港' }, { p: 'transport', l: '运输方式' }, { p: 'etd', l: '船期' }, { p: 'vessel', l: '船名航次' }, { p: 'containerType', l: '柜型' }, { p: 'containerQty', l: '柜量' }, { p: 'freightTerms', l: '运费条款' }, { p: 'paymentTerms', l: '付款条款' }, { p: 'customsType', l: '报关方式' }, { p: 'agent', l: '订舱代理' }, { p: 'shippingMarks', l: '唛头' }, { p: 'remark', l: '备注' }, { p: 'goodsSummary', l: '品名概述' },
+          { p: 'totals.boxCount', l: '总箱数' }, { p: 'totals.gw', l: '总毛重' }, { p: 'totals.nw', l: '总净重' }, { p: 'totals.volume', l: '总体积' }, { p: 'totals.amount', l: '总金额' }, { p: 'totals.qty', l: '总数量' },
+          { p: 'items.sku', l: 'SKU' }, { p: 'items.nameCn', l: '中文品名' }, { p: 'items.nameEn', l: '英文品名' }, { p: 'items.hsCode', l: '海关编码' }, { p: 'items.qty', l: '数量' }, { p: 'items.unit', l: '单位' }, { p: 'items.price', l: '单价' }, { p: 'items.amount', l: '金额' }, { p: 'items.nw', l: '净重' }, { p: 'items.gw', l: '毛重' }, { p: 'items.material', l: '材质' }, { p: 'items.brand', l: '品牌' }, { p: 'items.model', l: '型号' }, { p: 'items.boxNo', l: '箱号' }, { p: 'items.boxCount', l: '箱数' }, { p: 'items.dims', l: '尺寸' }, { p: 'items.origin', l: '原产国' }, { p: 'items.usage', l: '用途' }
+        ];
+        var lm = (t.mapping && t.mapping.labelMap && t.mapping.labelMap.length)
+          ? t.mapping.labelMap.slice()
+          : engine.buildLabelMap(wb, scan.itemsRow || -1);
+        function rowHtml(e, i) {
+          var opts = '<option value="">（不映射）</option>' + CAND.map(function (c) {
+            return '<option value="' + c.p + '"' + (e.path === c.p ? ' selected' : '') + '>' + c.l + ' · ' + c.p + '</option>';
+          }).join('');
+          return '<tr><td class="mono" style="max-width:240px;overflow:hidden;text-overflow:ellipsis">' + esc(e.label) + '</td>' +
+            '<td><select data-idx="' + i + '" style="max-width:260px">' + opts + '</select></td>' +
+            '<td style="color:' + (e.resolved ? '#2ecc71' : '#e67e22') + '">' + (e.resolved ? '✓自动' : '⚠未识别') + '</td></tr>';
+        }
+        var html = '<h3>字段映射 · ' + esc(t.name) + '</h3>' +
+          '<p class="hint">系统已自动识别模板里的中文标签并映射到数据字段。下拉可改；选「不映射」则该标签原样保留。改完自动存库。</p>' +
+          '<div class="card"><table id="tp-maptable" class="grid"><tr><th>模板标签（如 收件人国家代码）</th><th>映射到字段</th><th>状态</th></tr>' +
+          lm.map(rowHtml).join('') + '</table></div>' +
+          '<div style="margin-top:10px"><button class="btn" id="tp-rescan">🔄 重新扫描标签</button> ' +
+          '<button class="btn" onclick="TDUI.closeModal()">关闭</button></div>';
+        showModal(html);
+        var wrapRows = function () {
+          var tbl = document.getElementById('tp-maptable');
+          tbl.querySelectorAll('select').forEach(function (sel) {
+            sel.onchange = async function () {
+              var i = +sel.dataset.idx; lm[i].path = sel.value; lm[i].resolved = !!sel.value;
+              t.mapping = t.mapping || {}; t.mapping.labelMap = lm;
+              await db.put('templates', t); toast('已保存映射', 'ok');
+            };
+          });
+        };
+        wrapRows();
+        document.getElementById('tp-rescan').onclick = async function () {
+          lm = engine.buildLabelMap(wb, scan.itemsRow || -1);
+          t.mapping = t.mapping || {}; t.mapping.labelMap = lm;
+          await db.put('templates', t);
+          showModal('<h3>字段映射 · ' + esc(t.name) + '</h3>' +
+            '<p class="hint">已重新扫描。下拉可改，改完自动存库。</p>' +
+            '<div class="card"><table id="tp-maptable" class="grid"><tr><th>模板标签</th><th>映射到字段</th><th>状态</th></tr>' +
+            lm.map(rowHtml).join('') + '</table></div>' +
+            '<div style="margin-top:10px"><button class="btn" id="tp-rescan">🔄 重新扫描标签</button> ' +
+            '<button class="btn" onclick="TDUI.closeModal()">关闭</button></div>');
+          wrapRows();
+          document.getElementById('tp-rescan').onclick = arguments.callee;
+          toast('已重新扫描标签', 'ok');
+        };
       };
     });
     document.querySelectorAll('.tp-toggle').forEach(function (b) {
@@ -1071,7 +1118,7 @@
         return;
       }
       var wb = await loadWb(tpl.fileBuf, tpl.fileName);
-      var fillRes = engine.fillTemplate(wb, ctx.data, { logo: tpl.logo || null });
+      var fillRes = engine.fillTemplate(wb, ctx.data, { logo: tpl.logo || null, labelMap: ((tpl.mapping && tpl.mapping.labelMap) || []) });
       w._wb = wb; w._data = ctx.data;
       var confirmed = w.doc && w.doc.status === 'confirmed';
       body.innerHTML = '<div class="card"><h3>发票预览（模板: ' + esc(tpl.name) + '）</h3>' +
@@ -1325,7 +1372,7 @@
         return;
       }
       var wb = await loadWb(tpl.fileBuf, tpl.fileName);
-      var fillRes = engine.fillTemplate(wb, ctx.data, { logo: tpl.logo || null });
+      var fillRes = engine.fillTemplate(wb, ctx.data, { logo: tpl.logo || null, labelMap: ((tpl.mapping && tpl.mapping.labelMap) || []) });
       w._wb = wb;
       var confirmed = w.doc && w.doc.status === 'confirmed';
       body.innerHTML = '<div class="card"><h3>订舱单预览（模板: ' + esc(tpl.name) + '）</h3>' +
@@ -1386,7 +1433,7 @@
       var tpl = await db.get('templates', d.templateId);
       if (!tpl) throw new Error('关联模板已删除，无法重新生成');
       var wb = await loadWb(tpl.fileBuf, tpl.fileName);
-      engine.fillTemplate(wb, d.data, { logo: tpl.logo || null });
+      engine.fillTemplate(wb, d.data, { logo: tpl.logo || null, labelMap: ((tpl.mapping && tpl.mapping.labelMap) || []) });
       return wb;
     }
     document.querySelectorAll('.doc-view').forEach(function (b) {
