@@ -63,23 +63,23 @@
       return Promise.all(ups);
     });
     return migrateJobs.then(function () {
+      // 申报要素主数据：从本地《商品申报信息》表整表重建（window.TD.declareData，build_declare_from_xlsx.py 生成）。
+      // 用独立的 declareSeedVer 触发「清空 declare_reqs + 整表重建」；仅触发一次，不碰收发货人/模板，亦不覆盖首次 seed 逻辑。
+      var declareJob = db.get('config', 'declareSeedVer').then(function (dcfg) {
+        var DECLARE_VER = 2;
+        if (dcfg && dcfg.value >= DECLARE_VER) return null;
+        var rd = (typeof window !== 'undefined' && window.TD && window.TD.declareData) ? window.TD.declareData : [];
+        return db.clear('declare_reqs').then(function () {
+          return rd.length ? db.bulkPut('declare_reqs', rd) : null;
+        }).then(function () {
+          return db.put('config', { key: 'declareSeedVer', value: DECLARE_VER });
+        });
+      });
       return db.get('config', 'seedVer').then(function (cfg) {
-        if (cfg && cfg.value >= SEED_VER) return { seeded: false };
+        if (cfg && cfg.value >= SEED_VER) return declareJob.then(function () { return { seeded: false }; });
         var jobs = [
-          db.bulkPut('parties', PARTIES.slice()),
-          db.bulkPut('declare_reqs', DECLARES.slice())
+          db.bulkPut('parties', PARTIES.slice())
         ];
-        // 飞书《申报信息》双表合并镜像（tests/build_declare_data.js 生成，js/declare_data.js 提供）。
-        // 仅新增本地缺失的 SKU，不覆盖用户已手填/已存在的申报要素。
-        var realDeclares = (typeof window !== 'undefined' && window.TD && window.TD.declareData) ? window.TD.declareData : [];
-        if (realDeclares.length) {
-          jobs.push(db.all('declare_reqs').then(function (existing) {
-            var have = {};
-            existing.forEach(function (e) { have[e.sku] = true; });
-            var toAdd = realDeclares.filter(function (r) { return !have[r.sku]; });
-            return toAdd.length ? db.bulkPut('declare_reqs', toAdd) : null;
-          }));
-        }
         // 内置模板
         var inv = engine.makeBuiltinInvoiceTemplate(ExcelJS);
         var bok = engine.makeBuiltinBookingTemplate(ExcelJS);
@@ -128,6 +128,7 @@
             });
           }));
         });
+        jobs.push(declareJob);
         return Promise.all(jobs).then(function () {
           return db.put('config', { key: 'seedVer', value: SEED_VER }).then(function () { return { seeded: true }; });
         });

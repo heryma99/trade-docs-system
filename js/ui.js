@@ -402,11 +402,11 @@
     declareAll = await db.all('declare_reqs');
     declareAll.sort(function (a, b) { return a.sku < b.sku ? -1 : 1; });
     return '<h2>申报信息（申报要素主数据 · 分面浏览）</h2>' +
-      '<p class="hint">数据来源：飞书《申报信息》<b>主文档</b>（SKU主数据）+ <b>备用文档</b>（申报专用）。主文档优先，缺字段自动用备用文档同 SKU 补齐。点「☁️ 从飞书镜像同步」并入本地——仅填空字段，<b>不覆盖</b>手填项。</p>' +
+      '<p class="hint">数据来源：本地《商品申报信息》表（D:/模板/商品申报信息.xlsx，约 13019 行），由 build_declare_from_xlsx.py 重建为 js/declare_data.js。点「🔄 并入申报主数据」以该表整表刷新本地——仅填空字段，<b>不覆盖</b>手填项。</p>' +
       '<div class="card"><div class="toolbar">' +
       '<button class="btn" id="dc-add">＋新增SKU</button>' +
       '<label class="btn ghost" style="display:inline-block">📥 从 xlsx/xls/csv 导入<input type="file" id="dc-file" accept=".xlsx,.xls,.csv" style="display:none"></label>' +
-      '<button class="btn warn" id="dc-pull">☁️ 从飞书镜像同步</button>' +
+      '<button class="btn warn" id="dc-pull">🔄 并入申报主数据</button>' +
       '<input type="text" id="dc-search" class="input" placeholder="搜索 SKU / 品名 / HS编码 / 材质 / 品牌" style="width:260px;margin-left:auto">' +
       '</div>' +
       '<div id="dc-facets" class="facets"></div>' +
@@ -630,7 +630,7 @@
       } catch (e) { toast('导入失败: ' + e.message, 'err'); }
     };
     document.getElementById('dc-pull').onclick = async function () {
-      toast('正在从飞书《申报信息》镜像同步…');
+      toast('正在以《商品申报信息》表刷新本地申报要素…');
       var r = await syncDeclaresFromMirror();
       if (r.ok) { toast('✅ 同步完成：新增 ' + r.added + ' 条、补齐 ' + r.merged + ' 条（不覆盖手填项）', 'ok'); }
       else {
@@ -650,7 +650,7 @@
   // 做字段级合并：本地已有 SKU 仅填空字段、不覆盖手填值；本地缺失 SKU 新增。
   async function syncDeclaresFromMirror() {
     var data = (window.TD && window.TD.declareData) || [];
-    if (!data.length) return { ok: false, added: 0, merged: 0, error: '本地未找到飞书申报信息镜像（js/declare_data.js），请重新部署系统' };
+    if (!data.length) return { ok: false, added: 0, merged: 0, error: '本地未找到申报信息主数据（js/declare_data.js），请重新部署系统' };
     var existing = await db.all('declare_reqs');
     var map = {}; existing.forEach(function (e) { map[e.sku] = e; });
     var FIELDS = ['nameCn', 'nameEn', 'hsCode', 'declarePrice', 'declarePriceRaw', 'material', 'brand', 'usage', 'unit', 'nw', 'gw', 'currency', 'model', 'origin'];
@@ -1313,7 +1313,7 @@
     }
     pullBtn('st-pull-parties', 'parties', '收发货人');
     document.getElementById('st-pull-declares').onclick = async function () {
-      toast('正在从飞书《申报信息》镜像同步…');
+      toast('正在以《商品申报信息》表刷新本地申报要素…');
       var r = await syncDeclaresFromMirror();
       if (r.ok) toast('✅ 申报信息同步完成：新增 ' + r.added + ' 条、补齐 ' + r.merged + ' 条', 'ok');
       else toast('同步失败: ' + r.error, 'err');
