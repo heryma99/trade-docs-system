@@ -939,17 +939,16 @@
       // v1.4.45：当发票模板为空时，在 发票生成 页渲染一个明显的红色提示卡 + 「立即恢复」按钮，
       // 并在页面渲染时（不限 init 阶段）自动尝试一次静默远程拉取 + 拿到后立刻重渲。
       if (tpls.length === 0) {
-        // 静默自愈：渲染时若发现无发票模板，立刻拉一次（不需要用户点）
+        // v1.4.46：改用 _recoverInvoiceTemplates（add-only，绕过 threeWayMerge/db.clear）
         try {
           if (!window.__recovering_invoice__) {
             window.__recovering_invoice__ = 1;
-            var prAuto = await pullShared();
-            if (prAuto && prAuto.ok) {
+            var prAuto = await _recoverInvoiceTemplates();
+            if (prAuto && prAuto.ok && prAuto.got > 0) {
               var refreshed = (await db.all('templates')).filter(function (t) { return t.kind === 'invoice' && t.status === 'active'; });
-              if (refreshed.length > 0) {
-                toast('已自动恢复 ' + refreshed.length + ' 个发票模板', 'ok');
-                render(); return;
-              }
+              toast('已自动恢复 ' + refreshed.length + ' 个发票模板', 'ok');
+              window.__recovering_invoice__ = 0;
+              render(); return;
             }
             window.__recovering_invoice__ = 0;
           }
@@ -981,13 +980,19 @@
       if (rb) rb.onclick = async function () {
         rb.disabled = true; rb.textContent = '正在从团队库拉取…';
         try {
-          var pr2 = await pullShared();
-          if (pr2.ok) {
+          // v1.4.46：改用 add-only 独立恢复函数，不动其他 store、不清表、不 merge
+          var pr2 = await _recoverInvoiceTemplates();
+          if (pr2 && pr2.ok) {
             var got = (await db.all('templates')).filter(function (t) { return t.kind === 'invoice' && t.status === 'active'; });
-            toast('已从团队库拉取 ' + got.length + ' 个发票模板', 'ok');
-            render();
+            if (got.length > 0) {
+              toast('已从团队库拉取 ' + got.length + ' 个发票模板', 'ok');
+              render();
+            } else {
+              toast('云端也没有可用发票模板（拉到 0）', 'err');
+              rb.disabled = false; rb.textContent = '立即恢复发票模板';
+            }
           } else {
-            toast('拉取失败：' + pr2.error, 'err');
+            toast('拉取失败：' + (pr2 && pr2.error || '未知错误'), 'err');
             rb.disabled = false; rb.textContent = '立即恢复发票模板';
           }
         } catch (e) {
@@ -1836,6 +1841,50 @@
     });
     return out;
   }
+  // ---------- 发票模板自愈（add-only，绕过 threeWayMerge，单独用） ----------
+  // v1.4.46 抽出来：之前直接调 pullShared()，但 pullShared 会 db.clear + 三方合并，
+  // 在「本地已有老 invoice + 远端有同 id 新 invoice」边界 case 下会把 invoice 模板全丢，
+  // 而且会顺手把本地其他非 invoice 模板也一起清掉。
+  // 这里只做"从云端取 invoice 模板 add-only 写入本地"，不动其他 store、不清表、不 merge。
+  async function _recoverInvoiceTemplates() {
+    try {
+      var res = await fetch(SYNC_CDN, { cache: 'no-store' });
+      if (!res.ok) return { ok: false, error: '云端 HTTP ' + res.status, got: 0 };
+      var r = await res.json();
+      if (!r || !r.stores || !Array.isArray(r.stores.templates)) {
+        return { ok: false, error: '云端数据格式错误（无 stores.templates）', got: 0 };
+      }
+      var remoteList = r.stores.templates.filter(function (x) { return x && x.kind === 'invoice' && x.status === 'active' && !x.isSeed; });
+      if (!remoteList.length) return { ok: true, got: 0, note: '云端没有可恢复的发票模板' };
+      // 还原 fileBuf（v1.4.39 修复：push 上云的是 base64-string 或 {type:'Buffer',data:[]}）
+      remoteList = remoteList.map(function (t) {
+        var out = {};
+        for (var k in t) out[k] = t[k];
+        if (typeof out.fileBuf === 'string' && out.fileBuf.length > 0 && out.fileBufShape) {
+          try {
+            var bin = atob(out.fileBuf);
+            var u8 = Uint8Array.from(bin, function (c) { return c.charCodeAt(0); });
+            out.fileBuf = u8.buffer;
+          } catch (e) {}
+        } else if (out.fileBuf && typeof out.fileBuf === 'object' && Array.isArray(out.fileBuf.data)) {
+          out.fileBuf = Uint8Array.from(out.fileBuf.data).buffer;
+        } else if (Array.isArray(out.fileBuf)) {
+          out.fileBuf = Uint8Array.from(out.fileBuf).buffer;
+        }
+        return out;
+      });
+      // add-only：已存在的同 id 不覆盖（避免覆盖本地更新的版本），只新增缺的
+      var local = await db.all('templates');
+      var localIds = {};
+      local.forEach(function (x) { if (x && x.id) localIds[x.id] = 1; });
+      var toPut = remoteList.filter(function (x) { return x && x.id && !localIds[x.id]; });
+      if (toPut.length) await db.bulkPut('templates', toPut);
+      return { ok: true, got: toPut.length, total: remoteList.length };
+    } catch (e) {
+      return { ok: false, error: e.message || String(e), got: 0 };
+    }
+  }
+
   // 拉取：公开 CDN，无需 token。与本地做三方合并（保留本地未上传的修改），并记录服务端快照为基准。
   async function pullShared() {
     var r;
