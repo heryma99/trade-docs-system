@@ -1031,14 +1031,16 @@
         return;
       }
       // 早期诊断 fileBuf 格式（避免直接抛 generic 错误）
-      var _u8 = new Uint8Array(tpl.fileBuf instanceof ArrayBuffer ? tpl.fileBuf : tpl.fileBuf.buffer);
+      // 兼容：ArrayBuffer / Uint8Array / {data:[]} / {type:'Buffer', data:[]} / 其他损坏形式
+      var _info = _inspectFileBuf(tpl.fileBuf);
+      var _u8 = _info.bytes;
       var _fmt = (_u8.length >= 4 && _u8[0] === 0x50 && _u8[1] === 0x4B) ? 'xlsx'
                 : (_u8.length >= 8 && _u8[0] === 0xD0 && _u8[1] === 0xCF && _u8[2] === 0x11 && _u8[3] === 0xE0) ? 'xls-old'
                 : (_u8.length && _u8[0] >= 0x20 && _u8[0] <= 0x7E) ? 'csv-or-text' : 'unknown';
       if (_fmt === 'unknown' || _fmt === 'csv-or-text') {
         body.innerHTML = '<div class="card vres block" style="padding:20px">' +
           '<h3 style="margin-top:0">⚠️ 模板文件已损坏</h3>' +
-          '<p>当前选中模板 <b>' + esc(tpl.name) + '</b> 的 fileBuf 已不是有效 xlsx（探测为 <code>' + _fmt + '</code>，原始大小 ' + (tpl.fileBuf.byteLength || tpl.fileBuf.length || 0) + ' 字节）。</p>' +
+          '<p>当前选中模板 <b>' + esc(tpl.name) + '</b> 的 fileBuf 已不是有效 xlsx（探测为 <code>' + _fmt + '</code>，形态 <code>' + esc(_info.shape) + '</code>，原始大小 ' + _info.size + ' 字节）。</p>' +
           '<p>可能原因：浏览器本地存储被异常清空、IndexedDB schema 不兼容、模板上传时网络中断等。</p>' +
           '<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">' +
           '<button class="btn danger" id="wz-del-bad-tpl">🗑 删除该损坏模板并回 step 1</button>' +
@@ -1287,14 +1289,15 @@
         return;
       }
       // 早期诊断 fileBuf 格式（同 invoice step=4）
-      var _u8b = new Uint8Array(tpl.fileBuf instanceof ArrayBuffer ? tpl.fileBuf : tpl.fileBuf.buffer);
+      var _infob = _inspectFileBuf(tpl.fileBuf);
+      var _u8b = _infob.bytes;
       var _fmtb = (_u8b.length >= 4 && _u8b[0] === 0x50 && _u8b[1] === 0x4B) ? 'xlsx'
                 : (_u8b.length >= 8 && _u8b[0] === 0xD0 && _u8b[1] === 0xCF && _u8b[2] === 0x11 && _u8b[3] === 0xE0) ? 'xls-old'
                 : (_u8b.length && _u8b[0] >= 0x20 && _u8b[0] <= 0x7E) ? 'csv-or-text' : 'unknown';
       if (_fmtb === 'unknown' || _fmtb === 'csv-or-text') {
         body.innerHTML = '<div class="card vres block" style="padding:20px">' +
           '<h3 style="margin-top:0">⚠️ 模板文件已损坏</h3>' +
-          '<p>当前选中订舱模板 <b>' + esc(tpl.name) + '</b> 的 fileBuf 已被破坏（探测为 <code>' + _fmtb + '</code>）。</p>' +
+          '<p>当前选中订舱模板 <b>' + esc(tpl.name) + '</b> 的 fileBuf 已被破坏（探测为 <code>' + _fmtb + '</code>，形态 <code>' + esc(_infob.shape) + '</code>，大小 ' + _infob.size + ' 字节）。</p>' +
           '<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">' +
           '<button class="btn danger" id="bw-del-bad-tpl">🗑 删除该损坏模板并回 step 1</button>' +
           '<button class="btn ghost" id="bw-back4b">← 回到 step 1</button>' +
@@ -1473,12 +1476,11 @@
       var bad = [], ok = 0;
       for (var i = 0; i < tpls.length; i++) {
         var t = tpls[i];
-        var u8 = t.fileBuf ? new Uint8Array(t.fileBuf instanceof ArrayBuffer ? t.fileBuf : t.fileBuf.buffer) : new Uint8Array(0);
-        var isZip = u8.length >= 4 && u8[0] === 0x50 && u8[1] === 0x4B;
-        var isCfb = u8.length >= 8 && u8[0] === 0xD0 && u8[1] === 0xCF && u8[2] === 0x11 && u8[3] === 0xE0;
-        var sz = u8.length;
-        if (!sz || (!isZip && !isCfb)) {
-          bad.push({ id: t.id, name: t.name, kind: t.kind, size: sz, format: !sz ? 'empty' : (isCfb ? 'xls-old' : 'unknown') });
+        var info = _inspectFileBuf(t.fileBuf);
+        var isZip = info.bytes.length >= 4 && info.bytes[0] === 0x50 && info.bytes[1] === 0x4B;
+        var isCfb = info.bytes.length >= 8 && info.bytes[0] === 0xD0 && info.bytes[1] === 0xCF && info.bytes[2] === 0x11 && info.bytes[3] === 0xE0;
+        if (!info.size || (!isZip && !isCfb)) {
+          bad.push({ id: t.id, name: t.name, kind: t.kind, size: info.size, shape: info.shape, format: !info.size ? 'empty' : (isCfb ? 'xls-old' : 'unknown') });
         } else { ok++; }
       }
       var el = document.getElementById('tpl-scan-result');
@@ -1487,10 +1489,10 @@
         return;
       }
       el.innerHTML = '<div class="vres warn"><b>🔍 发现 ' + bad.length + ' 个损坏/格式异常模板（' + ok + ' 个健康）：</b><ul style="margin:6px 0 6px 20px">' +
-        bad.map(function (b) { return '<li><code>' + esc(b.id.slice(0, 12)) + '…</code> 「' + esc(b.name) + '」 <span class="hint">(' + esc(b.kind) + ' · ' + b.format + ' · ' + b.size + 'B)</span> ' +
+        bad.map(function (b) { return '<li><code>' + esc(b.id.slice(0, 12)) + '…</code> 「' + esc(b.name) + '」 <span class="hint">(' + esc(b.kind) + ' · ' + esc(b.shape) + ' · ' + b.size + 'B)</span> ' +
           '<button class="btn sm danger tpl-del-bad" data-id="' + esc(b.id) + '" style="margin-left:8px">🗑 删除</button></li>'; }).join('') +
         '</ul>' +
-        '<p class="hint" style="margin-top:6px">💡 这些模板的 fileBuf 已不是有效 xlsx。点删除可让向导 step 4 不再报错（内置真实模板仍可用）；坏模板里如果有真实发票样张，请在「模板管理」重新上传（建议同时另存为标准 .xlsx）。</p>' +
+        '<p class="hint" style="margin-top:6px">💡 这些模板的 fileBuf 已不是有效 xlsx（形态 <code>empty-object / null</code> 通常是 sync 拉空数据导致）。点删除可让向导 step 4 不再报错；坏模板里如果有真实发票样张，请在「模板管理」重新上传（建议同时另存为标准 .xlsx）。</p>' +
         '</div>';
       el.querySelectorAll('.tpl-del-bad').forEach(function (btn) {
         btn.onclick = async function () {
@@ -1547,6 +1549,79 @@
     var bin = atob(str);
     var bytes = Uint8Array.from(bin, function (c) { return c.charCodeAt(0); });
     return new TextDecoder().decode(bytes);
+  }
+
+  // ---------- v1.4.39: fileBuf 多形态检测 + sync 序列化/反序列化 ----------
+  // 诊断 fileBuf 的真实形态和大小（兼容 ArrayBuffer / TypedArray / {data:[]}/ {type:'Buffer',data:[]}/ 损坏）
+  function _inspectFileBuf(x) {
+    var shape = 'unknown', size = 0, bytes = new Uint8Array(0);
+    if (x == null) { shape = 'null'; return { shape: shape, size: 0, bytes: bytes }; }
+    if (x instanceof ArrayBuffer) { shape = 'ArrayBuffer'; size = x.byteLength; bytes = new Uint8Array(x); }
+    else if (ArrayBuffer.isView(x)) { shape = 'TypedArray'; size = x.byteLength; bytes = new Uint8Array(x.buffer, x.byteOffset, x.byteLength); }
+    else if (typeof x === 'string') { shape = 'base64-string'; size = x.length; try { bytes = new Uint8Array(Buffer.from(x, 'base64')); } catch (e) {} }
+    else if (typeof x === 'object') {
+      var arr = (x.data && Array.isArray(x.data)) ? x.data : (Array.isArray(x) ? x : null);
+      if (arr) { shape = (x.type === 'Buffer') ? '{type:Buffer,data:[]}' : '{data:[]}'; size = arr.length; bytes = Uint8Array.from(arr); }
+      else { shape = 'empty-object'; size = 0; }
+    }
+    return { shape: shape, size: size, bytes: bytes };
+  }
+  // 把对象里所有 fileBuf(ArrayBuffer/TypedArray) 转成 base64 字符串（push 序列化前调）
+  function _preSerializeForSync(obj) {
+    if (obj == null) return obj;
+    if (Array.isArray(obj)) return obj.map(_preSerializeForSync);
+    if (typeof obj === 'object' && !(obj instanceof ArrayBuffer) && !ArrayBuffer.isView(obj)) {
+      var out = {};
+      for (var k in obj) {
+        if (k === 'fileBuf' && obj[k] != null) {
+          var info = _inspectFileBuf(obj[k]);
+          if (info.size > 0) {
+            // ArrayBuffer → base64
+            out.fileBuf = btoa(String.fromCharCode.apply(null, info.bytes));
+            out.fileBufShape = info.shape;
+            out.fileBufSize = info.size;
+          } else {
+            // 空 fileBuf 标 - 避免把空 {} 推上团队库污染别人
+            out.fileBuf = null;
+            out.fileBufBroken = true;
+          }
+        } else {
+          out[k] = _preSerializeForSync(obj[k]);
+        }
+      }
+      return out;
+    }
+    return obj;
+  }
+  // pull 后还原：把 fileBuf base64 / {type:'Buffer', data:[]} 还原成 ArrayBuffer
+  function _postDeserializeFromSync(obj) {
+    if (obj == null) return obj;
+    if (Array.isArray(obj)) return obj.map(_postDeserializeFromSync);
+    if (typeof obj === 'object' && !(obj instanceof ArrayBuffer) && !ArrayBuffer.isView(obj)) {
+      var out = {};
+      for (var k in obj) {
+        out[k] = _postDeserializeFromSync(obj[k]);
+      }
+      // 还原 fileBuf
+      if (typeof out.fileBuf === 'string' && out.fileBuf.length > 0 && out.fileBufShape) {
+        try {
+          var bin = atob(out.fileBuf);
+          var u8 = Uint8Array.from(bin, function (c) { return c.charCodeAt(0); });
+          out.fileBuf = u8.buffer;
+        } catch (e) {}
+      } else if (out.fileBuf && typeof out.fileBuf === 'object' && Array.isArray(out.fileBuf.data)) {
+        // 旧版 {type:'Buffer', data:[]} 形态
+        var u8b = Uint8Array.from(out.fileBuf.data);
+        out.fileBuf = u8b.buffer;
+      } else if (out.fileBuf && Array.isArray(out.fileBuf)) {
+        var u8c = Uint8Array.from(out.fileBuf);
+        out.fileBuf = u8c.buffer;
+      } else if (out.fileBuf == null || (typeof out.fileBuf === 'object' && Object.keys(out.fileBuf).length === 0)) {
+        out.fileBufBroken = true;
+      }
+      return out;
+    }
+    return obj;
   }
   // 启动时：若文件内置了用户数据快照，合并写回 IndexedDB（同名 key 覆盖）
   async function hydrateFromEmbedded() {
@@ -1658,20 +1733,25 @@
     for (var i = 0; i < SYNC_STORES.length; i++) local[SYNC_STORES[i]] = await db.all(SYNC_STORES[i]);
     // 本地剔除 seed.js 内置占位（isSeed:true），避免把 DEMO 数据推上团队库
     SYNC_STORES.forEach(function (s) { local[s] = (local[s] || []).filter(function (x) { return !x || !x.isSeed; }); });
-    var base = await loadSyncBase();
-    var lastErr = null;
-    for (var attempt = 1; attempt <= 5; attempt++) {
-      var sha = null, remote = { stores: {} };
-      try {
-        var head = await fetch(SYNC_API + '?ref=' + SYNC_BRANCH, { headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' } });
-        if (head.ok) { var hj = await head.json(); sha = hj.sha; remote = JSON.parse(b64decodeUnicode(hj.content)); }
-      } catch (e) {}
-      var conflicts = 0, merged = {};
-      for (var j = 0; j < SYNC_STORES.length; j++) {
-        var s = SYNC_STORES[j];
-        merged[s] = threeWayMerge(base.stores ? base.stores[s] : null, local[s], remote.stores ? remote.stores[s] : null, function () { conflicts++; });
-      }
+      var base = await loadSyncBase();
+      var lastErr = null;
+      for (var attempt = 1; attempt <= 5; attempt++) {
+        var sha = null, remote = { stores: {} };
+        try {
+          var head = await fetch(SYNC_API + '?ref=' + SYNC_BRANCH, { headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' } });
+          if (head.ok) { var hj = await head.json(); sha = hj.sha; remote = JSON.parse(b64decodeUnicode(hj.content)); }
+        } catch (e) {}
+        // v1.4.39 修复：pull 后还原 fileBuf（v1.4.38 之前 push 上去的可能是 {type:'Buffer', data:[...]}）
+        remote = _postDeserializeFromSync(remote);
+        var conflicts = 0, merged = {};
+        for (var j = 0; j < SYNC_STORES.length; j++) {
+          var s = SYNC_STORES[j];
+          merged[s] = threeWayMerge(base.stores ? base.stores[s] : null, local[s], remote.stores ? remote.stores[s] : null, function () { conflicts++; });
+        }
       var payload = { _meta: { app: 'trade-docs-system', ver: '1.4.35', updatedAt: new Date().toISOString(), stores: SYNC_STORES, mergedBy: 'client-3way' }, stores: merged };
+      // v1.4.39 修复：push 前把 fileBuf(ArrayBuffer) 转成 base64 字符串，否则 JSON.stringify 会变成
+      //   {type:'Buffer', data:[...]} 这种嵌套对象，pull 反序列化时丢失或变空。
+      payload = _preSerializeForSync(payload);
       var json = JSON.stringify(payload);
       if (json.length > 900 * 1024) return { ok: false, error: '数据超过 900KB（GitHub 接口上限 1MB），请减少自定义模板数量后再上传' };
       var content = b64encodeUnicode(json);
