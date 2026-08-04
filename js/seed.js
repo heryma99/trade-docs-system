@@ -8,9 +8,9 @@
   var SEED_VER = 5;
 
   var PARTIES = [
-    { id: 'p_shipper_demo', type: 'shipper', name: '示例发货公司 DEMO TRADING CO., LTD.', address: 'ROOM 101, DEMO BUILDING, SHENZHEN, CHINA', tel: '0755-00000000', contact: 'DEMO', country: 'CN', remark: '示例数据，请在"收发货人"页维护真实信息' },
-    { id: 'p_consignee_demo', type: 'consignee', name: 'DEMO IMPORT LLC', address: '100 DEMO STREET, LOS ANGELES, CA, USA', tel: '+1-000-000-0000', contact: 'DEMO', country: 'US', remark: '示例数据' },
-    { id: 'p_notify_demo', type: 'notify', name: 'SAME AS CONSIGNEE', address: '', tel: '', contact: '', country: '', remark: '' }
+    { id: 'p_shipper_demo', type: 'shipper', isSeed: true, name: '示例发货公司 DEMO TRADING CO., LTD.', address: 'ROOM 101, DEMO BUILDING, SHENZHEN, CHINA', tel: '0755-00000000', contact: 'DEMO', country: 'CN', remark: '示例数据，请在"收发货人"页维护真实信息' },
+    { id: 'p_consignee_demo', type: 'consignee', isSeed: true, name: 'DEMO IMPORT LLC', address: '100 DEMO STREET, LOS ANGELES, CA, USA', tel: '+1-000-000-0000', contact: 'DEMO', country: 'US', remark: '示例数据' },
+    { id: 'p_notify_demo', type: 'notify', isSeed: true, name: 'SAME AS CONSIGNEE', address: '', tel: '', contact: '', country: '', remark: '' }
   ];
 
   var DECLARES = [
