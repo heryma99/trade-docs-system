@@ -8,7 +8,7 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">🧾 贸易单证系统 <span class="ver" title="v1.4.38 loadWb 加 magic bytes 自动探测格式（.xlsx/.xls/.csv 不再依赖 fileName）；向导 step4 提前诊断模板 fileBuf 是否损坏，给出「🗑 删除该坏模板」就地恢复；模板上传补 fileName/fileSize/uploadedAt；设置页危险操作新增「🛠 扫描并列出损坏模板」一键定位修复；v1.4.37 渲染错误就地显示">v1.4.38</span></div>
+  <div class="brand">🧾 贸易单证系统 <span class="ver" title="v1.4.39 sync 序列化/反序列化修复 fileBuf 空 {} 推污染团队库：push 前 ArrayBuffer→base64 字符串，pull 后还原 ArrayBuffer；fileBuf 形态诊断补强（识别 empty-object/{type:Buffer,data:[]}）；设置扫描列出形态+大小而非只看头 8 字节；v1.4.38 模板损坏诊断+一键删除；v1.4.37 渲染错误就地显示">v1.4.39</span></div>
   <nav id="tabs">
     <button data-tab="orders" class="tab active">订单</button>
     <button data-tab="packings" class="tab">装箱清单</button>
