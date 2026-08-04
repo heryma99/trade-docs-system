@@ -26,7 +26,7 @@
     singleGw:['SINGLE GW', 'PER CTN G.W', 'WEIGHT/CTN', '单箱重量', '单箱毛重', 'WEIGHT PER CTN', '单箱重', '单箱重(KG)'],
     volume:  ['CBM', 'M3', 'VOL', 'MEAS', '体积', '尺码', 'MEAS\'T'],
     material:['MATERIAL', '材质', '质地'],
-    usage:   ['用途', 'USE', 'USAGE', '用途说明'],
+    usage:   ['用途', 'USE', 'USAGE', '用途说明', 'PURPOSE'],
     brand:   ['BRAND', '品牌'],
     origin:  ['ORIGIN', '原产地', '产地', 'COUNTRY OF ORIGIN'],
     // v1.4.43 海运类模板「长/宽/高/产品图片/产品性质/备注」等 per-item 字段
@@ -35,7 +35,17 @@
     widthCm: ['WIDTH',  'W(CM)', '宽', '宽CM'],
     heightCm:['HEIGHT', 'H(CM)', '高', '高CM'],
     imageUrl:['IMAGE', 'PHOTO', 'PICTURE', '图片', '产品图片', '商品图片'],
-    productNature:['BATTERY TYPE', 'POWERED', 'NATURE', 'PRODUCT NATURE', '性质', '产品性质', '带电', '带磁'],
+    // v1.4.48：中运通达等模板中英双语表头「Purpose(用途)/产品电池类型/是否带电(Y/N)/是否带磁(Y/N)/
+    //          产品销售价格/图片链接/单个产品净重/币种」此前因 alias 缺失而整列空（已被 scanTemplate 兜底选中
+    //          为明细表头，但列未映射任何字段 → 不写值）。补齐下列中英别名。
+    productNature:['NATURE', 'PRODUCT NATURE', '性质', '产品性质'],
+    batteryType:['BATTERY TYPE', 'POWERED', '电池类型', '产品电池类型', '电池'],
+    electrified:['ELECTRIFIED', '是否带电', '带电(Y/N)', '带电'],
+    magnetic:['MAGNETIC', '是否带磁', '带磁(Y/N)', '带磁'],
+    productPrice:['产品价格', '产品销售价格', '销售价格', '零售价', 'RETAIL PRICE', 'SALE PRICE', 'UNIT PRICE'],
+    productLink:['产品链接', '图片链接', '商品链接', 'LINK', 'URL', 'PRODUCT LINK'],
+    singleNw:['单个产品净重', '单品净重', 'NET WT/PC', 'NET WEIGHT/PC'],
+    currency:['CURRENCY', '币种', '货币'],
     remark:  ['REMARK', 'NOTES', 'NOTE', '备注', '说明']
   };
 
@@ -166,6 +176,9 @@
         imageUrl: _pick('imageUrl') || _pick('image') || _pick('photo'),
         remark:   _pick('remark')   || _pick('note'),
         productNature: _pick('productNature') || _pick('batteryType') || _pick('nature'),
+        productPrice: d.productPrice || d.retailPrice || d.salePrice || itR.productPrice || '',
+        productLink: d.productLink || d.link || d.url || itR.productLink || '',
+        singleNw: d.singleNw || d.netWeightPerPc || d.nwPerPc || itR.singleNw || '',
         price: price, unit: d.unit || itR.unit || 'PCS', origin: d.origin || itR.origin || 'CN',
         electrified: (d.electrified != null && d.electrified !== '') ? d.electrified : (itR.electrified != null ? itR.electrified : '否'),
         magnetic: (d.magnetic != null && d.magnetic !== '') ? d.magnetic : (itR.magnetic != null ? itR.magnetic : '否'),
