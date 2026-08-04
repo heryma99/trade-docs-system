@@ -1342,10 +1342,11 @@
     document.getElementById('sync-auto').onchange = async function () { var c = await loadSyncCfg(); c.auto = this.checked; await saveSyncCfg(c); toast(this.checked ? '已开启启动自动拉取' : '已关闭自动拉取', 'ok'); };
     document.getElementById('sync-push').onclick = async function () {
       var c = await loadSyncCfg();
-      setSyncStatus('上传中…');
+      setSyncStatus('上传中（与团队库三方合并）…');
       var r = await pushShared(c.token);
-      setSyncStatus(r.ok ? '✅ 已上传到团队库，团队其他人刷新即可看到' : '❌ ' + r.error);
-      toast(r.ok ? '✅ 上传成功' : '❌ ' + r.error, r.ok ? 'ok' : 'err');
+      var okMsg = '✅ 已合并上传到团队库（' + (r.merged || 0) + ' 条' + (r.conflicts ? '，' + r.conflicts + ' 处冲突按最新时间合并' : '') + '），团队其他人刷新即可看到';
+      setSyncStatus(r.ok ? okMsg : '❌ ' + r.error);
+      toast(r.ok ? okMsg : '❌ ' + r.error, r.ok ? 'ok' : 'err');
     };
     document.getElementById('sync-pull').onclick = async function () {
       setSyncStatus('拉取中…');
@@ -1401,7 +1402,45 @@
   async function saveSyncCfg(cfg) {
     await db.put('config', { key: 'sync', value: { token: cfg.token || '', auto: !!cfg.auto } });
   }
-  // 拉取：公开 CDN，无需 token。以团队库为权威，整体覆盖本地对应 store。
+  // 三方合并基准：上次成功 pull/push 时记录的服务端快照（用于 3-way merge，多人协同不互覆盖）
+  async function loadSyncBase() {
+    var c = await db.get('config', 'syncBase');
+    return (c && c.value) || { stores: {} };
+  }
+  async function saveSyncBase(snapshot) {
+    await db.put('config', { key: 'syncBase', value: snapshot });
+  }
+  function _toMap(list) {
+    var m = {}; if (!list) return m;
+    for (var i = 0; i < list.length; i++) { var r = list[i]; if (r && r.id) m[r.id] = r; }
+    return m;
+  }
+  function _eq(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+  function _newer(a, b) { return (a && a.updatedAt || 0) >= (b && b.updatedAt || 0) ? a : b; }
+  // 3-way 合并：base=上次服务端快照, local=本地, remote=当前服务端。返回合并后数组（按 id 去重）。
+  function threeWayMerge(baseList, localList, remoteList, onConflict) {
+    var b = _toMap(baseList), l = _toMap(localList), r = _toMap(remoteList);
+    var ids = {}, out = [];
+    [b, l, r].forEach(function (m) { Object.keys(m).forEach(function (k) { ids[k] = 1; }); });
+    Object.keys(ids).forEach(function (id) {
+      var bv = b[id], lv = l[id], rv = r[id];
+      if (lv && !rv && !bv) { out.push(lv); return; }                       // 本地新增
+      if (!lv && rv && !bv) { out.push(rv); return; }                       // 远端新增
+      if (!lv && !rv) return;                                              // 都不存在
+      if (bv && lv && !rv) { if (!_eq(lv, bv)) out.push(lv); return; }      // 本地改/删
+      if (bv && !lv && rv) { if (!_eq(rv, bv)) out.push(rv); return; }      // 本地删、远端改 → 远端赢
+      if (lv && rv) {
+        if (_eq(lv, rv)) { out.push(lv); return; }                         // 完全一致
+        if (!bv) { if (onConflict) onConflict(); out.push(_newer(lv, rv)); return; } // 并发新增同 id
+        if (_eq(lv, bv)) { out.push(rv); return; }                          // 本地未动、远端改
+        if (_eq(rv, bv)) { out.push(lv); return; }                          // 远端未动、本地改
+        if (onConflict) onConflict();                                       // 双方都改 → 按 updatedAt 取新
+        out.push(_newer(lv, rv)); return;
+      }
+    });
+    return out;
+  }
+  // 拉取：公开 CDN，无需 token。与本地做三方合并（保留本地未上传的修改），并记录服务端快照为基准。
   async function pullShared() {
     var r;
     try {
@@ -1412,43 +1451,58 @@
       return { ok: false, error: '拉取失败（文件可能尚未上传）: ' + e.message };
     }
     if (!r || !r.stores) return { ok: false, error: '共享数据格式错误' };
-    var merged = 0;
+    var base = await loadSyncBase();
+    var conflicts = 0, merged = 0;
     for (var i = 0; i < SYNC_STORES.length; i++) {
       var s = SYNC_STORES[i], list = r.stores[s];
       if (!list) continue;
+      var local = await db.all(s);
+      var m = threeWayMerge(base.stores ? base.stores[s] : null, local, list, function () { conflicts++; });
       await db.clear(s);
-      await db.bulkPut(s, list);
-      merged += list.length;
+      await db.bulkPut(s, m);
+      merged += m.length;
     }
-    return { ok: true, merged: merged };
+    await saveSyncBase({ stores: r.stores }); // 服务端快照作为下次合并基准
+    return { ok: true, merged: merged, conflicts: conflicts };
   }
-  // 上传：用用户本地保存的细粒度 PAT 写 Contents API（团队权威源）。
+  // 上传：用用户本地保存的细粒度 PAT。先拉当前服务端，与本地做三方合并（多人协同不互覆盖），
+  // 再以服务端最新 sha 提交；若期间被他人并发提交（409/422）则重试最多 5 次。
   async function pushShared(token) {
     if (!token) return { ok: false, error: '请先在设置页填入「细粒度 PAT（仅本仓库 Contents 读写）」' };
-    var stores = {};
-    for (var i = 0; i < SYNC_STORES.length; i++) stores[SYNC_STORES[i]] = await db.all(SYNC_STORES[i]);
-    var payload = { _meta: { app: 'trade-docs-system', ver: '1.4.31', updatedAt: new Date().toISOString(), stores: SYNC_STORES }, stores: stores };
-    var json = JSON.stringify(payload);
-    if (json.length > 900 * 1024) return { ok: false, error: '数据超过 900KB（GitHub 接口上限 1MB），请减少自定义模板数量后再上传' };
-    var content = b64encodeUnicode(json);
-    var sha = null;
-    try {
-      var head = await fetch(SYNC_API + '?ref=' + SYNC_BRANCH, { headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' } });
-      if (head.ok) { var hj = await head.json(); sha = hj.sha; }
-    } catch (e) {}
-    var body = { message: 'sync: update shared master data (parties+templates)', content: content, branch: SYNC_BRANCH };
-    if (sha) body.sha = sha;
-    var res = await fetch(SYNC_API, {
-      method: 'PUT',
-      headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    if (!res.ok) {
+    var local = {};
+    for (var i = 0; i < SYNC_STORES.length; i++) local[SYNC_STORES[i]] = await db.all(SYNC_STORES[i]);
+    var base = await loadSyncBase();
+    var lastErr = null;
+    for (var attempt = 1; attempt <= 5; attempt++) {
+      var sha = null, remote = { stores: {} };
+      try {
+        var head = await fetch(SYNC_API + '?ref=' + SYNC_BRANCH, { headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' } });
+        if (head.ok) { var hj = await head.json(); sha = hj.sha; remote = JSON.parse(b64decodeUnicode(hj.content)); }
+      } catch (e) {}
+      var conflicts = 0, merged = {};
+      for (var j = 0; j < SYNC_STORES.length; j++) {
+        var s = SYNC_STORES[j];
+        merged[s] = threeWayMerge(base.stores ? base.stores[s] : null, local[s], remote.stores ? remote.stores[s] : null, function () { conflicts++; });
+      }
+      var payload = { _meta: { app: 'trade-docs-system', ver: '1.4.31', updatedAt: new Date().toISOString(), stores: SYNC_STORES, mergedBy: 'client-3way' }, stores: merged };
+      var json = JSON.stringify(payload);
+      if (json.length > 900 * 1024) return { ok: false, error: '数据超过 900KB（GitHub 接口上限 1MB），请减少自定义模板数量后再上传' };
+      var content = b64encodeUnicode(json);
+      var body = { message: 'sync: 3-way merge parties+templates (conflicts=' + conflicts + ')', content: content, branch: SYNC_BRANCH };
+      if (sha) body.sha = sha;
+      var res = await fetch(SYNC_API, {
+        method: 'PUT',
+        headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (res.ok) { await saveSyncBase({ stores: merged }); return { ok: true, merged: countRecords(merged), conflicts: conflicts }; }
+      if (res.status === 409 || res.status === 422) { lastErr = '并发提交，自动重试 ' + attempt + '/5'; continue; }
       var t = await res.text();
       return { ok: false, error: '上传失败 HTTP ' + res.status + ' ' + t.slice(0, 200) };
     }
-    return { ok: true };
+    return { ok: false, error: '上传失败（并发冲突重试超限）: ' + lastErr };
   }
+  function countRecords(stores) { var n = 0; SYNC_STORES.forEach(function (s) { n += (stores[s] || []).length; }); return n; }
   // 导出自包含 HTML：把 7 个 store 全量烘焙进一个 html 副本下载（双击即用）
   async function exportSelfContainedHTML() {
     var data = {};
