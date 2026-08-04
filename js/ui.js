@@ -1393,7 +1393,9 @@
   var SYNC_REPO = 'heryma99/trade-docs-system';
   var SYNC_BRANCH = 'main';
   var SYNC_FILE = 'userdata.json';
-  var SYNC_CDN = 'https://cdn.jsdelivr.net/gh/' + SYNC_REPO + '@' + SYNC_BRANCH + '/' + SYNC_FILE;
+  // 改用 raw.githubusercontent.com（GitHub raw 不缓存或缓存极短，几秒级生效）。
+  // 历史曾用 jsDelivr CDN，但 s-maxage=12h + purge 沙箱不可达，会卡 4~12 小时，导致「拉取成功 0 条」。
+  var SYNC_CDN = 'https://raw.githubusercontent.com/' + SYNC_REPO + '/' + SYNC_BRANCH + '/' + SYNC_FILE;
   var SYNC_API = 'https://api.github.com/repos/' + SYNC_REPO + '/contents/' + SYNC_FILE;
   async function loadSyncCfg() {
     var c = await db.get('config', 'sync');
