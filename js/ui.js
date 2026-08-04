@@ -311,6 +311,8 @@
       var obj = { type: val('pt-type'), name: name, company: val('pt-company'), address: val('pt-address'), city: val('pt-city'), state: val('pt-state'), zip: val('pt-zip'), tel: val('pt-tel'), contact: val('pt-contact'), email: val('pt-email'), country: val('pt-country'), taxNo: val('pt-taxno') };
       var id = val('pt-id');
       if (id) { var old = await db.get('parties', id); obj = Object.assign(old, obj); }
+      // 用户接管 seed 占位数据：保存时自动剥离 isSeed 标记，避免下次 push 把 DEMO 推上团队库
+      if (obj && obj.isSeed) delete obj.isSeed;
       await db.put('parties', obj);
       toast('已保存', 'ok'); render();
     };
@@ -1458,7 +1460,11 @@
     for (var i = 0; i < SYNC_STORES.length; i++) {
       var s = SYNC_STORES[i], list = r.stores[s];
       if (!list) continue;
+      // 远端剔除 seed.js 内置的占位数据（isSeed:true），避免历史误混入团队库
+      list = list.filter(function (x) { return !x || !x.isSeed; });
       var local = await db.all(s);
+      // 本地残留的未编辑占位也剔除，避免下次 push 把 DEMO 再次推上去
+      local = local.filter(function (x) { return !x || !x.isSeed; });
       var m = threeWayMerge(base.stores ? base.stores[s] : null, local, list, function () { conflicts++; });
       await db.clear(s);
       await db.bulkPut(s, m);
@@ -1473,6 +1479,8 @@
     if (!token) return { ok: false, error: '请先在设置页填入「细粒度 PAT（仅本仓库 Contents 读写）」' };
     var local = {};
     for (var i = 0; i < SYNC_STORES.length; i++) local[SYNC_STORES[i]] = await db.all(SYNC_STORES[i]);
+    // 本地剔除 seed.js 内置占位（isSeed:true），避免把 DEMO 数据推上团队库
+    SYNC_STORES.forEach(function (s) { local[s] = (local[s] || []).filter(function (x) { return !x || !x.isSeed; }); });
     var base = await loadSyncBase();
     var lastErr = null;
     for (var attempt = 1; attempt <= 5; attempt++) {
@@ -1486,7 +1494,7 @@
         var s = SYNC_STORES[j];
         merged[s] = threeWayMerge(base.stores ? base.stores[s] : null, local[s], remote.stores ? remote.stores[s] : null, function () { conflicts++; });
       }
-      var payload = { _meta: { app: 'trade-docs-system', ver: '1.4.31', updatedAt: new Date().toISOString(), stores: SYNC_STORES, mergedBy: 'client-3way' }, stores: merged };
+      var payload = { _meta: { app: 'trade-docs-system', ver: '1.4.35', updatedAt: new Date().toISOString(), stores: SYNC_STORES, mergedBy: 'client-3way' }, stores: merged };
       var json = JSON.stringify(payload);
       if (json.length > 900 * 1024) return { ok: false, error: '数据超过 900KB（GitHub 接口上限 1MB），请减少自定义模板数量后再上传' };
       var content = b64encodeUnicode(json);
