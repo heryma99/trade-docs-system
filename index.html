@@ -8,7 +8,7 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">🧾 贸易单证系统 <span class="ver" title="v1.4.48 明细行中英双语表头别名补齐：①HEADER_ALIASES 新增 PURPOSE→usage、BATTERY TYPE/产品电池类型→batteryType、是否带电(Y/N)/带电→electrified、是否带磁(Y/N)/带磁→magnetic、产品价格/产品销售价格/零售价→productPrice、产品链接/图片链接→productLink、单个产品净重→singleNw、币种→currency；并把 带电/带磁 从 productNature 拆出（避免产品性质列误填带电信息）。②makeItemCore 同步导出 productPrice/productLink/singleNw 字段，明细逐列按表头写值。解决中运通达等模板「用途/产品销售价格/产品电池类型/是否带电/是否带磁」整列空白（此前这些中英双语表头未命中任何别名 → 列未映射 → 不写值）。实测：真实中运通达模板填出后明细 25 列全部映射，用途=Put things、是否带电=否、是否带磁=否 均正确回填。注：产品图片/产品链接/电池类型/带电 在申报表 declare_data.js 命中率 0%（飞书源表无这些列），引擎已能识别并填空，需回飞书补数据后自然生效。v1.4.47 长短高/发货人收货人填充修复。v1.4.46 发票模板自愈 add-only。v1.4.45 立即恢复按钮+静默自愈。v1.4.44 启动自动拉取发票模板。v1.4.43 海运类明细行填充。v1.4.42 fileBuf 形态自适应。v1.4.41 中文括号标签自动填充。v1.4.40 上传即解析。v1.4.39 sync 序列化修复。v1.4.38 模板损坏诊断。v1.4.37 渲染错误就地显示">v1.4.48</span></div>
+  <div class="brand">🧾 贸易单证系统 <span class="ver" title="v1.4.49 初始化卡死修复：①pullShared() 内 fetch 加 8s AbortSignal.timeout——国内访问 raw.githubusercontent.com 不稳时（沙箱实测 32s+ ECONNRESET）init 不会再挂 1-5 分钟，超时立即返回 ok:false 走静默兜底。②init 顶层加 12s watchdog——超过 12s 还没到 render()，$main 自动换为红色提示卡「初始化用时较长，点了「跳过拉取」立即继续」+ 整页重试按钮，彻底解决「一直显示正在初始化…」无法进入主界面。v1.4.48 明细行中英双语表头别名补齐。v1.4.47 长短高/发货人收货人。v1.4.46 模板自愈 add-only。v1.4.45 立即恢复+静默自愈。v1.4.44 启动拉取发票模板。v1.4.43 海运类明细行。v1.4.42 fileBuf 形态自适应。v1.4.41 中文括号标签。v1.4.40 上传即解析。v1.4.39 sync 序列化。v1.4.38 模板损坏诊断。v1.4.37 渲染错误就地显示">v1.4.49</span></div>
   <nav id="tabs">
     <button data-tab="orders" class="tab active">订单</button>
     <button data-tab="packings" class="tab">装箱清单</button>
