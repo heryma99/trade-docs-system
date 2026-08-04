@@ -310,6 +310,7 @@
       '<input type="hidden" id="pt-id">' +
       '<label class="req">类型</label><select id="pt-type"><option value="shipper">发货人 SHIPPER</option><option value="consignee">收货人 CONSIGNEE</option><option value="notify">通知人 NOTIFY</option></select>' +
       '<label class="req" style="margin-top:8px">名称（英文）</label><input id="pt-name">' +
+      '<label style="margin-top:8px">仓库代码（如 LAX9 / FTW1 / GYR3，私人地址留空）</label><input id="pt-whcode" placeholder="海外仓 FBA 代码">' +
       '<label style="margin-top:8px">公司名（英文）</label><input id="pt-company" placeholder="如 JW PEI AP LIMITED">' +
       '<label style="margin-top:8px">地址（英文，可多行）</label><textarea id="pt-address" rows="2"></textarea>' +
       '<label style="margin-top:8px">城市</label><input id="pt-city">' +
@@ -323,12 +324,12 @@
       '<div style="margin-top:12px;display:flex;gap:8px"><button class="btn" id="pt-save">保存</button><button class="btn ghost" id="pt-reset">清空</button></div></div></div>';
   };
   BINDERS.parties = function () {
-    function resetForm() { ['pt-id', 'pt-name', 'pt-company', 'pt-address', 'pt-city', 'pt-state', 'pt-zip', 'pt-tel', 'pt-contact', 'pt-email', 'pt-country', 'pt-taxno'].forEach(function (i) { document.getElementById(i).value = ''; }); document.getElementById('pt-form-title').textContent = '新增'; }
+    function resetForm() { ['pt-id', 'pt-name', 'pt-whcode', 'pt-company', 'pt-address', 'pt-city', 'pt-state', 'pt-zip', 'pt-tel', 'pt-contact', 'pt-email', 'pt-country', 'pt-taxno'].forEach(function (i) { document.getElementById(i).value = ''; }); document.getElementById('pt-form-title').textContent = '新增'; }
     document.getElementById('pt-reset').onclick = resetForm;
     document.getElementById('pt-save').onclick = async function () {
       var name = val('pt-name');
       if (!name) { toast('名称必填', 'err'); return; }
-      var obj = { type: val('pt-type'), name: name, company: val('pt-company'), address: val('pt-address'), city: val('pt-city'), state: val('pt-state'), zip: val('pt-zip'), tel: val('pt-tel'), contact: val('pt-contact'), email: val('pt-email'), country: val('pt-country'), taxNo: val('pt-taxno') };
+      var obj = { type: val('pt-type'), name: name, company: val('pt-company'), warehouseCode: val('pt-whcode'), address: val('pt-address'), city: val('pt-city'), state: val('pt-state'), zip: val('pt-zip'), tel: val('pt-tel'), contact: val('pt-contact'), email: val('pt-email'), country: val('pt-country'), taxNo: val('pt-taxno') };
       var id = val('pt-id');
       if (id) { var old = await db.get('parties', id); obj = Object.assign(old, obj); }
       // 用户接管 seed 占位数据：保存时自动剥离 isSeed 标记，避免下次 push 把 DEMO 推上团队库
@@ -342,6 +343,7 @@
         document.getElementById('pt-id').value = p.id;
         document.getElementById('pt-type').value = p.type;
         document.getElementById('pt-name').value = p.name || '';
+        document.getElementById('pt-whcode').value = p.warehouseCode || '';
         document.getElementById('pt-company').value = p.company || '';
         document.getElementById('pt-address').value = p.address || '';
         document.getElementById('pt-city').value = p.city || '';
@@ -967,6 +969,7 @@
       }).join('');
       var tplOpts = tpls.map(function (t) { return '<option value="' + t.id + '"' + (w.templateId === t.id ? ' selected' : '') + '>' + esc(t.name) + '（' + esc(t.carrier) + '）</option>'; }).join('');
       body.innerHTML = banner + '<div class="card"><h3>① 选择装箱清单（用于单号/SKU/数量强校验及重量体积）</h3>' +
+        '<p class="hint">📌 装箱清单决定「长(cm) / 宽(cm) / 高(cm) / 单箱重量」能否填出。海运类模板（如亚运发货最新）必须关联装箱清单，否则这些明细列为空。下方②选择模板后将在下一步预览核对。</p>' +
         '<table class="grid"><tr><th></th><th>文件名</th><th>关联单号</th><th>箱数</th><th>数量</th><th>与所选订单</th></tr>' +
         (pkRows || '<tr><td colspan="6" class="empty">暂无装箱清单，请先到「装箱清单」页上传</td></tr>') + '</table>' +
         '<h3 style="margin-top:16px">② 物流商 / 渠道 / 发票模板</h3><div class="form-grid">' +
@@ -1028,7 +1031,7 @@
       var ordRecv = orders.find(function (o) { return o.receiver || o.address; });
       function opts(list, sel) { return '<option value="">请选择</option>' + list.map(function (p) { return '<option value="' + p.id + '"' + (sel === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>'; }).join(''); }
       body.innerHTML = '<div class="card"><h3>收发货人</h3><div class="form-grid">' +
-        '<div><label class="req">SHIPPER 发货人</label><select id="wz-shipper">' + opts(shippers, w.shipperId) + '</select></div>' +
+        '<div><label class="req">SHIPPER 发货人</label><select id="wz-shipper">' + opts(shippers, w.shipperId) + '</select>' + (shippers.length === 0 ? '<p class="hint">📌 无发货人主数据。<button class="btn sm ghost" id="wz-use-ord-shipper">抓取订单的卖家/承运商为发货人</button></p>' : '') + '</div>' +
         '<div><label class="req">CONSIGNEE 收货人</label><select id="wz-consignee">' + opts(consignees, w.consigneeId) + '</select>' +
         (ordRecv ? '<p class="hint">📌 订单自带收货人「' + esc(ordRecv.receiver || ordRecv.buyer) + '」<button class="btn sm ghost" id="wz-use-ord-recv">直接抓取使用</button></p>' : '<p class="hint">订单无收发货人信息，请从主数据选择 <button class="btn sm ghost" id="wz-goto-parties">去「收发货人」页维护</button></p>') + '</div>' +
         '<div><label>NOTIFY 通知人</label><select id="wz-notify">' + opts(notifies, w.notifyId) + '</select></div></div>' +
@@ -1049,6 +1052,13 @@
       if (useBtn) useBtn.onclick = async function () {
         var p = await db.put('parties', { type: 'consignee', name: ordRecv.receiver || ordRecv.buyer, address: ordRecv.address || '', tel: ordRecv.phone || '', country: ordRecv.country || '', remark: '从订单 ' + ordRecv.orderNo + ' 抓取' });
         w.consigneeId = p.id; toast('已抓取订单收货人并存入主数据', 'ok'); renderWizStep();
+      };
+      var shipperBtn = document.getElementById('wz-use-ord-shipper');
+      if (shipperBtn) shipperBtn.onclick = async function () {
+        var so = orders.find(function (o) { return o.seller || o.sellerName || o.company; });
+        if (!so) { toast('该订单没有卖家/发货人信息，请到「收发货人」页手动新增', 'err'); return; }
+        var p = await db.put('parties', { type: 'shipper', name: so.seller || so.sellerName || so.company, company: so.company || so.seller || '', address: so.sellerAddress || '', remark: '从订单 ' + so.orderNo + ' 抓取' });
+        w.shipperId = p.id; toast('已抓取订单卖家为发货人并存入主数据', 'ok'); renderWizStep();
       };
       var gotoParties = document.getElementById('wz-goto-parties');
       if (gotoParties) gotoParties.onclick = function () {
@@ -1228,7 +1238,21 @@
         await db.put('templates', tpl);
       } catch (e) {}
     }
-    var boxMode = !!(packing && itemFields.some(function (f) { return /(boxNo|length|width|height)/.test(f); }));
+    // v1.4.47：boxMode 触发条件同时看 ① 模板占位符 itemFields ② 现场扫描的 itemHeaderMap 是否映射长/宽/高/单箱重
+    //          纯标签驱动的海运类模板（明细列是「长(cm)/宽(cm)/单箱重量」文字而非 {{items.lengthCm}}）也能触发 boxMode
+    var itemHeaderMap = (tpl && tpl.mapping && tpl.mapping.scanned && tpl.mapping.scanned.itemHeaderMap) || {};
+    var headerHasDims = Object.keys(itemHeaderMap).some(function (c) {
+      var f = itemHeaderMap[c];
+      return /^(lengthCm|widthCm|heightCm|singleGw)$/.test(f);
+    });
+    if (tpl && headerHasDims && !itemHeaderMap.__scanned && w._wb) {
+      try { itemHeaderMap = engine.scanTemplate(w._wb).itemHeaderMap || itemHeaderMap; } catch (e) {}
+      headerHasDims = Object.keys(itemHeaderMap).some(function (c) {
+        var f = itemHeaderMap[c];
+        return /^(lengthCm|widthCm|heightCm|singleGw)$/.test(f);
+      });
+    }
+    var boxMode = !!(packing && (itemFields.some(function (f) { return /(boxNo|length|width|height)/.test(f); }) || headerHasDims));
     var data = engine.buildDocData({
       kind: kind, orders: orders, packing: packing, meta: w.meta, boxMode: boxMode,
       shipper: shipper || {}, consignee: consignee || {}, notify: notify, declareMap: declareMap
