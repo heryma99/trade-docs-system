@@ -728,7 +728,19 @@
         '<button class="btn sm danger tp-del" data-id="' + t.id + '">删除</button></td></tr>';
     }).join('');
     var carrierOpts = CARRIERS.map(function (c) { return '<option>' + c + '</option>'; }).join('');
-    return '<h2>模板库</h2><div class="card"><h3>上传新模板</h3><div class="form-grid">' +
+    function tplUploadCard() {
+      var r = window.__lastTplUpload; if (!r) return '';
+      if (r.ok) {
+        var sz = r.size >= 1048576 ? (r.size / 1048576).toFixed(1) + 'MB' : Math.round(r.size / 1024) + 'KB';
+        return '<div class="card" style="border-left:4px solid #2ecc71;background:rgba(46,204,113,.08)"><h3>✓ 上传并解析成功</h3>' +
+          '<p>' + esc(r.name) + ' · ' + esc(r.kind) + ' · ' + sz + (r.converted ? ' · 已从 .xls 转为 .xlsx' : '') + '</p>' +
+          '<p>Sheet：' + r.sheets.map(esc).join('、') + '</p>' +
+          '<p>扫描到 <b>' + r.fields + '</b> 个表头占位符 + <b>' + r.itemFields + '</b> 个明细占位符</p></div>';
+      }
+      return '<div class="card" style="border-left:4px solid #e74c3c;background:rgba(231,76,60,.08)"><h3>✗ 上传解析失败</h3><p>' + esc(r.error) + '</p></div>';
+    }
+    var uploadCard = tplUploadCard();
+    return (uploadCard ? uploadCard + '<br>' : '') + '<h2>模板库</h2><div class="card"><h3>上传新模板</h3><div class="form-grid">' +
       '<div><label class="req">模板名称</label><input id="tp-name" placeholder="如 亚丰发票模板v2"></div>' +
       '<div><label class="req">类型</label><select id="tp-kind"><option value="invoice">发票</option><option value="booking">订舱单(BOOKING FORM)</option><option value="packing">装箱单(PACKING LIST)</option><option value="declare">申报/买单要素</option></select></div>' +
       '<div><label>物流商</label><input id="tp-carrier" list="carrier-list" placeholder="通用"><datalist id="carrier-list">' + carrierOpts + '</datalist></div>' +
@@ -756,9 +768,10 @@
           uploadedAt: Date.now(),
           mapping: { required: engine.REQUIRED_FIELDS[kind] || [], scanned: scan }
         });
+        window.__lastTplUpload = { ok: true, name: name, kind: kind, size: (buf.byteLength || buf.length || 0), sheets: wb.worksheets.map(function (w) { return w.name; }), fields: scan.fields.length, itemFields: scan.itemFields.length, converted: !!(wb.__formatGuess && wb.__formatGuess !== 'xlsx') };
         toast('模板已上传：扫描到 ' + scan.fields.length + ' 个表头字段 + ' + scan.itemFields.length + ' 个明细字段', 'ok');
         render();
-      } catch (e) { toast('模板解析失败: ' + e.message, 'err'); }
+      } catch (e) { window.__lastTplUpload = { ok: false, error: e.message }; toast('模板解析失败: ' + e.message, 'err'); render(); }
     };
     document.querySelectorAll('.tp-prev').forEach(function (b) {
       b.onclick = async function () {
