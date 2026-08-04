@@ -20,17 +20,25 @@
     qty:     ['QTY', '数量', '件数', 'PCS', 'QUANTITY', 'TOTAL QUANTITY'],
     unit:    ['UNIT', '单位', 'UOM'],
     price:   ['UNIT PRICE', '单价', 'PRICE', 'DECLARED VALUE'],
-    amount:  ['AMOUNT', '金额', 'TOTAL', 'TOTAL AMOUNT', 'TOTAL PRICE'],
+    amount:  ['AMOUNT', '金额', 'TOTAL', 'TOTAL AMOUNT', 'TOTAL PRICE', '总申报价值', '申报价值'],
     nw:      ['N.W', 'N.W.', 'NW', 'NET WEIGHT', '净重'],
     gw:      ['G.W', 'G.W.', 'GW', 'GROSS WEIGHT', '毛重'],
+    singleGw:['SINGLE GW', 'PER CTN G.W', 'WEIGHT/CTN', '单箱重量', '单箱毛重', 'WEIGHT PER CTN', '单箱重', '单箱重(KG)'],
     volume:  ['CBM', 'M3', 'VOL', 'MEAS', '体积', '尺码', 'MEAS\'T'],
     material:['MATERIAL', '材质', '质地'],
     brand:   ['BRAND', '品牌'],
-    origin:  ['ORIGIN', '原产地', '产地', 'COUNTRY OF ORIGIN']
+    origin:  ['ORIGIN', '原产地', '产地', 'COUNTRY OF ORIGIN'],
+    // v1.4.43 海运类模板「长/宽/高/产品图片/产品性质/备注」等 per-item 字段
+    lengthCm:['LENGTH', 'L', 'L (CM)', 'L(CM)', '长', '长(CM)', '长(CM)'],
+    widthCm: ['WIDTH',  'W', 'W (CM)', 'W(CM)', '宽', '宽(CM)', '宽(CM)'],
+    heightCm:['HEIGHT', 'H', 'H (CM)', 'H(CM)', '高', '高(CM)', '高(CM)'],
+    imageUrl:['IMAGE', 'PHOTO', 'PICTURE', '图片', '产品图片', '商品图片'],
+    productNature:['BATTERY TYPE', 'POWERED', 'NATURE', 'PRODUCT NATURE', '性质', '产品性质', '带电', '带磁'],
+    remark:  ['REMARK', 'NOTES', 'NOTE', '备注', '说明']
   };
 
   function normalizeHeader(s) {
-    return String(s || '').replace(/\s+/g, '').replace(/[（(].*?[)）]/g, '').toUpperCase();
+    return String(s || '').replace(/\s+/g, '').replace(/[（(].*?[)）]/g, '').replace(/[*※]+$/, '').toUpperCase();
   }
   function matchHeaderAlias(s) {
     var ns = normalizeHeader(s);
@@ -137,21 +145,34 @@
       });
     }
 
-    function makeItemCore(sku, d) {
+    function makeItemCore(sku, d, itR) {
+      itR = itR || {};
       var price = (priceBySku[sku] !== undefined) ? priceBySku[sku] : (d.declarePrice || 0);
       var currency = currencyBySku[sku] || d.currency || meta.currency || 'USD';
+      // v1.4.43: 回退到订单 item 的字段（declareMap 缺字段时不再丢品名/材质等）
+      //          同时新增 lengthCm/widthCm/heightCm/singleGw/imageUrl/remark 出口供明细 per-item 列填充
+      function _pick(k) { return (d[k] !== undefined && d[k] !== '') ? d[k] : (itR[k] !== undefined && itR[k] !== '' ? itR[k] : ''); }
       return {
-        sku: sku, model: d.model || sku,
-        nameEn: d.nameEn || '', nameCn: d.nameCn || '',
-        hsCode: d.hsCode || '', material: d.material || '', usage: d.usage || '', brand: d.brand || '',
-        price: price, unit: d.unit || 'PCS', origin: d.origin || 'CN',
-        electrified: (d.electrified != null && d.electrified !== '') ? d.electrified : '否',
-        magnetic: (d.magnetic != null && d.magnetic !== '') ? d.magnetic : '否',
-        asin: d.asin || '', fnsku: d.fnsku || sku, note: d.note || '', costPrice: d.costPrice || '',
+        sku: sku,
+        model: _pick('model') || sku,
+        nameEn: _pick('nameEn'), nameCn: _pick('nameCn'),
+        hsCode: _pick('hsCode'), material: _pick('material'), usage: _pick('usage'), brand: _pick('brand'),
+        lengthCm: _pick('lengthCm') || _pick('length'),
+        widthCm:  _pick('widthCm')  || _pick('width'),
+        heightCm: _pick('heightCm') || _pick('height'),
+        singleGw: _pick('singleGw'),
+        imageUrl: _pick('imageUrl') || _pick('image') || _pick('photo'),
+        remark:   _pick('remark')   || _pick('note'),
+        productNature: _pick('productNature') || _pick('batteryType') || _pick('nature'),
+        price: price, unit: d.unit || itR.unit || 'PCS', origin: d.origin || itR.origin || 'CN',
+        electrified: (d.electrified != null && d.electrified !== '') ? d.electrified : (itR.electrified != null ? itR.electrified : '否'),
+        magnetic: (d.magnetic != null && d.magnetic !== '') ? d.magnetic : (itR.magnetic != null ? itR.magnetic : '否'),
+        asin: d.asin || itR.asin || '', fnsku: d.fnsku || itR.fnsku || sku, note: d.note || itR.note || '', costPrice: d.costPrice || itR.costPrice || '',
         currency: currency, destCountry: destCountry, refId: refId,
-        condition: d.condition || 'NEW', exportPrefer: d.exportPrefer || '', tradeTerm: tradeTerm,
-        batteryType: d.batteryType || '', taxNo: d.taxNo || '',
-        shippingMarks: '', poNo: refId, manufacturer: d.manufacturer || ''
+        condition: d.condition || itR.condition || 'NEW', exportPrefer: d.exportPrefer || itR.exportPrefer || '', tradeTerm: tradeTerm,
+        batteryType: d.batteryType || itR.batteryType || '',
+        taxNo: d.taxNo || itR.taxNo || '',
+        shippingMarks: '', poNo: refId, manufacturer: d.manufacturer || itR.manufacturer || ''
       };
     }
 
@@ -185,7 +206,7 @@
           var price = (it.price !== undefined && it.price !== null && Number(it.price) > 0) ? Number(it.price) : (d.declarePrice || 0);
           var key = sku + '@' + price;
           if (!agg[key]) {
-            agg[key] = makeItemCore(sku, d);
+            agg[key] = makeItemCore(sku, d, it);
             agg[key].qty = 0; agg[key].amount = 0; agg[key].nw = 0; agg[key].gw = 0;
             agg[key]._priceSource = (it.price && Number(it.price) > 0) ? 'order' : (d.declarePrice ? 'master' : 'none');
           }
