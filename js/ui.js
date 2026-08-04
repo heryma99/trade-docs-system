@@ -75,8 +75,9 @@
    */
   async function loadWb(buf, fileName) {
     var fn = fileName || '';
-    var ab = buf;
-    var u8 = new Uint8Array(buf instanceof ArrayBuffer ? buf : (buf && buf.buffer ? buf.buffer : buf));
+    // 先把任意形态的 fileBuf 规范化成 ArrayBuffer（base64-string / {type:Buffer,data:[]} / TypedArray 都接），避免老 sync 残留的 base64-string 让 loadWb 误判
+    var ab = _asArrayBuffer(buf);
+    var u8 = new Uint8Array(ab);
     var isZip = u8.length >= 4 && u8[0] === 0x50 && u8[1] === 0x4B && (u8[2] === 0x03 || u8[2] === 0x05);
     var isCfb = u8.length >= 8 && u8[0] === 0xD0 && u8[1] === 0xCF && u8[2] === 0x11 && u8[3] === 0xE0;
     var isCsvHint = /\.csv$/i.test(fn);
@@ -87,7 +88,7 @@
     if (needConvert) {
       try {
         var fakeFn = fn || (isCfb ? 'upload.xls' : 'upload.csv');
-        ab = await anyToXlsx(buf, fakeFn);
+        ab = await anyToXlsx(ab, fakeFn);
       } catch (cv) {
         throw new Error('文件无法解析（探测为 ' + formatGuess + '，转换失败: ' + (cv.message || cv) + '）。请用 Excel/WPS 另存为 .xlsx 后再试');
       }
@@ -1618,13 +1619,51 @@
     if (x == null) { shape = 'null'; return { shape: shape, size: 0, bytes: bytes }; }
     if (x instanceof ArrayBuffer) { shape = 'ArrayBuffer'; size = x.byteLength; bytes = new Uint8Array(x); }
     else if (ArrayBuffer.isView(x)) { shape = 'TypedArray'; size = x.byteLength; bytes = new Uint8Array(x.buffer, x.byteOffset, x.byteLength); }
-    else if (typeof x === 'string') { shape = 'base64-string'; size = x.length; try { bytes = new Uint8Array(Buffer.from(x, 'base64')); } catch (e) {} }
+    else if (typeof x === 'string') { shape = 'base64-string'; size = x.length; try { var _bin = atob(x); bytes = Uint8Array.from(_bin, function (c) { return c.charCodeAt(0); }); } catch (e) { bytes = new Uint8Array(0); } }
     else if (typeof x === 'object') {
       var arr = (x.data && Array.isArray(x.data)) ? x.data : (Array.isArray(x) ? x : null);
       if (arr) { shape = (x.type === 'Buffer') ? '{type:Buffer,data:[]}' : '{data:[]}'; size = arr.length; bytes = Uint8Array.from(arr); }
       else { shape = 'empty-object'; size = 0; }
     }
     return { shape: shape, size: size, bytes: bytes };
+  }
+  // 把任意形态的 fileBuf 规范化为 ArrayBuffer（base64-string / {type:Buffer,data:[]} / TypedArray / ArrayBuffer 都接）
+  // 用于 loadWb 等所有"用 fileBuf"的入口，幂等
+  function _asArrayBuffer(x) {
+    var info = _inspectFileBuf(x);
+    if (info.shape === 'ArrayBuffer') return x;
+    if (info.shape === 'TypedArray') return x.buffer;
+    if (info.shape === 'base64-string') return info.bytes.buffer;
+    if (info.shape === '{type:Buffer,data:[]}' || info.shape === '{data:[]}') return info.bytes.buffer;
+    throw new Error('fileBuf 形态无效: ' + info.shape + ' (size=' + info.size + ')');
+  }
+  // 启动自愈：把 IndexedDB 里残留的 base64-string 模板就地还原成 ArrayBuffer（v1.4.39 之前或 fileBufShape 缺失情况下漏转的）
+  async function _migrateBase64Templates() {
+    try {
+      var templates = await db.all('templates');
+      var fixed = 0;
+      for (var i = 0; i < templates.length; i++) {
+        var t = templates[i];
+        if (!t.fileBuf) continue;
+        var info = _inspectFileBuf(t.fileBuf);
+        if (info.shape !== 'base64-string') continue;
+        var ab;
+        try { ab = _asArrayBuffer(t.fileBuf); } catch (e) { continue; }
+        var u8 = new Uint8Array(ab);
+        var isValid = (u8.length >= 4 && u8[0] === 0x50 && u8[1] === 0x4B && (u8[2] === 0x03 || u8[2] === 0x05)) ||
+                      (u8.length >= 8 && u8[0] === 0xD0 && u8[1] === 0xCF && u8[2] === 0x11 && u8[3] === 0xE0);
+        if (!isValid) continue;
+        t.fileBuf = ab;
+        delete t.fileBufShape; delete t.fileBufSize;
+        await db.put('templates', t);
+        fixed++;
+      }
+      if (fixed) console.log('[v1.4.42 自愈] 已把 ' + fixed + ' 个 base64-string 模板还原为 ArrayBuffer');
+      return fixed;
+    } catch (e) {
+      console.warn('_migrateBase64Templates failed', e);
+      return 0;
+    }
   }
   // 把对象里所有 fileBuf(ArrayBuffer/TypedArray) 转成 base64 字符串（push 序列化前调）
   function _preSerializeForSync(obj) {
@@ -1885,6 +1924,7 @@
     try {
       await db.open();
       await hydrateFromEmbedded();
+      await _migrateBase64Templates();  // v1.4.42: 把残留 base64-string 模板还原为 ArrayBuffer
       await seed.run(db, engine, ExcelJS);
       if ((await loadSyncCfg()).auto) {
         var pr = await pullShared();
