@@ -804,6 +804,25 @@
     var w = state.wiz;
     var body = document.getElementById('wiz-body');
     if (!body) return;
+    try {
+      await renderWizStepInner();
+    } catch (e) {
+      console.error(e);
+      body.innerHTML = '<div class="card vres block" style="padding:20px">' +
+        '<h3 style="margin-top:0">⚠️ 步骤 ' + (w ? w.step : '?') + ' 渲染失败</h3>' +
+        '<p style="color:#c0392b;margin:8px 0"><b>' + esc(e.message || String(e)) + '</b></p>' +
+        '<pre style="background:#fafbfd;padding:8px;border-radius:6px;font-size:12px;max-height:200px;overflow:auto;white-space:pre-wrap">' + esc((e.stack || '').split('\n').slice(0, 4).join('\n')) + '</pre>' +
+        '<p class="hint" style="margin-top:10px">💡 截图发给开发者可快速定位。常见诱因：①本地 IndexedDB 缺失模板数据；②v1.4.33 之前录入的旧数据 schema 与新版本不兼容；③模板 fileBuf 损坏。可尝试 <b>Ctrl+Shift+R 硬刷新</b> 重新走流程，或在「设置 → ⚠️ 危险操作」清空数据库后让种子数据重新注入。</p>' +
+        (w ? '<div style="margin-top:10px;display:flex;gap:8px"><button class="btn ghost" id="err-wiz-home">← 回到发票向导 step 1</button></div>' : '') +
+        '</div>';
+      var back = document.getElementById('err-wiz-home');
+      if (back && w) back.onclick = function () { w.step = 0; w.orderIds = []; w.packingId = ''; w.templateId = ''; w.meta = {}; w.report = null; w.doc = null; render(); };
+    }
+  }
+
+  async function renderWizStepInner() {
+    var w = state.wiz;
+    var body = document.getElementById('wiz-body');
 
     // ---------- step0 选订单 ----------
     if (w.step === 0) {
@@ -984,6 +1003,12 @@
     if (w.step === 4) {
       var ctx = await buildWizContext(w, 'invoice');
       var tpl = await db.get('templates', w.templateId);
+      // 防御：模板不存在/损坏 → 自动回退到 step=1 重新选模板（不再黑屏）
+      if (!tpl || !tpl.fileBuf) {
+        toast('模板不可用（id=' + esc(w.templateId || '') + '），请重新选择', 'err');
+        w.step = 1; w.templateId = ''; w.doc = null; render();
+        return;
+      }
       var wb = await loadWb(tpl.fileBuf);
       var fillRes = engine.fillTemplate(wb, ctx.data, { logo: tpl.logo || null });
       w._wb = wb; w._data = ctx.data;
@@ -1065,6 +1090,26 @@
   BINDERS.booking = function () { renderBookingStep(); };
 
   async function renderBookingStep() {
+    var w = state.bwiz;
+    var body = document.getElementById('bwiz-body');
+    if (!body) return;
+    try {
+      await renderBookingStepInner();
+    } catch (e) {
+      console.error(e);
+      body.innerHTML = '<div class="card vres block" style="padding:20px">' +
+        '<h3 style="margin-top:0">⚠️ 订舱单步骤 ' + (w ? w.step : '?') + ' 渲染失败</h3>' +
+        '<p style="color:#c0392b;margin:8px 0"><b>' + esc(e.message || String(e)) + '</b></p>' +
+        '<pre style="background:#fafbfd;padding:8px;border-radius:6px;font-size:12px;max-height:200px;overflow:auto;white-space:pre-wrap">' + esc((e.stack || '').split('\n').slice(0, 4).join('\n')) + '</pre>' +
+        '<p class="hint" style="margin-top:10px">💡 截图发给开发者可快速定位。可尝试 <b>Ctrl+Shift+R 硬刷新</b> 或在「设置 → ⚠️ 危险操作」清空数据库后重试。</p>' +
+        (w ? '<div style="margin-top:10px"><button class="btn ghost" id="err-bwiz-home">← 回到订舱向导 step 1</button></div>' : '') +
+        '</div>';
+      var back = document.getElementById('err-bwiz-home');
+      if (back && w) back.onclick = function () { w.step = 0; w.orderIds = []; w.packingId = ''; w.templateId = ''; w.meta = {}; w.report = null; w.doc = null; render(); };
+    }
+  }
+
+  async function renderBookingStepInner() {
     var w = state.bwiz;
     var body = document.getElementById('bwiz-body');
     if (!body) return;
@@ -1189,6 +1234,12 @@
     if (w.step === 4) {
       var ctx = await buildWizContext(w, 'booking');
       var tpl = await db.get('templates', w.templateId);
+      // 防御：模板不可用 → 自动回退到 step=1 重新选择
+      if (!tpl || !tpl.fileBuf) {
+        toast('模板不可用（id=' + esc(w.templateId || '') + '），请重新选择', 'err');
+        w.step = 1; w.templateId = ''; w.doc = null; render();
+        return;
+      }
       var wb = await loadWb(tpl.fileBuf);
       var fillRes = engine.fillTemplate(wb, ctx.data, { logo: tpl.logo || null });
       w._wb = wb;
