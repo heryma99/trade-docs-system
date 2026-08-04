@@ -1280,9 +1280,9 @@
       '<button class="btn" id="st-import-json">📥 导入 JSON 备份</button>' +
       '</div></div>' +
       '<div class="card"><h3>🔄 团队共享主数据（GitHub）</h3>' +
-      '<p class="hint">把「收发货人」和「自定义模板」上传到仓库的 <code>userdata.json</code>，团队其他人打开系统自动拉取、无需再维护。读取公开无需 token；上传需填入<strong>细粒度 PAT</strong>（仅授权本仓库、仅 Contents 读写）。</p>' +
+      '<p class="hint"><b>三步同步团队数据：</b>① 打开 <a href="https://github.com/settings/personal-access-tokens" target="_blank" rel="noopener">github.com/settings/personal-access-tokens</a> 建<strong>细粒度 PAT</strong>（仅授权本仓库 <code>trade-docs-system</code>、权限 Contents = Read and write）；② 把整串 <code>github_pat_...</code> 粘贴到下面的「上传 Token」框（粘贴后显示圆点属正常，已自动存本地）；③ 点绿色「⬆️ 上传到团队库」。其他人打开系统自动拉取，无需再维护。</p>' +
       '<div class="form-grid">' +
-      '<div><label>上传 Token（仅本地保存，不写进公开代码）</label><input id="sync-token" type="password" placeholder="fine-grained PAT，仅本仓库 Contents 读写"></div>' +
+      '<div><label>上传 Token（仅本地保存，不写进公开代码）</label><input id="sync-token" type="password" placeholder="整串粘贴 github_pat_ 开头的 token"></div>' +
       '<div><label><input type="checkbox" id="sync-auto"> 启动时自动从团队库拉取</label></div></div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">' +
       '<button class="btn ok" id="sync-push">⬆️ 上传到团队库</button>' +
