@@ -8,7 +8,7 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">🧾 贸易单证系统 <span class="ver" title="v1.4.49 初始化卡死修复：①pullShared() 内 fetch 加 8s AbortSignal.timeout——国内访问 raw.githubusercontent.com 不稳时（沙箱实测 32s+ ECONNRESET）init 不会再挂 1-5 分钟，超时立即返回 ok:false 走静默兜底。②init 顶层加 12s watchdog——超过 12s 还没到 render()，$main 自动换为红色提示卡「初始化用时较长，点了「跳过拉取」立即继续」+ 整页重试按钮，彻底解决「一直显示正在初始化…」无法进入主界面。v1.4.48 明细行中英双语表头别名补齐。v1.4.47 长短高/发货人收货人。v1.4.46 模板自愈 add-only。v1.4.45 立即恢复+静默自愈。v1.4.44 启动拉取发票模板。v1.4.43 海运类明细行。v1.4.42 fileBuf 形态自适应。v1.4.41 中文括号标签。v1.4.40 上传即解析。v1.4.39 sync 序列化。v1.4.38 模板损坏诊断。v1.4.37 渲染错误就地显示">v1.4.49</span></div>
+  <div class="brand">🧾 贸易单证系统 <span class="ver" title="v1.4.50 收件人/箱号修复：①模板样本残留清空——之前纯标签模板（无 {{}} 占位符如中运通达-FBA订单V3）的 PASS1 因 valueCols 为空而清不掉模板自带样本（Geospeed-Mu3005/意大利/Milano/Via 1 Maggio/0039...），导致发票生成时显示的是模板样本而非你选的收件人。现 PASS1 改为按 mapFieldLabel 识别的 label 右侧值格（无论合并与否）一并清除，无占位符模板也能清残留；v1.4.49 初始化卡死修复。v1.4.48 明细行中英双语表头别名补齐。v1.4.47 长短高/发货人收货人。v1.4.46 模板自愈 add-only。v1.4.45 立即恢复+静默自愈。v1.4.44 启动拉取发票模板。v1.4.43 海运类明细行。v1.4.42 fileBuf 形态自适应。v1.4.41 中文括号标签。v1.4.40 上传即解析。v1.4.39 sync 序列化。v1.4.38 模板损坏诊断。v1.4.37 渲染错误就地显示">v1.4.50</span></div>
   <nav id="tabs">
     <button data-tab="orders" class="tab active">订单</button>
     <button data-tab="packings" class="tab">装箱清单</button>
