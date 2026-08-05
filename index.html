@@ -4,11 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>贸易单证系统 · 发票 & BOOKING FORM</title>
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=1.4.55">
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">🧾 贸易单证系统 <span class="ver" title="v1.4.54 跨订单箱号合并修复：①PASS1 保护明细表头行(列标签 SKU/DESCRIPTION/QTY)，不再当样本残留清空导致表头空白+数据列右移；②parser 与 engine 箱级去重改用复合键 订单号/箱号，1978182/1 与 1978183/1 不再误合并——箱数 2→3、G.W./VOLUME 不再漏算。v1.4.53 G.W.=0 与 No./箱号列显示价格 回归修复；v1.4.52 混装去重：箱级量按唯一箱号聚合；v1.4.51 通用发票模板中间行{{items.*}}占位符未替换修复；v1.4.50 收件人样本残留清空；v1.4.49 初始化卡死修复；v1.4.48 中英双语表头别名；v1.4.47 长短高/收发人；v1.4.46 模板自愈 add-only；v1.4.45 立即恢复+静默自愈；v1.4.44 启动拉取发票模板；v1.4.43 海运类明细行；v1.4.42 fileBuf 形态自适应；v1.4.41 中文括号标签；v1.4.40 上传即解析；v1.4.39 sync 序列化；v1.4.38 模板损坏诊断；v1.4.37 渲染错误就地显示">v1.4.54</span></div>
+  <div class="brand">🧾 贸易单证系统 <span class="ver" title="v1.4.55 资源缓存破坏(cache busting)：所有本地 js/css 资源 URL 加 ?v= 查询串，彻底绕过浏览器强缓存，解决「代码已修但用户仍看到旧版」；v1.4.54 跨订单箱号合并修复：①PASS1 保护明细表头行(列标签 SKU/DESCRIPTION/QTY)，不再当样本残留清空导致表头空白+数据列右移；②parser 与 engine 箱级去重改用复合键 订单号/箱号，1978182/1 与 1978183/1 不再误合并——箱数 2→3、G.W./VOLUME 不再漏算。v1.4.53 G.W.=0 与 No./箱号列显示价格 回归修复；v1.4.52 混装去重：箱级量按唯一箱号聚合；v1.4.51 通用发票模板中间行{{items.*}}占位符未替换修复；v1.4.50 收件人样本残留清空；v1.4.49 初始化卡死修复；v1.4.48 中英双语表头别名；v1.4.47 长短高/收发人；v1.4.46 模板自愈 add-only；v1.4.45 立即恢复+静默自愈；v1.4.44 启动拉取发票模板；v1.4.43 海运类明细行；v1.4.42 fileBuf 形态自适应；v1.4.41 中文括号标签；v1.4.40 上传即解析；v1.4.39 sync 序列化；v1.4.38 模板损坏诊断；v1.4.37 渲染错误就地显示">v1.4.55</span></div>
   <nav id="tabs">
     <button data-tab="orders" class="tab active">订单</button>
     <button data-tab="packings" class="tab">装箱清单</button>
@@ -25,35 +25,35 @@
 <div id="toast"></div>
 <div id="modal-mask" class="hidden"><div id="modal"></div></div>
 
-<script src="vendor/exceljs.min.js"></script>
-<script src="vendor/xlsx.full.min.js"></script>
-<script src="js/db.js"></script>
-<script src="js/adapters.js"></script>
-<script src="js/parser.js"></script>
-<script src="js/validator.js"></script>
-<script src="js/engine.js"></script>
-<script src="js/exporter.js"></script>
-<script src="js/declare_data.js"></script>
-<script src="js/declare_data.part01.js"></script>
-<script src="js/declare_data.part02.js"></script>
-<script src="js/declare_data.part03.js"></script>
-<script src="js/declare_data.part04.js"></script>
-<script src="js/declare_data.part05.js"></script>
-<script src="js/declare_data.part06.js"></script>
-<script src="js/declare_data.part07.js"></script>
-<script src="js/declare_data.part08.js"></script>
-<script src="js/declare_data.part09.js"></script>
-<script src="js/declare_data.part10.js"></script>
-<script src="js/declare_data.part11.js"></script>
-<script src="js/declare_data.part12.js"></script>
-<script src="js/declare_data.part13.js"></script>
-<script src="js/declare_data.part14.js"></script>
-<script src="js/declare_data.part15.js"></script>
-<script src="js/declare_data.part16.js"></script>
-<script src="js/seed.js"></script>
-<script src="js/real_templates.js"></script>
-<script src="js/preview.js"></script>
-<script src="js/ui.js"></script>
+<script src="vendor/exceljs.min.js?v=1.4.55"></script>
+<script src="vendor/xlsx.full.min.js?v=1.4.55"></script>
+<script src="js/db.js?v=1.4.55"></script>
+<script src="js/adapters.js?v=1.4.55"></script>
+<script src="js/parser.js?v=1.4.55"></script>
+<script src="js/validator.js?v=1.4.55"></script>
+<script src="js/engine.js?v=1.4.55"></script>
+<script src="js/exporter.js?v=1.4.55"></script>
+<script src="js/declare_data.js?v=1.4.55"></script>
+<script src="js/declare_data.part01.js?v=1.4.55"></script>
+<script src="js/declare_data.part02.js?v=1.4.55"></script>
+<script src="js/declare_data.part03.js?v=1.4.55"></script>
+<script src="js/declare_data.part04.js?v=1.4.55"></script>
+<script src="js/declare_data.part05.js?v=1.4.55"></script>
+<script src="js/declare_data.part06.js?v=1.4.55"></script>
+<script src="js/declare_data.part07.js?v=1.4.55"></script>
+<script src="js/declare_data.part08.js?v=1.4.55"></script>
+<script src="js/declare_data.part09.js?v=1.4.55"></script>
+<script src="js/declare_data.part10.js?v=1.4.55"></script>
+<script src="js/declare_data.part11.js?v=1.4.55"></script>
+<script src="js/declare_data.part12.js?v=1.4.55"></script>
+<script src="js/declare_data.part13.js?v=1.4.55"></script>
+<script src="js/declare_data.part14.js?v=1.4.55"></script>
+<script src="js/declare_data.part15.js?v=1.4.55"></script>
+<script src="js/declare_data.part16.js?v=1.4.55"></script>
+<script src="js/seed.js?v=1.4.55"></script>
+<script src="js/real_templates.js?v=1.4.55"></script>
+<script src="js/preview.js?v=1.4.55"></script>
+<script src="js/ui.js?v=1.4.55"></script>
 <!--USERDATA_SLOT-->
 </body>
 </html>
