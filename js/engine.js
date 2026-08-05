@@ -230,6 +230,8 @@
         it.volume = vol; it.volumeWeight = volW;
         it.boxCount = 1; it.ctns = 1;
         it.qty = Number(b.qty) || 0; it.amount = round(it.qty * it.price, 2);
+        // v1.4.58：总箱单个产品数量 = 单箱数量 × 箱数（boxMode 每行 = 1箱×SKU，boxCount=1）
+        it.totalBoxQty = round(it.qty * (it.boxCount || 1), 0);
         // 保持 per-SKU 装箱值（首行有、其余0），供 totals 正确累加总毛重；不为单箱重量列污染
         it.nw = Number(b.nw) || 0; it.gw = Number(b.gw) || 0; it.boxNw = it.nw;
         it._weightSource = 'packing';
@@ -287,6 +289,7 @@
         }
         if (ba) {
           it.boxCount = ba.count; it.ctns = ba.count;
+          it.totalBoxQty = round(it.qty * (ba.count || 1), 0); // v1.4.58 总件数=单箱数量×箱数
           it.dims = ba.firstDims; it.boxSpec = ba.firstBoxSpec;
           it.volume = round(ba.volume, 6); it.volumeWeight = round(ba.volumeWeight, 3);
           it.boxNw = ba.count ? round(ba.nw / ba.count, 3) : 0;
@@ -544,6 +547,16 @@
     var seen = {};
     for (var r = 1; r <= end; r++) {
       var row = ws.getRow(r);
+      // v1.4.58：跳过「明细表头行」——该行有 >=3 个可 matchHeaderAlias 识别的明细列头
+      //（如亚丰「货箱编号/中文品名/型号/数量/长宽高」），它们不是单据字段标签。
+      // 若不跳过，「箱数*」「总箱单个产品数量*」「总申报价值（USD）」会被 GENERAL_LABEL_RULES
+      // 误判为 totals.boxCount / totals.amount 标签，fillByFieldLabels 把 totals 值写进
+      // 标签右侧第一个空格 → 覆盖相邻明细表头（亚丰 K27/M27/O27 被 13/13/2869.6 破坏）。
+      var hdrCnt = 0;
+      row.eachCell({ includeEmpty: false }, function (cellH) {
+        if (matchHeaderAlias(_cellStr(cellH))) hdrCnt++;
+      });
+      if (hdrCnt >= 3) continue;
       row.eachCell({ includeEmpty: false }, function (cell, c) {
         // 跳过合并从属格：同一合并块只在其主格处理一次，避免把值填进标签跨度破坏版式
         if (mergedMaps.masterOf[r + ',' + c]) return;
