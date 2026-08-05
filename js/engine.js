@@ -374,16 +374,18 @@
     var map = {};
     if (!ws || itemsRow <= 1) return map;
     var sub = (mergedMaps && mergedMaps.subordinate) || {};
-    // 向上扫最多 3 行，取每个列最近一行的非空表头
+    // 向上扫最多 3 行，取每个列「最靠近明细行」那一行的表头（低行覆盖高行）。
+    // v1.4.57 修复：原先「首次命中即定」会让更靠上的表头标签（如 E17 投保币种→currency）
+    // 抢占下方真正的明细表头（如 E18 货箱高度→heightCm），导致按表头兜底时把币种错填进高度列。
+    // 改为「低行覆盖」——明细表头(紧邻明细行上方)优先，避免被更上方的单据表头标签劫持。
     for (var r = Math.max(1, itemsRow - 3); r < itemsRow; r++) {
       var row = ws.getRow(r);
       row.eachCell({ includeEmpty: false }, function (cell, colNumber) {
-        if (map[colNumber]) return;
         if (sub[r + ',' + colNumber]) return; // 跳过合并从属格（B36:C36 合并的 C36 列等），避免重复映射字段
         var v = cell.value;
         var s = (v && v.richText) ? v.richText.map(function (t) { return t.text; }).join('') : (typeof v === 'string' ? v : '');
         var f = matchHeaderAlias(s);
-        if (f) map[colNumber] = f;
+        if (f) map[colNumber] = f; // 低行(更靠近明细)覆盖高行
       });
     }
     return map;
@@ -467,6 +469,7 @@
     else if (/(邮编|ZIP|POSTAL?)/i.test(text)) field = 'zip';
     else if (/(省|州|STATE|PROVINCE)/i.test(text)) field = 'state';
     else if (/(城市|CITY)/i.test(text)) field = 'city';
+    else if (/(地址编码|地址库编码)/i.test(text)) field = 'warehouseCode';
     else if (/地址/i.test(text)) {
       field = 'address';
       var m = text.match(/地址([一二三四五六七八九十\d])/);
@@ -496,6 +499,8 @@
     { re: /备注/, path: 'remark' },
     { re: /(VAT号|EORI)/, path: 'consignee.taxNo' },
     { re: /仓库代码|WAREHOUSE\s*CODE|海外仓代码|仓库编号|FBA代码/, path: 'consignee.warehouseCode' },
+    // v1.4.57：亚丰模板「地址库编码」(FBA 货件地址库编码，无 party 前缀) → consignee.warehouseCode
+    { re: /地址库编码/, path: 'consignee.warehouseCode' },
     // v1.4.50：补"国家/省/城市/邮编/地址/电话/邮箱/联系人/姓名/公司"等纯字段标签（无"发件人/收货人"等 party 词时也能识别）
     { re: /国家|国别|COUNTRY/i, path: 'consignee.country' },
     { re: /邮编|ZIP|POSTAL?/i, path: 'consignee.zip' },
