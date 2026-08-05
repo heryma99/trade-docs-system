@@ -203,13 +203,20 @@
       boxes.push(b);
     }
     if (!boxes.length) throw new Error('装箱清单中没有有效数据行');
-    var orderNos = {}, boxNos = {}, totalQty = 0, totalNw = 0, totalGw = 0, totalVol = 0;
+    // v1.4.52：混装去重——毛重/体积/体积重是「箱」级属性，按唯一箱号只计一次，避免同箱多SKU重复累加
+    var orderNos = {}, boxNos = {}, totalQty = 0, totalNw = 0, totalGw = 0, totalVol = 0, totalVolW = 0;
+    var seenBox = {};
     boxes.forEach(function (b) {
       if (b.orderNo) orderNos[b.orderNo] = 1;
       if (b.boxNo) boxNos[b.boxNo] = 1;
-      totalQty += b.qty; totalNw += b.nw || 0; totalGw += b.gw || 0;
-      var v = b.volume || (b.length && b.width && b.height ? (b.length * b.width * b.height) / 1000000 : 0);
-      totalVol += v;
+      totalQty += b.qty; totalNw += b.nw || 0;
+      var bn = String(b.boxNo || '').trim();
+      if (bn && seenBox[bn]) return;   // 同一箱已在前面计过箱级重量/体积，跳过
+      if (bn) seenBox[bn] = 1;
+      totalGw += b.gw || 0;
+      var L = Number(b.length) || 0, W = Number(b.width) || 0, H = Number(b.height) || 0;
+      if (L && W && H) { totalVol += L * W * H / 1000000; totalVolW += L * W * H / 6000; }
+      else { totalVol += Number(b.volume) || 0; totalVolW += Number(b.volumeWeight) || 0; }
     });
     return {
       boxes: boxes,
@@ -219,7 +226,8 @@
         qty: totalQty,
         nw: Math.round(totalNw * 1000) / 1000,
         gw: Math.round(totalGw * 1000) / 1000,
-        volume: Math.round(totalVol * 10000) / 10000
+        volume: Math.round(totalVol * 10000) / 10000,
+        volumeWeight: Math.round(totalVolW * 1000) / 1000
       }
     };
   }
