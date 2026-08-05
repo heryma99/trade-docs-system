@@ -40,6 +40,11 @@ table.grid td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .form-col input, .form-col select, .form-col textarea { width: 100%; padding: 6px 9px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: #fff; color: #222; }
 input:focus, select:focus, textarea:focus { outline: 2px solid #93c5fd; border-color: #60a5fa; }
 .req::after { content: " *"; color: #dc2626; }
+/* v1.4.50：step2 收发货人选中摘要卡片 */
+.party-info { grid-column: 1 / -1; margin: -2px 0 4px; }
+.pi-card { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 6px 10px; font-size: 12.5px; color: #0c4a6e; line-height: 1.5; }
+.pi-card b { color: #075985; }
+.pi-empty { color: #94a3b8; font-size: 12px; }
 .steps { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
 .step { flex: 1; min-width: 110px; text-align: center; padding: 8px 4px; background: #e8edf5; color: #667; border-radius: 6px; font-size: 12.5px; position: relative; }
 .step.on { background: #2563eb; color: #fff; font-weight: 600; }
