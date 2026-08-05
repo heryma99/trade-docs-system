@@ -290,7 +290,8 @@
       if (packing.boxes && packing.boxes.length) {
         var _bt = { gw: 0, volume: 0, volumeWeight: 0 }, _seen = {}, _ri = 0, _hasBoxGw = false;
         (packing.boxes || []).forEach(function (b) {
-          var k = String(b.boxNo == null ? '' : b.boxNo).trim() || ('@row' + (_ri++));
+          var k = String(b.orderNo == null ? '' : b.orderNo) + '/' + String(b.boxNo == null ? '' : b.boxNo).trim();
+          if (k === '/') k = '@row' + (_ri++); // 无订单号也无箱号时按行独立，不跨行合并
           if (_seen[k]) return; _seen[k] = 1;
           var _g = Number(b.gw) || 0; if (_g > 0) _hasBoxGw = true;
           _bt.gw += _g;
@@ -651,6 +652,8 @@
       var rowA = ws.getRow(r1);
       rowA.eachCell({ includeEmpty: true }, function (cell, col) {
         var s = _cellStr(cell);
+        // v1.4.54：保护明细表头行（列标签 SKU/MODEL/DESCRIPTION/QTY 等），避免被当样本残留清空导致表头空白、数据列整体右移
+        if (itemsRowNumArg && itemsRowNumArg !== -1 && r1 >= itemsRowNumArg - 3 && r1 <= itemsRowNumArg - 1) return;
         if (/\{\{/.test(s)) return;
         if (mapFieldLabel(s)) return; // v1.4.50：用更宽的 mapFieldLabel 保护"运输方式/客户单号/PO号"等 GENERAL_LABEL_RULES 也被识别为 label（避免被误清）
         var inLabelRange = false;
