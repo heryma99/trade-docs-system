@@ -4,11 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>贸易单证系统 · 发票 & BOOKING FORM</title>
-<link rel="stylesheet" href="styles.css?v=1.4.56">
+<link rel="stylesheet" href="styles.css?v=1.4.57">
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">🧾 贸易单证系统 <span class="ver" title="v1.4.56 boxMode 真实模板明细列修复：①单箱重量(O)/长(P)/宽(Q)/高(R) 此前仅每箱首行 SKU 有值、其余行 0/空——按 订单号/箱号 归并箱级规格灌给该箱全部 SKU 行（it.gw/it.nw 保持 per-SKU 值不动，总毛重不被放大）；②采购价格(M) 列空白——HEADER_ALIASES.price 缺中文「采购价格」别名已补。v1.4.55 缓存破坏；v1.4.54 跨订单箱号合并；v1.4.53 G.W.=0 回归修复；v1.4.52 混装去重；v1.4.51 通用模板中间行占位符；v1.4.50 收件人残留；v1.4.49 初始化卡死；v1.4.48 中英表头别名；v1.4.47 长短高/收发人；v1.4.46 模板自愈；v1.4.45 恢复；v1.4.44 拉取；v1.4.43 海运明细；v1.4.42 fileBuf；v1.4.41 中文括号；v1.4.40 上传即解析；v1.4.39 sync；v1.4.38 诊断；v1.4.37 错误显示">v1.4.56</span></div>
+  <div class="brand">🧾 贸易单证系统 <span class="ver" title="v1.4.57 亚丰空派模板「按模板格式生成」修复：①内嵌模板改用用户最新纯标签模板重建（保留可见表头标签，不再整格替换占位符，标签不再被值覆盖）；②引擎 mapHeaderLabel 新增「地址编码/地址库编码→warehouseCode」、GENERAL_LABEL_RULES 新增「地址库编码→consignee.warehouseCode」，修复「地址库编码」未填、发件人地址编码被误识别为 shipper.address；③scanItemHeader 改为「低行(贴近明细)覆盖」，修复 投保币种 等表头标签劫持货箱高度列导致币种错填；④ITEM_MAP 货箱长/宽/高→lengthCm/widthCm/heightCm，明细尺寸列不再整列空。v1.4.56 boxMode 真实模板明细列修复；v1.4.55 缓存破坏；v1.4.54 跨订单箱号合并；v1.4.53 G.W.=0 回归修复；v1.4.52 混装去重；v1.4.51 通用模板中间行占位符；v1.4.50 收件人残留；v1.4.49 初始化卡死；v1.4.48 中英表头别名；v1.4.47 长短高/收发人；v1.4.46 模板自愈；v1.4.45 恢复；v1.4.44 拉取；v1.4.43 海运明细；v1.4.42 fileBuf；v1.4.41 中文括号；v1.4.40 上传即解析；v1.4.39 sync；v1.4.38 诊断；v1.4.37 错误显示">v1.4.57</span></div>
   <nav id="tabs">
     <button data-tab="orders" class="tab active">订单</button>
     <button data-tab="packings" class="tab">装箱清单</button>
@@ -25,35 +25,35 @@
 <div id="toast"></div>
 <div id="modal-mask" class="hidden"><div id="modal"></div></div>
 
-<script src="vendor/exceljs.min.js?v=1.4.56"></script>
-<script src="vendor/xlsx.full.min.js?v=1.4.56"></script>
-<script src="js/db.js?v=1.4.56"></script>
-<script src="js/adapters.js?v=1.4.56"></script>
-<script src="js/parser.js?v=1.4.56"></script>
-<script src="js/validator.js?v=1.4.56"></script>
-<script src="js/engine.js?v=1.4.56"></script>
-<script src="js/exporter.js?v=1.4.56"></script>
-<script src="js/declare_data.js?v=1.4.56"></script>
-<script src="js/declare_data.part01.js?v=1.4.56"></script>
-<script src="js/declare_data.part02.js?v=1.4.56"></script>
-<script src="js/declare_data.part03.js?v=1.4.56"></script>
-<script src="js/declare_data.part04.js?v=1.4.56"></script>
-<script src="js/declare_data.part05.js?v=1.4.56"></script>
-<script src="js/declare_data.part06.js?v=1.4.56"></script>
-<script src="js/declare_data.part07.js?v=1.4.56"></script>
-<script src="js/declare_data.part08.js?v=1.4.56"></script>
-<script src="js/declare_data.part09.js?v=1.4.56"></script>
-<script src="js/declare_data.part10.js?v=1.4.56"></script>
-<script src="js/declare_data.part11.js?v=1.4.56"></script>
-<script src="js/declare_data.part12.js?v=1.4.56"></script>
-<script src="js/declare_data.part13.js?v=1.4.56"></script>
-<script src="js/declare_data.part14.js?v=1.4.56"></script>
-<script src="js/declare_data.part15.js?v=1.4.56"></script>
-<script src="js/declare_data.part16.js?v=1.4.56"></script>
-<script src="js/seed.js?v=1.4.56"></script>
-<script src="js/real_templates.js?v=1.4.56"></script>
-<script src="js/preview.js?v=1.4.56"></script>
-<script src="js/ui.js?v=1.4.56"></script>
+<script src="vendor/exceljs.min.js?v=1.4.57"></script>
+<script src="vendor/xlsx.full.min.js?v=1.4.57"></script>
+<script src="js/db.js?v=1.4.57"></script>
+<script src="js/adapters.js?v=1.4.57"></script>
+<script src="js/parser.js?v=1.4.57"></script>
+<script src="js/validator.js?v=1.4.57"></script>
+<script src="js/engine.js?v=1.4.57"></script>
+<script src="js/exporter.js?v=1.4.57"></script>
+<script src="js/declare_data.js?v=1.4.57"></script>
+<script src="js/declare_data.part01.js?v=1.4.57"></script>
+<script src="js/declare_data.part02.js?v=1.4.57"></script>
+<script src="js/declare_data.part03.js?v=1.4.57"></script>
+<script src="js/declare_data.part04.js?v=1.4.57"></script>
+<script src="js/declare_data.part05.js?v=1.4.57"></script>
+<script src="js/declare_data.part06.js?v=1.4.57"></script>
+<script src="js/declare_data.part07.js?v=1.4.57"></script>
+<script src="js/declare_data.part08.js?v=1.4.57"></script>
+<script src="js/declare_data.part09.js?v=1.4.57"></script>
+<script src="js/declare_data.part10.js?v=1.4.57"></script>
+<script src="js/declare_data.part11.js?v=1.4.57"></script>
+<script src="js/declare_data.part12.js?v=1.4.57"></script>
+<script src="js/declare_data.part13.js?v=1.4.57"></script>
+<script src="js/declare_data.part14.js?v=1.4.57"></script>
+<script src="js/declare_data.part15.js?v=1.4.57"></script>
+<script src="js/declare_data.part16.js?v=1.4.57"></script>
+<script src="js/seed.js?v=1.4.57"></script>
+<script src="js/real_templates.js?v=1.4.57"></script>
+<script src="js/preview.js?v=1.4.57"></script>
+<script src="js/ui.js?v=1.4.57"></script>
 <!--USERDATA_SLOT-->
 </body>
 </html>
