@@ -283,10 +283,22 @@
     totals.amount = round(totals.amount, 2); totals.nw = round(totals.nw, 3); totals.gw = round(totals.gw, 3); totals.volumeWeight = round(totals.volumeWeight, 3);
     if (packing) {
       totals.boxCount = packing.totals.boxCount;
-      totals.volume = packing.totals.volume;
-      // 装箱清单总重优先（权威源）
+      // v1.4.52：混装去重——毛重/体积/体积重是「箱」级属性，按唯一箱号聚合（同箱多SKU只计一次），避免重复统计
+      if (packing.boxes && packing.boxes.length) {
+        var _bt = { gw: 0, volume: 0, volumeWeight: 0 }, _seen = {}, _ri = 0;
+        (packing.boxes || []).forEach(function (b) {
+          var k = String(b.boxNo == null ? '' : b.boxNo).trim() || ('@row' + (_ri++));
+          if (_seen[k]) return; _seen[k] = 1;
+          _bt.gw += Number(b.gw) || 0;
+          var L = Number(b.length) || 0, W = Number(b.width) || 0, H = Number(b.height) || 0;
+          if (L && W && H) { _bt.volume += L * W * H / 1000000; _bt.volumeWeight += L * W * H / 6000; }
+          else { _bt.volume += Number(b.volume) || 0; _bt.volumeWeight += Number(b.volumeWeight) || 0; }
+        });
+        totals.gw = round(_bt.gw, 3);
+        totals.volume = round(_bt.volume, 4);
+        totals.volumeWeight = round(_bt.volumeWeight, 3);
+      }
       if (packing.totals.nw) totals.nw = packing.totals.nw;
-      if (packing.totals.gw) totals.gw = packing.totals.gw;
     }
 
     var currency = meta.currency || 'USD';
@@ -889,6 +901,35 @@
         // 暂不实现：保持现状多槽位（多余槽位 2.5 段会清掉 {{items.*}} 占位符文本，整行仍带原样式）
       }
       // 逐行填充 items：占位符优先；无占位符但有表头映射的列，按表头写值
+      // ⑤ 合并还原（必须前移到 pass2 之前：否则 mergedMaps 用的是插入前的旧合并坐标，
+      //    会把页脚合并 A19:I19/B21:I21/F23:I23 误判到插入后的明细行 19/21/23，导致 B-I 列被当从属格跳过）
+      if (itemsRowNum !== -1 && origMerges.length) {
+        var delta = 0;
+        for (var si = 0; si < splices.length; si++) if (splices[si].at === itemsRowNum + 1) { delta = splices[si].delta; break; }
+        if (delta > 0) {
+          var newMerges = [];
+          var pattern = origMerges.filter(function (m) { return m.top === itemsRowNum; });
+          origMerges.forEach(function (m) {
+            if (m.bottom < itemsRowNum) {
+              newMerges.push({ top: m.top, left: m.left, bottom: m.bottom, right: m.right });
+            } else if (m.top > itemsRowNum) {
+              // 修正：原用 m.top>itemEnd 会把紧贴明细区的页脚合并漏掉->丢合并；改用 m.top>itemsRowNum 判定「在明细区下方」
+              newMerges.push({ top: m.top + delta, left: m.left, bottom: m.bottom + delta, right: m.right });
+            }
+          });
+          for (var k = 0; k <= delta; k++) {
+            pattern.forEach(function (p) {
+              newMerges.push({ top: itemsRowNum + k, left: p.left, bottom: itemsRowNum + k, right: p.right });
+            });
+          }
+          (ws.model.merges || []).slice().forEach(function (m) { try { ws.unMergeCells(m); } catch (e) {} });
+          newMerges.forEach(function (m) {
+            try { ws.mergeCells(makeMergeRef(m)); } catch (e) {}
+          });
+        }
+      }
+      // 合并还原后重算从属格映射，pass2 据此只跳过真正的明细行内合并（如 B:C 合并），不再误伤页脚合并错位的明细行
+      mergedMaps = buildMergedMaps(ws);
       for (var r = 0; r < items.length; r++) {
         var rowObj = ws.getRow(itemsRowNum + r);
         var itR = items[r];
@@ -1024,39 +1065,8 @@
       });
     });
 
-    // ⑤ 1:1 还原合并单元格：明细行插入导致下方合并区域需要整体下移；
-    //    与明细行同处一行的合并需要复制到每一行插入行；纵向跨越明细行的合并需要扩展。
-    if (itemsRowNum !== -1 && origMerges.length) {
-      var delta = 0;
-      for (var si = 0; si < splices.length; si++) if (splices[si].at === itemsRowNum + 1) { delta = splices[si].delta; break; }
-      if (delta > 0) {
-        var newMerges = [];
-        // 货描表结构合并：以「首条明细行(itemsRowNum)的合并」为列模式
-        var pattern = origMerges.filter(function (m) { return m.top === itemsRowNum; });
-        origMerges.forEach(function (m) {
-          if (m.bottom < itemsRowNum) {
-            // 完全在明细区上方（表头/标签区）：原样保留
-            newMerges.push({ top: m.top, left: m.left, bottom: m.bottom, right: m.right });
-          } else if (m.top > itemEnd) {
-            // 完全在明细区下方（页脚/免责声明/签字区）：整体下移 delta 行
-            newMerges.push({ top: m.top + delta, left: m.left, bottom: m.bottom + delta, right: m.right });
-          }
-          // 与明细区相交的合并：不在此直接处理，统一由下方 pattern 复制到每一条明细行
-        });
-        // 把首条明细行的列合并模式复制到每一条明细行（单行合并），保证货描表每行格式一致；
-        // 纵向 2 行合并（如 Aramex 的 I21:K22）也按单行复制，避免第二样例行等重复合并错位/悬空。
-        for (var k = 0; k <= delta; k++) {
-          pattern.forEach(function (p) {
-            newMerges.push({ top: itemsRowNum + k, left: p.left, bottom: itemsRowNum + k, right: p.right });
-          });
-        }
-        // 清空现有合并（ExcelJS 在 spliceRows 后不会自动更新 merge 范围）
-        (ws.model.merges || []).slice().forEach(function (m) { try { ws.unMergeCells(m); } catch (e) {} });
-        newMerges.forEach(function (m) {
-          try { ws.mergeCells(makeMergeRef(m)); } catch (e) {}
-        });
-      }
-    }
+
+
     // ⑤.5) 明细行 wrapText 关掉（放在 ④ 还原 origStyles 之后，避免被覆盖）：
     //   源模板 D/F/H 等列常 wrap=true，列宽刚好到边界时会强制把 "Handbag" 折成 "Handba\ng"
     //   显示错位；关 wrap 后长字符溢出右空白列更符合订舱单观感（且第 2.2 段已加宽列避免溢出到相邻内容列）。
