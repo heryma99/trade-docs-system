@@ -1033,8 +1033,10 @@
       function opts(list, sel) { return '<option value="">请选择</option>' + list.map(function (p) { return '<option value="' + p.id + '"' + (sel === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>'; }).join(''); }
       body.innerHTML = '<div class="card"><h3>收发货人</h3><div class="form-grid">' +
         '<div><label class="req">SHIPPER 发货人</label><select id="wz-shipper">' + opts(shippers, w.shipperId) + '</select>' + (shippers.length === 0 ? '<p class="hint">📌 无发货人主数据。<button class="btn sm ghost" id="wz-use-ord-shipper">抓取订单的卖家/承运商为发货人</button></p>' : '') + '</div>' +
+        '<div id="wz-shipper-info" class="party-info"></div>' +
         '<div><label class="req">CONSIGNEE 收货人</label><select id="wz-consignee">' + opts(consignees, w.consigneeId) + '</select>' +
         (ordRecv ? '<p class="hint">📌 订单自带收货人「' + esc(ordRecv.receiver || ordRecv.buyer) + '」<button class="btn sm ghost" id="wz-use-ord-recv">直接抓取使用</button></p>' : '<p class="hint">订单无收发货人信息，请从主数据选择 <button class="btn sm ghost" id="wz-goto-parties">去「收发货人」页维护</button></p>') + '</div>' +
+        '<div id="wz-consignee-info" class="party-info"></div>' +
         '<div><label>NOTIFY 通知人</label><select id="wz-notify">' + opts(notifies, w.notifyId) + '</select></div></div>' +
         '<h3 style="margin-top:14px">发票要素</h3><div class="form-grid">' +
         '<div><label class="req">发票号</label><input id="wz-invno" value="' + esc(m.invoiceNo) + '"></div>' +
@@ -1067,6 +1069,25 @@
         document.querySelectorAll('.tab').forEach(function (t) { t.classList.toggle('active', t.dataset.tab === 'parties'); });
         render();
       };
+      // v1.4.50：选中收发货人后就地显示其摘要，避免选错看不出来（用户曾因模板自带样本残留误以为填错）
+      function renderPartyInfo() {
+        var allMap = {};
+        parties.forEach(function (p) { allMap[p.id] = p; });
+        ['wz-shipper-info|wz-shipper', 'wz-consignee-info|wz-consignee'].forEach(function (pair) {
+          var parts = pair.split('|');
+          var box = document.getElementById(parts[0]);
+          var sel = document.getElementById(parts[1]);
+          if (!box || !sel) return;
+          var p = allMap[sel.value];
+          if (!p) { box.innerHTML = '<span class="pi-empty">（未选择）</span>'; return; }
+          var lines = [p.name, p.company, p.address, [p.country, p.state, p.city].filter(Boolean).join(' / '), p.tel, p.email, p.zip ? '邮编 ' + p.zip : '', p.warehouseCode ? '仓库代码 ' + p.warehouseCode : ''].filter(Boolean);
+          box.innerHTML = '<div class="pi-card"><b>已选：' + esc(p.name) + '</b><br>' + lines.slice(1).map(function (l) { return esc(l); }).join('<br>') + '</div>';
+        });
+      }
+      renderPartyInfo();
+      var shSel = document.getElementById('wz-shipper'), coSel = document.getElementById('wz-consignee');
+      if (shSel) shSel.onchange = renderPartyInfo;
+      if (coSel) coSel.onchange = renderPartyInfo;
       document.getElementById('wz-back2').onclick = function () { w.step = 1; render(); };
       document.getElementById('wz-next2').onclick = function () {
         w.shipperId = val('wz-shipper'); w.consigneeId = val('wz-consignee'); w.notifyId = val('wz-notify');
@@ -1241,13 +1262,21 @@
     }
     // v1.4.47：boxMode 触发条件同时看 ① 模板占位符 itemFields ② 现场扫描的 itemHeaderMap 是否映射长/宽/高/单箱重
     //          纯标签驱动的海运类模板（明细列是「长(cm)/宽(cm)/单箱重量」文字而非 {{items.lengthCm}}）也能触发 boxMode
+    // v1.4.50 修：① 主动现场 scan 一次（不依赖 tpl 缓存，因为用户早期上传的模板 scan 当时是旧版本，没识别 lengthCm/widthCm/heightCm，tpl 缓存里没这些字段）② 兜底 if 条件写反问题（之前是 headerHasDims=true 才进重扫，但旧 tpl 缓存里就是空的 headerHasDims=false → 永远不重扫）
     var itemHeaderMap = (tpl && tpl.mapping && tpl.mapping.scanned && tpl.mapping.scanned.itemHeaderMap) || {};
     var headerHasDims = Object.keys(itemHeaderMap).some(function (c) {
       var f = itemHeaderMap[c];
       return /^(lengthCm|widthCm|heightCm|singleGw)$/.test(f);
     });
-    if (tpl && headerHasDims && !itemHeaderMap.__scanned && w._wb) {
-      try { itemHeaderMap = engine.scanTemplate(w._wb).itemHeaderMap || itemHeaderMap; } catch (e) {}
+    // v1.4.50 主动现场 scan 一次（无论 tpl 缓存是否有 dims），避免早期上传模板因旧 scan 引擎没识别长宽高而永远不触发 boxMode
+    if (tpl && !itemHeaderMap.__scanned && w._wb) {
+      try {
+        var _liveScan = engine.scanTemplate(w._wb);
+        if (_liveScan && _liveScan.itemHeaderMap) {
+          itemHeaderMap = _liveScan.itemHeaderMap;
+          itemHeaderMap.__scanned = 1;
+        }
+      } catch (e) {}
       headerHasDims = Object.keys(itemHeaderMap).some(function (c) {
         var f = itemHeaderMap[c];
         return /^(lengthCm|widthCm|heightCm|singleGw)$/.test(f);
