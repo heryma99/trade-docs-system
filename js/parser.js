@@ -29,7 +29,7 @@
     name:    ['商品名称', '品名', '英文品名', '货品名称', 'DESCRIPTION', 'Description'],
     qty:     ['数量', '装箱数量', 'QTY', 'Qty', 'PCS', '件数'],
     nw:      ['净重', '净重KG', 'N.W', 'N.W.', 'NW', 'N.W(KG)', '净重(KG)', '净重（KG）', '净重(kg)', '净重（kg）'],
-    gw:      ['毛重', '毛重KG', 'G.W', 'G.W.', 'GW', 'G.W(KG)', '毛重(KG)', '毛重（KG）', '毛重(kg)', '毛重（kg）'],
+    gw:      ['重量', '毛重', '毛重KG', 'G.W', 'G.W.', 'GW', 'G.W(KG)', '毛重(KG)', '毛重（KG）', '毛重(kg)', '毛重（kg）'],
     length:  ['长', '长CM', 'L', '长(CM)', '长（CM）', '长cm'],
     width:   ['宽', '宽CM', 'W', '宽(CM)', '宽（CM）', '宽cm'],
     height:  ['高', '高CM', 'H', '高(CM)', '高（CM）', '高cm'],
@@ -208,11 +208,11 @@
     var seenBox = {};
     boxes.forEach(function (b) {
       if (b.orderNo) orderNos[b.orderNo] = 1;
-      if (b.boxNo) boxNos[b.boxNo] = 1;
+      var boxKey = String(b.orderNo == null ? '' : b.orderNo) + '/' + String(b.boxNo == null ? '' : b.boxNo).trim(); // v1.4.54：复合键，跨订单同箱号(1978182/1 与 1978183/1)不再误合并
+      if (b.boxNo) boxNos[boxKey] = 1;
       totalQty += b.qty; totalNw += b.nw || 0;
-      var bn = String(b.boxNo || '').trim();
-      if (bn && seenBox[bn]) return;   // 同一箱已在前面计过箱级重量/体积，跳过
-      if (bn) seenBox[bn] = 1;
+      if (boxKey !== '/' && seenBox[boxKey]) return;   // 同一(订单/箱号)已在前面计过箱级重量/体积，跳过
+      if (boxKey !== '/') seenBox[boxKey] = 1;
       totalGw += b.gw || 0;
       var L = Number(b.length) || 0, W = Number(b.width) || 0, H = Number(b.height) || 0;
       if (L && W && H) { totalVol += L * W * H / 1000000; totalVolW += L * W * H / 6000; }
