@@ -19,7 +19,7 @@
     hsCode:  ['HS CODE', 'HSCODE', 'HS编码', '海关编码', 'TARIFF CODE'],
     qty:     ['QTY', '数量', '件数', 'PCS', 'QUANTITY', 'TOTAL QUANTITY'],
     unit:    ['UNIT', '单位', 'UOM'],
-    price:   ['UNIT PRICE', '单价', 'PRICE', 'DECLARED VALUE'],
+    price:   ['UNIT PRICE', '单价', 'PRICE', 'DECLARED VALUE', '采购价格', '采购价'],
     amount:  ['AMOUNT', '金额', 'TOTAL', 'TOTAL AMOUNT', 'TOTAL PRICE', '总申报价值', '申报价值'],
     nw:      ['N.W', 'N.W.', 'NW', 'NET WEIGHT', '净重'],
     gw:      ['G.W', 'G.W.', 'GW', 'GROSS WEIGHT', '毛重'],
@@ -193,22 +193,44 @@
 
     var items = [];
     if (boxMode) {
+      // 箱级规格归并：装箱清单只在「每箱首行」写 重量/长/宽/高，需按 订单号/箱号 聚合到该箱全部 SKU 行，
+      // 否则非首行 SKU 的 单箱重量/长/宽/高 全空（模板「单箱重量(kg)」「长(cm)」等列按箱×SKU 展开后只有首行有值）。
+      // 注意：仅用于明细「单箱重量/尺寸」展示列；it.gw/it.nw 仍保持「每行 per-SKU 装箱值」(首行有、其余0)，
+      // 这样下方 totals 按行累加 = 各箱首行重量之和 = 总毛重，不会被箱重在多行重复放大。
+      var boxSpecMap = {};
+      (packing.boxes || []).forEach(function (b0) {
+        var bk = String(b0.orderNo == null ? '' : b0.orderNo) + '/' + String(b0.boxNo == null ? '' : b0.boxNo).trim();
+        if (bk === '/') bk = '@row' + Math.random();
+        if (!boxSpecMap[bk]) boxSpecMap[bk] = { gw: 0, nw: 0, length: '', width: '', height: '', _set: false };
+        if (!boxSpecMap[bk]._set && (Number(b0.gw) || Number(b0.length))) {
+          boxSpecMap[bk].gw = Number(b0.gw) || 0;
+          boxSpecMap[bk].nw = Number(b0.nw) || 0;
+          boxSpecMap[bk].length = b0.length || '';
+          boxSpecMap[bk].width = b0.width || '';
+          boxSpecMap[bk].height = b0.height || '';
+          boxSpecMap[bk]._set = true;
+        }
+      });
       items = (packing.boxes || []).map(function (b) {
         var sku = String(b.sku == null ? '' : b.sku).trim();
         var d = declareMap[sku] || {};
-        var L = Number(b.length) || 0, W = Number(b.width) || 0, H = Number(b.height) || 0;
+        var bk = String(b.orderNo == null ? '' : b.orderNo) + '/' + String(b.boxNo == null ? '' : b.boxNo).trim();
+        var spec = boxSpecMap[bk] || {};
+        var L = Number(spec.length) || Number(b.length) || 0, W = Number(spec.width) || Number(b.width) || 0, H = Number(spec.height) || Number(b.height) || 0;
         var dims = (L && W && H) ? (L + '×' + W + '×' + H) : (b.boxSpec || '');
         var volW = (L && W && H) ? round(L * W * H / 6000, 3) : (b.volumeWeight || 0);
         var vol = (L && W && H) ? round(L * W * H / 1000000, 6) : 0;
         var it = makeItemCore(sku, d);
         it.boxNo = b.boxNo || ''; it.boxSpec = dims; it.dims = dims;
-        it.length = b.length || ''; it.width = b.width || ''; it.height = b.height || '';
+        it.length = L || ''; it.width = W || ''; it.height = H || '';
         // v1.4.47：boxMode 直接把箱规同步给 per-item 长/宽/高/单箱重字段（模板列映射的是 lengthCm/... 而非 length）
-        it.lengthCm = b.length || ''; it.widthCm = b.width || ''; it.heightCm = b.height || '';
-        it.singleGw = Number(b.gw) || 0;
+        // v1.4.56：箱级规格按 订单号/箱号 归并，非首行 SKU 也拿到整箱重量/尺寸
+        it.lengthCm = L || ''; it.widthCm = W || ''; it.heightCm = H || '';
+        it.singleGw = (spec.gw || Number(b.gw)) || 0;
         it.volume = vol; it.volumeWeight = volW;
         it.boxCount = 1; it.ctns = 1;
         it.qty = Number(b.qty) || 0; it.amount = round(it.qty * it.price, 2);
+        // 保持 per-SKU 装箱值（首行有、其余0），供 totals 正确累加总毛重；不为单箱重量列污染
         it.nw = Number(b.nw) || 0; it.gw = Number(b.gw) || 0; it.boxNw = it.nw;
         it._weightSource = 'packing';
         return it;
