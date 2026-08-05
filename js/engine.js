@@ -455,6 +455,17 @@
     { re: /备注/, path: 'remark' },
     { re: /(VAT号|EORI)/, path: 'consignee.taxNo' },
     { re: /仓库代码|WAREHOUSE\s*CODE|海外仓代码|仓库编号|FBA代码/, path: 'consignee.warehouseCode' },
+    // v1.4.50：补"国家/省/城市/邮编/地址/电话/邮箱/联系人/姓名/公司"等纯字段标签（无"发件人/收货人"等 party 词时也能识别）
+    { re: /国家|国别|COUNTRY/i, path: 'consignee.country' },
+    { re: /邮编|ZIP|POSTAL?/i, path: 'consignee.zip' },
+    { re: /省|州|STATE|PROVINCE/i, path: 'consignee.state' },
+    { re: /城市|CITY/i, path: 'consignee.city' },
+    { re: /地址/i, path: 'consignee.address' },
+    { re: /电话|手机|TEL|PHONE|MOBILE/i, path: 'consignee.tel' },
+    { re: /邮箱|EMAIL|邮件|E-?MAIL/i, path: 'consignee.email' },
+    { re: /联系人|CONTACT/i, path: 'consignee.contact' },
+    { re: /姓名|NAME/i, path: 'consignee.name' },
+    { re: /公司|COMPANY|企业/i, path: 'consignee.company' },
     { re: /(揽货渠道|客户渠道|服务渠道|服务$)/, path: '' } // 无对应字段，跳过
   ];
 
@@ -555,31 +566,95 @@
     }
     // 合并单元格成员表：key = r + ',' + c；mergedMaster[r,c] = true 表示该单元格属于某个合并范围
     var mergedCell = {};
+    // v1.4.50：mergedSubordinate 仅标记从属格（不含主格），供 PASS2 写值时跳过——避免合并从属格 _cellStr 返回主格值让 for 循环 c++ 越界
+    var mergedSubordinate = {};
     (ws.model.merges || []).forEach(function (m) {
       var mm = (typeof m === 'string') ? m.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/) : null;
       if (!mm) return;
       var c1 = _colNum(mm[1]), r1 = parseInt(mm[2], 10), c2 = _colNum(mm[3]), r2 = parseInt(mm[4], 10);
       for (var rr = r1; rr <= r2; rr++) for (var cc = c1; cc <= c2; cc++) mergedCell[rr + ',' + cc] = true;
+      // 主格 (r1, c1) 不算 subordinate；从属格 (rr != r1 || cc != c1) 才算
+      for (var rr2 = r1; rr2 <= r2; rr2++) for (var cc2 = c1; cc2 <= c2; cc2++) {
+        if (rr2 === r1 && cc2 === c1) continue;
+        mergedSubordinate[rr2 + ',' + cc2] = true;
+      }
     });
     // 这些词出现在单元格里时视为「标签/静态文本」，保留不清理。
     // 注意：「地址/电话/邮箱/联系人」等由 mapHeaderLabel 识别保护，不在这里兜底，
     // 否则会把 JW PEI、Noul LLC 等模板样本地址残留也保留下来。
     var KEEP = /(编码|编号|号|库|液体|粉末|危险品|清关|交税|交货|派送|参考|备注|保价|投保|箱数|商品|申报|材质|海关|用途|品牌|型号|英文|中文|品名|数量|重量|长|宽|高|带电|带磁|图片|链接|销售|价格|名称|发件人|收件人|发货人|通知人|收货|装货|卸货|船名|航次|委托|贸易术语|SHIPPER|CONSIGNEE|NOTIFY|BOOKING|INSTRUCTION|PO|NO\.|承运人|运费|吨位|航班|日期|文件|通知|声明|托运|到达|始发|体积|进仓|运单|预留)/i;
 
+    // v1.4.50：扫描可识别 label cell，计算它们右侧"应该清的值 cell"（兼容无 {{}} 占位符的纯标签模板，
+    //          例如中运通达-FBA订单(V3) 整张表没有任何 {{}} 占位符，valueCols 永远为空 → 样本数据全保留）
+    // 同一行有多个 label 时，label 之间也属值 cell。
+    // 识别范围：mapFieldLabel（涵盖 mapHeaderLabel 三类收发人 + GENERAL_LABEL_RULES 通用字段如仓库代码/运输方式/客户单号）
+    var labelCellValueRanges = {}; // r -> [{c1,c2}]  闭区间
+    var merged = ws.model.merges || [];
+    function _parseMerge(m) {
+      if (typeof m === 'string') {
+        var mm = m.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+        if (!mm) return null;
+        return { r1: parseInt(mm[2], 10), c1: _colNum(mm[1]), r2: parseInt(mm[4], 10), c2: _colNum(mm[3]) };
+      }
+      return null;
+    }
+    var labelCellList = []; // [{r, c, spanEnd}]  spanEnd = 标签合并区右边界
+    for (var rL = 1; rL <= valueEnd; rL++) {
+      var rowL = ws.getRow(rL);
+      rowL.eachCell({ includeEmpty: false }, function (cellL, cL) {
+        var sL = _cellStr(cellL);
+        if (!sL || /\{\{/.test(sL)) return;
+        if (!mapFieldLabel(sL)) return; // v1.4.50：用更宽的 mapFieldLabel（涵盖 GENERAL_LABEL_RULES，如"收件人(仓库代码)"/"运输方式"等）
+        var spanEndL = cL;
+        for (var mi = 0; mi < merged.length; mi++) {
+          var m = _parseMerge(merged[mi]);
+          if (m && m.r1 <= rL && rL <= m.r2 && m.c1 <= cL && cL <= m.c2) { spanEndL = Math.max(spanEndL, m.c2); break; }
+        }
+        labelCellList.push({ r: rL, c: cL, spanEnd: spanEndL });
+      });
+    }
+    // 按行分组 label，按列排序
+    var labelByRow = {};
+    labelCellList.forEach(function (lc) { (labelByRow[lc.r] = labelByRow[lc.r] || []).push(lc); });
+    Object.keys(labelByRow).forEach(function (rKey) {
+      var arr = labelByRow[rKey].sort(function (a, b) { return a.c - b.c; });
+      labelCellValueRanges[rKey] = [];
+      for (var li = 0; li < arr.length; li++) {
+        var start = arr[li].spanEnd + 1;
+        var end = (li + 1 < arr.length) ? arr[li + 1].c - 1 : (start + 12); // 限 12 格防越界
+        if (start <= end) labelCellValueRanges[rKey].push({ c1: start, c2: end });
+      }
+    });
+
     // PASS 1：清理值列里的样本残留（非占位符、非标签、非静态文本）。
     // 合并单元格成员只保留包含标签词的静态文本；具体样本数据（如旧地址、旧公司名）仍清空。
+    // v1.4.50：兼容无 {{}} 占位符模板——按 mapFieldLabel label 右侧值格也清；label 右侧的值合并区（主格+从属格）也清（之前 mergedCell skip 会跳过整片合并区导致样本残留）
     for (var r1 = 1; r1 <= headerEnd; r1++) {
       var rowA = ws.getRow(r1);
       rowA.eachCell({ includeEmpty: true }, function (cell, col) {
         var s = _cellStr(cell);
         if (/\{\{/.test(s)) return;
-        if (mapHeaderLabel(s)) return;
-        if (mergedCell[r1 + ',' + col]) return; // 合并单元格（版式锚点文本）一律保留：块式模板(KEAS)的标题/承运商抬头/贸易术语/货描表头都是合并锚点，误清会整体走样；样本数据(如 Aramex 地址)是普通单元格非合并，仍会被下方 valueCols 规则清除。
+        if (mapFieldLabel(s)) return; // v1.4.50：用更宽的 mapFieldLabel 保护"运输方式/客户单号/PO号"等 GENERAL_LABEL_RULES 也被识别为 label（避免被误清）
+        var inLabelRange = false;
+        if (labelCellValueRanges[r1]) {
+          for (var ri = 0; ri < labelCellValueRanges[r1].length; ri++) {
+            var rg = labelCellValueRanges[r1][ri];
+            if (col >= rg.c1 && col <= rg.c2) { inLabelRange = true; break; }
+          }
+        }
+        // v1.4.50：label 右侧值格（无论合并与否）都允许清——避免样本数据占据合并值格
+        if (inLabelRange) {
+          if (KEEP.test(s)) return; // 含保留词不动
+          cell.value = '';
+          return;
+        }
+        if (mergedCell[r1 + ',' + col]) return; // 非值格的合并锚点（版式标题/承运商抬头/贸易术语等）保留
         if (valueCols[col] && !KEEP.test(s)) cell.value = '';
       });
     }
 
     // PASS 2：按模板表头标签写入收发人数据
+    // v1.4.50：写值时跳过合并从属格（subordinate cells）——避免 PASS1 写合并主格后 for 循环看到从属格的 _cellStr 返回主格值继续 c++ 越界写到 col 11+（用户截图"地址"4 行重复就是因为这个越界）
     for (var r2 = 1; r2 <= headerEnd; r2++) {
       var rowB = ws.getRow(r2);
       rowB.eachCell({ includeEmpty: true }, function (cell, col) {
@@ -593,6 +668,7 @@
         if (val === '') return;
         var target = null, isPh = false;
         for (var c = col + 1; c <= col + 12 && c <= ws.columnCount; c++) {
+          if (mergedSubordinate[r2 + ',' + c]) continue; // 跳过合并从属格（主格保留，可写）——避免 _cellStr 返回主格值让 for 误以为非空继续 c++ 越界
           var tc = rowB.getCell(c); var ts = _cellStr(tc);
           if (ts && /\{\{/.test(ts)) {
             var mp = ts.match(/\{\{\s*([A-Za-z0-9_.]+)\s*\}\}/);
