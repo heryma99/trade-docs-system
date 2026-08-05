@@ -252,12 +252,13 @@
       var ba = boxAgg[sku];
       if (!boxMode) {
         var pk = pkAgg[sku];
+        var d = declareMap[sku] || {};
         if (pk && pk.qty > 0) {
-          it.nw = round(pk.nw * (it.qty / pk.qty), 3);
-          it.gw = round(pk.gw * (it.qty / pk.qty), 3);
-          it._weightSource = 'packing';
+          // 装箱清单有该 SKU：优先用清单毛净重量；若清单无「毛重/净重」列（值为 0/空），回退到主数据（申报信息）重量，避免 G.W./N.W. 变 0
+          it.nw = pk.nw ? round(pk.nw * (it.qty / pk.qty), 3) : round((d.nw || 0) * it.qty, 3);
+          it.gw = pk.gw ? round(pk.gw * (it.qty / pk.qty), 3) : round((d.gw || 0) * it.qty, 3);
+          it._weightSource = (pk.gw || pk.nw) ? 'packing' : 'master';
         } else {
-          var d = declareMap[sku] || {};
           it.nw = round((d.nw || 0) * it.qty, 3);
           it.gw = round((d.gw || 0) * it.qty, 3);
           it._weightSource = d.nw ? 'master' : 'none';
@@ -284,19 +285,24 @@
     if (packing) {
       totals.boxCount = packing.totals.boxCount;
       // v1.4.52：混装去重——毛重/体积/体积重是「箱」级属性，按唯一箱号聚合（同箱多SKU只计一次），避免重复统计
+      // 修正 v1.4.52 回归：仅当箱单确实含「毛重」列（箱级数据存在）时才用箱级聚合覆盖；
+      // 否则（重量仅来自主数据 per-unit）保留上面已按明细汇总的值（本已正确处理混装，避免被清零成 0）
       if (packing.boxes && packing.boxes.length) {
-        var _bt = { gw: 0, volume: 0, volumeWeight: 0 }, _seen = {}, _ri = 0;
+        var _bt = { gw: 0, volume: 0, volumeWeight: 0 }, _seen = {}, _ri = 0, _hasBoxGw = false;
         (packing.boxes || []).forEach(function (b) {
           var k = String(b.boxNo == null ? '' : b.boxNo).trim() || ('@row' + (_ri++));
           if (_seen[k]) return; _seen[k] = 1;
-          _bt.gw += Number(b.gw) || 0;
+          var _g = Number(b.gw) || 0; if (_g > 0) _hasBoxGw = true;
+          _bt.gw += _g;
           var L = Number(b.length) || 0, W = Number(b.width) || 0, H = Number(b.height) || 0;
           if (L && W && H) { _bt.volume += L * W * H / 1000000; _bt.volumeWeight += L * W * H / 6000; }
           else { _bt.volume += Number(b.volume) || 0; _bt.volumeWeight += Number(b.volumeWeight) || 0; }
         });
-        totals.gw = round(_bt.gw, 3);
-        totals.volume = round(_bt.volume, 4);
-        totals.volumeWeight = round(_bt.volumeWeight, 3);
+        if (_hasBoxGw) {
+          totals.gw = round(_bt.gw, 3);
+          totals.volume = round(_bt.volume, 4);
+          totals.volumeWeight = round(_bt.volumeWeight, 3);
+        }
       }
       if (packing.totals.nw) totals.nw = packing.totals.nw;
     }
@@ -957,14 +963,17 @@
             cell.value = (num !== null) ? num : replaceInString(s, ctx);
           }
           // 表头兜底：该列上方有识别出的表头，且该单元格无占位符（或占位符解析后为空），则按表头写值
+          // v1.4.53 修复：cellString 对数字返回 ''，故必须直接判断 cell.value，否则数字会被错映射字段覆盖
           var field = itemHeaderMap[cell.col];
           if (field) {
             var v = getPath(ctx, 'items.' + field);
             if (v === undefined || v === null || v === '') v = getPath(ctx, field);
             if (v !== undefined && v !== null && v !== '') {
-              // 如果占位符已经写了有效值，不覆盖；否则按表头写入
-              var cur = cellString(cell);
-              if (!hasPh || !cur || cur === '') cell.value = (typeof v === 'number') ? v : String(v);
+              // 如果占位符已经写了有效值（含数字），不覆盖；否则按表头写入
+              // 注意：cellString 对数字返回 ''，故必须直接判断 cell.value，否则数字会被错映射字段覆盖
+              var _cv = cell.value;
+              var _filled = (_cv !== undefined && _cv !== null && _cv !== '');
+              if (!hasPh || !_filled) cell.value = (typeof v === 'number') ? v : String(v);
             }
           }
         });
@@ -983,8 +992,8 @@
             var col = parseInt(colStr, 10);
             if (mergedMaps.subordinate[(itemsRowNum + r2) + ',' + col]) return;
             var cell2 = rowObj2.getCell(col);
-            var cur2 = cellString(cell2);
-            if (cur2 && cur2 !== '') return; // 已有内容（占位符已填）跳过
+            var cv2 = cell2.value;
+            if (cv2 !== undefined && cv2 !== null && cv2 !== '') return; // 已有内容（含数字）跳过，避免数字被 cellString 误判为空而覆盖
             var field2 = itemHeaderMap[col];
             if (!field2) return;
             var v2 = getPath(ctx2, 'items.' + field2);
