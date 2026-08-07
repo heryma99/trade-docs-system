@@ -80,54 +80,8 @@
         var jobs = [
           db.bulkPut('parties', PARTIES.slice())
         ];
-        // 内置模板
-        var inv = engine.makeBuiltinInvoiceTemplate(ExcelJS);
-        var bok = engine.makeBuiltinBookingTemplate(ExcelJS);
-        jobs.push(inv.xlsx.writeBuffer().then(function (buf) {
-          return db.put('templates', {
-            id: 'tpl_builtin_invoice', name: '内置·通用商业发票模板', kind: 'invoice', carrier: '通用',
-            status: 'active', builtin: true, fileBuf: buf,
-            mapping: { required: engine.REQUIRED_FIELDS.invoice }
-          });
-        }));
-        jobs.push(bok.xlsx.writeBuffer().then(function (buf) {
-          return db.put('templates', {
-            id: 'tpl_builtin_booking', name: '内置·通用订舱单模板(BOOKING FORM)', kind: 'booking', carrier: '通用',
-            status: 'active', builtin: true, fileBuf: buf,
-            mapping: { required: engine.REQUIRED_FIELDS.booking }
-          });
-        }));
-        // 真实业务模板（tests/build_real_templates.js 生成，js/real_templates.js 提供 base64）
-        var realTpls = (typeof window !== 'undefined' && window.TD && window.TD.realTemplates) ? window.TD.realTemplates : [];
-        realTpls.forEach(function (rt) {
-          var bin = rt.fileBufB64 || '';
-          var binary = (typeof atob !== 'undefined') ? atob(bin) : Buffer.from(bin, 'base64').toString('binary');
-          var ab = new ArrayBuffer(binary.length);
-          var vu = new Uint8Array(ab);
-          for (var i = 0; i < binary.length; i++) vu[i] = binary.charCodeAt(i);
-          var mapping = { required: engine.REQUIRED_FIELDS[rt.kind] || [] };
-          // 首次 seed 时扫描模板占位符并缓存，供后续 boxMode 等逻辑使用
-          var scanJob = new ExcelJS.Workbook().xlsx.load(ab).then(function (wb) {
-            mapping.scanned = engine.scanTemplate(wb);
-          }).catch(function (e) {
-            mapping.scanned = { fields: [], itemFields: [], itemsRow: -1, itemHeaderMap: {}, sheetName: '' };
-          });
-          jobs.push(scanJob.then(function () {
-            // 方案 B：预览用源文件原样（含 LOGO + 样张公司名/地址），不走 normalize
-            var pbin = rt.previewBufB64 || '';
-            var pbinary = (typeof atob !== 'undefined') ? atob(pbin) : Buffer.from(pbin, 'base64').toString('binary');
-            var pab = new ArrayBuffer(pbinary.length);
-            var pvu = new Uint8Array(pab);
-            for (var pi = 0; pi < pbinary.length; pi++) pvu[pi] = pbinary.charCodeAt(pi);
-            return db.put('templates', {
-              id: rt.id, name: rt.name, kind: rt.kind, carrier: rt.carrier || '通用',
-              status: 'active', builtin: true, fileBuf: ab,
-              previewBuf: pbin ? pab : null,
-              logo: rt.logo || null,
-              mapping: mapping
-            });
-          }));
-        });
+        // v1.4.59：不再内置/内嵌任何模板。模板唯一真源改为 GitHub userdata.json（stores.templates），
+        // 启动时 pullShared 对 templates 做全量同步（清掉历史内置/嵌入/老浏览器缓存的残留模板）。
         jobs.push(declareJob);
         return Promise.all(jobs).then(function () {
           return db.put('config', { key: 'seedVer', value: SEED_VER }).then(function () { return { seeded: true }; });
