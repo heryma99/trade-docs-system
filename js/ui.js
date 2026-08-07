@@ -1595,6 +1595,14 @@
       '<button class="btn" id="sync-pull">⬇️ 从团队库拉取</button>' +
       '</div>' +
       '<p class="hint" id="sync-status"></p></div>' +
+      '<div class="card"><h3>📂 模板管理（单一真源：团队库）</h3>' +
+      '<p class="hint">模板不再内置/内嵌，全部来自 GitHub 团队库。下述按钮用于「始终展示最新」：重新同步会清空本地模板缓存、以团队库为准重建；批量导入文件夹可把本地文件夹整体上传覆盖团队库（同名文件更新、删掉的文件会从团队库移除）。</p>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">' +
+      '<button class="btn ok" id="tpl-resync">🔄 清空本地缓存并重新同步</button>' +
+      '<button class="btn" id="tpl-import-folder">📁 批量导入文件夹并上传团队库</button>' +
+      '<input type="file" id="tpl-folder-input" webkitdirectory directory multiple style="display:none">' +
+      '</div>' +
+      '<p class="hint" id="tpl-mgmt-status"></p></div>' +
       '<div class="card"><h3>⚠️ 危险操作</h3>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
       '<button class="btn warn" id="st-scan-tpl">🛠 扫描并列出损坏的模板</button>' +
@@ -1696,6 +1704,32 @@
       setSyncStatus(r.ok ? '✅ 已拉取 ' + r.merged + ' 条到本地' : '❌ ' + r.error);
       toast(r.ok ? '✅ 拉取成功 ' + r.merged + ' 条' : '❌ ' + r.error, r.ok ? 'ok' : 'err');
       if (r.ok) render();
+    };
+    // ---------- 模板管理：重新同步 + 批量导入文件夹 ----------
+    document.getElementById('tpl-resync').onclick = async function () {
+      var el = document.getElementById('tpl-mgmt-status');
+      el.textContent = '正在清空本地模板缓存并从团队库重新同步…';
+      var r = await pullShared();
+      if (r.ok) { el.textContent = '✅ 已以团队库为准重建本地模板（' + r.merged + ' 条）'; toast('✅ 重新同步成功，' + r.merged + ' 个模板', 'ok'); }
+      else { el.textContent = '❌ ' + r.error; toast('❌ 同步失败: ' + r.error, 'err'); }
+      render();
+    };
+    document.getElementById('tpl-import-folder').onclick = function () {
+      document.getElementById('tpl-folder-input').click();
+    };
+    document.getElementById('tpl-folder-input').onchange = async function (ev) {
+      var files = ev.target.files;
+      if (!files || !files.length) return;
+      var el = document.getElementById('tpl-mgmt-status');
+      var c = await loadSyncCfg();
+      if (!c.token) { el.textContent = '⚠️ 请先在上方「上传 Token」框填入细粒度 PAT 再批量导入'; toast('请先填写上传 Token', 'err'); return; }
+      el.textContent = '正在读取 ' + files.length + ' 个文件并上传团队库…';
+      try {
+        var r = await _replaceCloudTemplatesByFolder(c.token, files);
+        if (r.ok) { el.textContent = '✅ 已用文件夹 ' + r.count + ' 个模板覆盖团队库并重新同步'; toast('✅ 批量导入成功，' + r.count + ' 个模板已上传', 'ok'); }
+        else { el.textContent = '❌ ' + r.error; toast('❌ 导入失败: ' + r.error, 'err'); }
+      } catch (e) { el.textContent = '❌ ' + e.message; toast('❌ 导入失败: ' + e.message, 'err'); }
+      render();
     };
   };
 
@@ -1963,6 +1997,15 @@
       if (!list) continue;
       // 远端剔除 seed.js 内置的占位数据（isSeed:true），避免历史误混入团队库
       list = list.filter(function (x) { return !x || !x.isSeed; });
+      if (s === 'templates') {
+        // v1.4.59：模板以云端为唯一真源，全量替换本地（清掉历史内置/嵌入/老浏览器缓存残留的旧模板）。
+        // 直接 db.clear + bulkPut 云端列表，不再三方合并（否则本地独有的老模板会残留）。
+        var tmpls = _postDeserializeFromSync({ stores: { templates: list } }).stores.templates;
+        await db.clear('templates');
+        await db.bulkPut('templates', tmpls);
+        merged += tmpls.length;
+        continue;
+      }
       var local = await db.all(s);
       // 本地残留的未编辑占位也剔除，避免下次 push 把 DEMO 再次推上去
       local = local.filter(function (x) { return !x || !x.isSeed; });
@@ -1973,6 +2016,50 @@
     }
     await saveSyncBase({ stores: r.stores }); // 服务端快照作为下次合并基准
     return { ok: true, merged: merged, conflicts: conflicts };
+  }
+  // v1.4.59：批量导入文件夹 → 以文件夹内容整体覆盖团队库 templates（同名更新、删掉的移除），再重新同步本地。
+  async function _replaceCloudTemplatesByFolder(token, fileList) {
+    // 1. 读当前云端 userdata.json（带 sha）
+    var head = await fetch(SYNC_API + '?ref=' + SYNC_BRANCH, { headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' } });
+    if (!head.ok) return { ok: false, error: '读取云端失败 HTTP ' + head.status };
+    var hj = await head.json();
+    var sha = hj.sha;
+    var remote = _postDeserializeFromSync(JSON.parse(b64decodeUnicode(hj.content)));
+    var remoteTpls = (remote.stores && remote.stores.templates) || [];
+    var byName = {};
+    remoteTpls.forEach(function (t) { if (t && t.name) byName[t.name] = t; });
+    // 2. 读本地选中的 xlsx
+    var xlsx = Array.prototype.slice.call(fileList).filter(function (f) { return /\.xlsx?$/i.test(f.name) && f.name.indexOf('~$') !== 0; });
+    if (!xlsx.length) return { ok: false, error: '未选中任何 xlsx 文件' };
+    var newTpls = [];
+    for (var i = 0; i < xlsx.length; i++) {
+      var name = xlsx[i].name.replace(/\.xlsx?$/i, '');
+      var carrier = name.indexOf('-') >= 0 ? name.split('-')[0] : '通用';
+      var kind = /装箱/.test(name) ? 'packing' : (/申报|买单/.test(name) ? 'declare' : 'invoice');
+      var existing = byName[name];
+      var id = existing ? existing.id : ('tpl_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8));
+      var buf = await xlsx[i].arrayBuffer();
+      newTpls.push({ id: id, name: name, kind: kind, carrier: carrier, status: 'active', isSeed: false, updatedAt: Date.now(), fileBuf: buf });
+    }
+    // 3. 序列化并 PUT 覆盖
+    remote.stores.templates = newTpls;
+    remote.updatedAt = Date.now();
+    var payload = _preSerializeForSync(remote);
+    var json = JSON.stringify(payload);
+    if (json.length > 900 * 1024) return { ok: false, error: '数据超过 900KB（GitHub 接口上限 1MB），请减少模板数量' };
+    var content = b64encodeUnicode(json);
+    var res = await fetch(SYNC_API, {
+      method: 'PUT',
+      headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'replace templates from local folder', content: content, branch: SYNC_BRANCH, sha: sha })
+    });
+    if (!res.ok) { var t = await res.text(); return { ok: false, error: '上传失败 HTTP ' + res.status + ' ' + t.slice(0, 200) }; }
+    // 4. 重新同步本地（全量替换）
+    var arr = _postDeserializeFromSync({ stores: { templates: newTpls } }).stores.templates;
+    await db.clear('templates');
+    await db.bulkPut('templates', arr);
+    await saveSyncBase({ stores: { templates: newTpls } });
+    return { ok: true, count: newTpls.length };
   }
   // 上传：用用户本地保存的细粒度 PAT。先拉当前服务端，与本地做三方合并（多人协同不互覆盖），
   // 再以服务端最新 sha 提交；若期间被他人并发提交（409/422）则重试最多 5 次。
