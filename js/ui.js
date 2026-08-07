@@ -2177,6 +2177,17 @@
       await hydrateFromEmbedded();
       await _migrateBase64Templates();  // v1.4.42: 把残留 base64-string 模板还原为 ArrayBuffer
       await seed.run(db, engine, ExcelJS);
+      // v1.4.59：一次性强制全量同步模板（清掉历史内置/嵌入/老浏览器缓存残留的旧模板），以团队库为准重建。
+      // 仅首次升级到 v1.4.59 执行；之后由「启动自动拉取」或手动「重新同步」保持最新。
+      try {
+        var tplClean = await db.get('config', 'tplCleanV');
+        if (!tplClean || !tplClean.value || tplClean.value < 1459) {
+          if (!_initSkipPull) {
+            var prClean = await pullShared();
+            if (prClean && prClean.ok) await db.put('config', { key: 'tplCleanV', value: 1459 });
+          }
+        }
+      } catch (e) { /* 离线则跳过，等用户手动「清空本地缓存并重新同步」 */ }
       // v1.4.44 自愈：本地无发票模板时（清空数据/换浏览器/IDB 异常），自动从团队库拉取一次，避免「发票模板怎么又没了」反复出现。
       // 仅在 kind==='invoice' 数量为 0 时触发，不破坏已有数据；离线/网络异常静默失败。
       // v1.4.49：pullShared 内 fetch 已加 8s AbortSignal.timeout，最坏 8s 后自动跳过
