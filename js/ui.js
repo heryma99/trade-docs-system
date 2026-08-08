@@ -108,6 +108,15 @@
     }
   }
   function val(id) { var e = document.getElementById(id); return e ? e.value.trim() : ''; }
+  /** v1.4.60：显式列出「已录入但本模板无对应栏位」的字段，杜绝静默丢弃。 */
+  function uncarriedHtml(fillRes) {
+    var list = (fillRes && fillRes.uncarried) || [];
+    if (!list.length) return '';
+    return '<div class="vres warn"><b>🚫 本模板装不下以下 ' + list.length + ' 个已录入字段（模板没有对应栏位，未写入）：</b>' +
+      '<table class="grid" style="margin-top:6px"><tr><th style="width:36%">字段</th><th>你录入的值</th></tr>' +
+      list.map(function (u) { return '<tr><td>' + esc(u.label) + '</td><td class="mono">' + esc(u.value) + '</td></tr>'; }).join('') +
+      '</table><div style="margin-top:6px">如需体现，请改用带该栏位的模板，或在模板对应位置加上标签文字后重新上传。</div></div>';
+  }
 
   /** workbook首表 → 1:1 HTML预览表（还原列宽/行高/合并/字体/底色/边框），实现见 js/preview.js */
   function wbToHtml(wb) { return TD.preview.wbToHtml(wb); }
@@ -321,16 +330,18 @@
       '<label style="margin-top:8px">联系人</label><input id="pt-contact">' +
       '<label style="margin-top:8px">邮箱</label><input id="pt-email">' +
       '<label style="margin-top:8px">国家代码</label><input id="pt-country" placeholder="如 US / CN">' +
-      '<label style="margin-top:8px">税号/EORI</label><input id="pt-taxno">' +
+      '<label style="margin-top:8px">税号 TAX ID</label><input id="pt-taxno">' +
+      '<label style="margin-top:8px">VAT 号</label><input id="pt-vatno" placeholder="欧盟 VAT，留空则用税号">' +
+      '<label style="margin-top:8px">EORI</label><input id="pt-eori" placeholder="留空则用税号">' +
       '<div style="margin-top:12px;display:flex;gap:8px"><button class="btn" id="pt-save">保存</button><button class="btn ghost" id="pt-reset">清空</button></div></div></div>';
   };
   BINDERS.parties = function () {
-    function resetForm() { ['pt-id', 'pt-name', 'pt-whcode', 'pt-company', 'pt-address', 'pt-city', 'pt-state', 'pt-zip', 'pt-tel', 'pt-contact', 'pt-email', 'pt-country', 'pt-taxno'].forEach(function (i) { document.getElementById(i).value = ''; }); document.getElementById('pt-form-title').textContent = '新增'; }
+    function resetForm() { ['pt-id', 'pt-name', 'pt-whcode', 'pt-company', 'pt-address', 'pt-city', 'pt-state', 'pt-zip', 'pt-tel', 'pt-contact', 'pt-email', 'pt-country', 'pt-taxno', 'pt-vatno', 'pt-eori'].forEach(function (i) { var el = document.getElementById(i); if (el) el.value = ''; }); document.getElementById('pt-form-title').textContent = '新增'; }
     document.getElementById('pt-reset').onclick = resetForm;
     document.getElementById('pt-save').onclick = async function () {
       var name = val('pt-name');
       if (!name) { toast('名称必填', 'err'); return; }
-      var obj = { type: val('pt-type'), name: name, company: val('pt-company'), warehouseCode: val('pt-whcode'), address: val('pt-address'), city: val('pt-city'), state: val('pt-state'), zip: val('pt-zip'), tel: val('pt-tel'), contact: val('pt-contact'), email: val('pt-email'), country: val('pt-country'), taxNo: val('pt-taxno') };
+      var obj = { type: val('pt-type'), name: name, company: val('pt-company'), warehouseCode: val('pt-whcode'), address: val('pt-address'), city: val('pt-city'), state: val('pt-state'), zip: val('pt-zip'), tel: val('pt-tel'), contact: val('pt-contact'), email: val('pt-email'), country: val('pt-country'), taxNo: val('pt-taxno'), vatNo: val('pt-vatno'), eori: val('pt-eori') };
       var id = val('pt-id');
       if (id) { var old = await db.get('parties', id); obj = Object.assign(old, obj); }
       // 用户接管 seed 占位数据：保存时自动剥离 isSeed 标记，避免下次 push 把 DEMO 推上团队库
@@ -355,6 +366,8 @@
         document.getElementById('pt-email').value = p.email || '';
         document.getElementById('pt-country').value = p.country || '';
         document.getElementById('pt-taxno').value = p.taxNo || '';
+        var _vat = document.getElementById('pt-vatno'); if (_vat) _vat.value = p.vatNo || '';
+        var _eori = document.getElementById('pt-eori'); if (_eori) _eori.value = p.eori || '';
         document.getElementById('pt-form-title').textContent = '编辑: ' + p.name;
       };
     });
@@ -1202,6 +1215,7 @@
       var confirmed = w.doc && w.doc.status === 'confirmed';
       body.innerHTML = '<div class="card"><h3>发票预览（模板: ' + esc(tpl.name) + '）</h3>' +
         (fillRes.unresolved.length ? '<div class="vres warn">⚠️ 以下占位符无数据（已置空）: <span class="mono">' + fillRes.unresolved.filter(function (v, i, a) { return a.indexOf(v) === i; }).map(esc).join('　') + '</span></div>' : '') +
+        uncarriedHtml(fillRes) +
         '<div style="overflow:auto;border:1px solid #e3e8f0;border-radius:8px;padding:8px;background:#fafbfd">' + wbToHtml(wb) + '</div>' +
         '<div style="margin-top:14px;display:flex;gap:8px;align-items:center">' +
         '<button class="btn ghost" id="wz-back4">← 上一步</button>' +
@@ -1478,6 +1492,7 @@
       var confirmed = w.doc && w.doc.status === 'confirmed';
       body.innerHTML = '<div class="card"><h3>订舱单预览（模板: ' + esc(tpl.name) + '）</h3>' +
         (fillRes.unresolved.length ? '<div class="vres warn">⚠️ 空占位符: <span class="mono">' + fillRes.unresolved.filter(function (v, i, a) { return a.indexOf(v) === i; }).map(esc).join('　') + '</span></div>' : '') +
+        uncarriedHtml(fillRes) +
         '<div style="overflow:auto;border:1px solid #e3e8f0;border-radius:8px;padding:8px;background:#fafbfd">' + wbToHtml(wb) + '</div>' +
         '<div style="margin-top:14px;display:flex;gap:8px;align-items:center">' +
         '<button class="btn ghost" id="bw-back4">← 上一步</button>' +
