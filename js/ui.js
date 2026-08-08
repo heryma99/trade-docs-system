@@ -313,7 +313,7 @@
       '<label class="req" style="margin-top:8px">名称（英文）</label><input id="pt-name">' +
       '<label style="margin-top:8px">仓库代码（如 LAX9 / FTW1 / GYR3，私人地址留空）</label><input id="pt-whcode" placeholder="海外仓 FBA 代码">' +
       '<label style="margin-top:8px">公司名（英文）</label><input id="pt-company" placeholder="如 JW PEI AP LIMITED">' +
-      '<label style="margin-top:8px">地址（英文，可多行）</label><textarea id="pt-address" rows="2"></textarea>' +
+      '<label style="margin-top:8px">地址（英文，可多行）</label><textarea id="pt-address" rows="2" onblur="window.__tdAddrBlur&&window.__tdAddrBlur(this)"></textarea>' +
       '<label style="margin-top:8px">城市</label><input id="pt-city">' +
       '<label style="margin-top:8px">省份/州</label><input id="pt-state">' +
       '<label style="margin-top:8px">邮编</label><input id="pt-zip">' +
@@ -325,6 +325,28 @@
       '<label style="margin-top:8px">VAT 号</label><input id="pt-vatno" placeholder="欧盟 VAT，留空则用税号">' +
       '<label style="margin-top:8px">EORI</label><input id="pt-eori" placeholder="留空则用税号">' +
       '<div style="margin-top:12px;display:flex;gap:8px"><button class="btn" id="pt-save">保存</button><button class="btn ghost" id="pt-reset">清空</button></div></div></div>';
+  };
+  // v1.4.62：地址框失焦时保守解析国家/邮编/城市并回填到对应输入框（仅填空字段，可见可改，不覆盖已填值）
+  window.__tdAddrBlur = function (ta) {
+    var addr = (ta && ta.value) || '';
+    if (!addr.trim()) return;
+    function g(id) { return document.getElementById(id); }
+    var s = addr.toUpperCase();
+    var cm = [['HONG KONG', 'HK'], ['HONGKONG', 'HK'], ['HK', 'HK'], ['MACAU', 'MO'], ['CHINA', 'CN'], ['CN', 'CN'],
+      ['U.S.A', 'US'], ['U.S.', 'US'], ['USA', 'US'], ['US', 'US'], ['UNITED STATES', 'US'], ['AMERICA', 'US'],
+      ['U.K', 'GB'], ['UK', 'GB'], ['UNITED KINGDOM', 'GB'], ['ENGLAND', 'GB'], ['SCOTLAND', 'GB'],
+      ['JAPAN', 'JP'], ['GERMANY', 'DE'], ['DEUTSCHLAND', 'DE'], ['FRANCE', 'FR'], ['FR', 'FR'], ['AUSTRALIA', 'AU'],
+      ['CANADA', 'CA'], ['SINGAPORE', 'SG'], ['MALAYSIA', 'MY'], ['KOREA', 'KR'], ['REPUBLIC OF KOREA', 'KR'],
+      ['TAIWAN', 'TW'], ['THAILAND', 'TH'], ['VIETNAM', 'VN'], ['INDIA', 'IN'], ['MEXICO', 'MX'], ['BRAZIL', 'BR']];
+    var country = ''; cm.forEach(function (c) { if (s.indexOf(c[0]) >= 0) country = c[1]; });
+    var zm = addr.match(/\b(\d{5,6}|\d{5}-\d{4})\b/); var zip = zm ? zm[1] : '';
+    var cityMap = ['HONG KONG', 'HONGKONG', 'SHENZHEN', 'GUANGZHOU', 'SHANGHAI', 'YIWU', 'NINGBO', 'TOKYO', 'OSAKA',
+      'LOS ANGELES', 'NEW YORK', 'NEW JERSEY', 'NEWARK', 'CHICAGO', 'DALLAS', 'HOUSTON', 'MIAMI', 'SEATTLE', 'ATLANTA',
+      'LONDON', 'MANCHESTER', 'SYDNEY', 'MELBOURNE', 'SINGAPORE', 'KUALA LUMPUR', 'BUSAN', 'SEOUL', 'TAIPEI', 'BANGKOK', 'HANOI'];
+    var city = ''; cityMap.forEach(function (c) { if (s.indexOf(c) >= 0) city = c.replace('HONGKONG', 'HONG KONG'); });
+    if (g('pt-country') && !g('pt-country').value && country) g('pt-country').value = country;
+    if (g('pt-zip') && !g('pt-zip').value && zip) g('pt-zip').value = zip;
+    if (g('pt-city') && !g('pt-city').value && city) g('pt-city').value = city;
   };
   BINDERS.parties = function () {
     function resetForm() { ['pt-id', 'pt-name', 'pt-whcode', 'pt-company', 'pt-address', 'pt-city', 'pt-state', 'pt-zip', 'pt-tel', 'pt-contact', 'pt-email', 'pt-country', 'pt-taxno', 'pt-vatno', 'pt-eori'].forEach(function (i) { var el = document.getElementById(i); if (el) el.value = ''; }); document.getElementById('pt-form-title').textContent = '新增'; }
@@ -1268,9 +1290,9 @@
     //          纯标签驱动的海运类模板（明细列是「长(cm)/宽(cm)/单箱重量」文字而非 {{items.lengthCm}}）也能触发 boxMode
     // v1.4.50 修：① 主动现场 scan 一次（不依赖 tpl 缓存，因为用户早期上传的模板 scan 当时是旧版本，没识别 lengthCm/widthCm/heightCm，tpl 缓存里没这些字段）② 兜底 if 条件写反问题（之前是 headerHasDims=true 才进重扫，但旧 tpl 缓存里就是空的 headerHasDims=false → 永远不重扫）
     var itemHeaderMap = (tpl && tpl.mapping && tpl.mapping.scanned && tpl.mapping.scanned.itemHeaderMap) || {};
-    var headerHasDims = Object.keys(itemHeaderMap).some(function (c) {
+    var headerHasBoxCols = Object.keys(itemHeaderMap).some(function (c) {
       var f = itemHeaderMap[c];
-      return /^(lengthCm|widthCm|heightCm|singleGw)$/.test(f);
+      return /^(boxNo|lengthCm|widthCm|heightCm|singleGw)$/.test(f);
     });
     // v1.4.50 主动现场 scan 一次（无论 tpl 缓存是否有 dims），避免早期上传模板因旧 scan 引擎没识别长宽高而永远不触发 boxMode
     if (tpl && !itemHeaderMap.__scanned && w._wb) {
@@ -1281,12 +1303,14 @@
           itemHeaderMap.__scanned = 1;
         }
       } catch (e) {}
-      headerHasDims = Object.keys(itemHeaderMap).some(function (c) {
+      headerHasBoxCols = Object.keys(itemHeaderMap).some(function (c) {
         var f = itemHeaderMap[c];
-        return /^(lengthCm|widthCm|heightCm|singleGw)$/.test(f);
+        return /^(boxNo|lengthCm|widthCm|heightCm|singleGw)$/.test(f);
       });
     }
-    var boxMode = !!(packing && (itemFields.some(function (f) { return /(boxNo|length|width|height)/.test(f); }) || headerHasDims));
+    // v1.4.62：只要关联了「含箱号的装箱清单」且模板明细含箱号类列（货箱编号/箱号/CARTON NO），就强制箱号模式，确保箱号一定显示
+    var packingHasBoxes = !!(packing && (packing.boxes || []).length);
+    var boxMode = !!(packing && (itemFields.some(function (f) { return /(boxNo|length|width|height)/.test(f); }) || (headerHasBoxCols && packingHasBoxes)));
     var data = engine.buildDocData({
       kind: kind, orders: orders, packing: packing, meta: w.meta, boxMode: boxMode,
       shipper: shipper || {}, consignee: consignee || {}, notify: notify, declareMap: declareMap
