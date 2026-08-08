@@ -431,7 +431,15 @@
       dangerous: meta.dangerous || 'NON-DANGEROUS / GENERAL CARGO',
       customsType: meta.customsType || '',
       agent: meta.agent || '',
-      goodsSummary: meta.goodsSummary || (items.length ? items.map(function (i) { return i.nameEn || i.nameCn; }).filter(function (v, i, a) { return v && a.indexOf(v) === i; }).slice(0, 3).join(', ') : ''),
+      // v1.4.61：品名汇总优先用明细 items；boxMode 下明细来自箱单（declareMap 缺品名时为空），
+      //          回退到订单 items 的品名，确保「模板里有的字段都填进去」。
+      goodsSummary: meta.goodsSummary || (function () {
+        var _names = [];
+        function _add(n) { if (n && _names.indexOf(n) < 0) _names.push(n); }
+        (items || []).forEach(function (i) { _add(i.nameEn || i.nameCn); });
+        if (!_names.length) { (orders || []).forEach(function (o) { (o.items || []).forEach(function (it) { _add(it.nameEn || it.nameCn); }); }); }
+        return _names.slice(0, 3).join(', ');
+      })(),
       items: items,
       totals: totals,
       amountInWords: amountInWords(totals.amount, currency)
