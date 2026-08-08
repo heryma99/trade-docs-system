@@ -10,7 +10,7 @@
   /** 模板明细表头别名词典：把模板里真实列名映射到数据字段 */
   var HEADER_ALIASES = {
     no:      ['NO.', 'NO', '序号', '#', '项次'],
-    boxNo:   ['CTNR NO', 'CTNR NO.', 'CTNRNO', 'CTNR', 'CARTON NO', 'CARTON#', '箱号', 'CARTON', 'CTN#'],
+    boxNo:   ['CTNR NO', 'CTNR NO.', 'CTNRNO', 'CTNR', 'CARTON NO', 'CARTON#', '箱号', 'CARTON', 'CTN#', '货箱编号', 'FBA箱号'],
     boxCount:['CTNS', 'CARTONS', '箱数', '件数', 'TYPES OF PKG', 'TYPESOFPKG', 'NO. AND TYPES OF PKG'],
     sku:     ['SKU', '款号', '商品编码', '商家编码', '货号', '规格编码', 'MODEL NO', 'MODELNO'],
     model:   ['MODEL', '型号', 'MODEL NO.', 'MODEL NO'],
@@ -278,6 +278,13 @@
       });
       // v1.4.60：订单顺序 → 箱号数值顺序 → 清单原始行序（A的1..5箱全列完再列B的1..8箱）
       items.sort(_boxRowCmp);
+      // v1.4.62：标记每箱首行（箱数仅首行显示，避免混装 N 行被误读为 N 箱）
+      var _seenBox = {};
+      items.forEach(function (it) {
+        var bk = String(it.orderNo || '') + '/' + String(it.boxNo || '');
+        it._firstOfBox = !_seenBox[bk];
+        _seenBox[bk] = true;
+      });
     } else {
       // 明细合并（跨订单同SKU同价合并）
       var agg = {};
@@ -398,9 +405,37 @@
 
     var currency = meta.currency || 'USD';
     // 给收发人补全常用字段默认值，避免模板占位符 unresolved
+    // v1.4.62：地址保守解析——仅当结构化字段为空、地址有值时，抽取高置信度国家/邮编/城市回填。
+    // 省份/州等自由文本易误判，一律留空不猜（避免海关单据编造错误数据）。
+    function parseAddress(addr) {
+      var out = { city: '', state: '', zip: '', country: '' };
+      if (!addr || typeof addr !== 'string') return out;
+      var s = addr.toUpperCase();
+      var cm = [['HONG KONG', 'HK'], ['HONGKONG', 'HK'], ['HK', 'HK'], ['MACAU', 'MO'], ['CHINA', 'CN'], ['CN', 'CN'],
+        ['U.S.A', 'US'], ['U.S.', 'US'], ['USA', 'US'], ['US', 'US'], ['UNITED STATES', 'US'], ['AMERICA', 'US'],
+        ['U.K', 'GB'], ['UK', 'GB'], ['UNITED KINGDOM', 'GB'], ['ENGLAND', 'GB'], ['SCOTLAND', 'GB'],
+        ['JAPAN', 'JP'], ['GERMANY', 'DE'], ['DEUTSCHLAND', 'DE'], ['FRANCE', 'FR'], ['FR', 'FR'], ['AUSTRALIA', 'AU'],
+        ['CANADA', 'CA'], ['SINGAPORE', 'SG'], ['MALAYSIA', 'MY'], ['KOREA', 'KR'], ['REPUBLIC OF KOREA', 'KR'],
+        ['TAIWAN', 'TW'], ['THAILAND', 'TH'], ['VIETNAM', 'VN'], ['INDIA', 'IN'], ['MEXICO', 'MX'], ['BRAZIL', 'BR']];
+      cm.forEach(function (c) { if (s.indexOf(c[0]) >= 0) out.country = c[1]; });
+      var zm = addr.match(/\b(\d{5,6}|\d{5}-\d{4})\b/);
+      if (zm) out.zip = zm[1];
+      var cityMap = ['HONG KONG', 'HONGKONG', 'SHENZHEN', 'GUANGZHOU', 'SHANGHAI', 'YIWU', 'NINGBO', 'TOKYO', 'OSAKA',
+        'LOS ANGELES', 'NEW YORK', 'NEW JERSEY', 'NEWARK', 'CHICAGO', 'DALLAS', 'HOUSTON', 'MIAMI', 'SEATTLE', 'ATLANTA',
+        'LONDON', 'MANCHESTER', 'SYDNEY', 'MELBOURNE', 'SINGAPORE', 'KUALA LUMPUR', 'BUSAN', 'SEOUL', 'TAIPEI', 'BANGKOK', 'HANOI'];
+      cityMap.forEach(function (c) { if (s.indexOf(c) >= 0) out.city = c.replace('HONGKONG', 'HONG KONG'); });
+      return out;
+    }
     function fillPartyDefaults(p) {
       p = p || {};
       ['name', 'company', 'warehouseCode', 'address', 'city', 'state', 'zip', 'country', 'tel', 'email', 'contact', 'taxNo', 'vatNo', 'eori'].forEach(function (k) { if (p[k] === undefined) p[k] = ''; });
+      // v1.4.62：地址保守解析回填（仅填空字段，绝不覆盖用户已填值）
+      if (p.address && (!p.city || !p.country || !p.zip)) {
+        var pa = parseAddress(p.address);
+        if (!p.country && pa.country) p.country = pa.country;
+        if (!p.zip && pa.zip) p.zip = pa.zip;
+        if (!p.city && pa.city) p.city = pa.city;
+      }
       // v1.4.60：VAT / EORI 拆成独立字段后，老档案只填了「税号/EORI」一个框 → 兼容回退，避免原本能填的格变空
       if (!p.vatNo && p.taxNo) p.vatNo = p.taxNo;
       if (!p.eori && p.taxNo) p.eori = p.taxNo;
@@ -1183,6 +1218,7 @@
           var field = itemHeaderMap[cell.col];
           if (field) {
             var v = getPath(ctx, 'items.' + field);
+            if (field === 'boxCount' && itR._firstOfBox === false) v = ''; // v1.4.62 箱数仅首行显示，避免混装被误读为总箱数
             if (v === undefined || v === null || v === '') v = getPath(ctx, field);
             if (v !== undefined && v !== null && v !== '') {
               // 如果占位符已经写了有效值（含数字），不覆盖；否则按表头写入
@@ -1212,6 +1248,7 @@
             if (cv2 !== undefined && cv2 !== null && cv2 !== '') return; // 已有内容（含数字）跳过，避免数字被 cellString 误判为空而覆盖
             var field2 = itemHeaderMap[col];
             if (!field2) return;
+            if (field2 === 'boxCount' && itR2._firstOfBox === false) return; // v1.4.62 箱数仅首行显示，避免混装被误读为总箱数
             var v2 = getPath(ctx2, 'items.' + field2);
             if (v2 === undefined || v2 === null || v2 === '') v2 = getPath(ctx2, field2);
             if (v2 !== undefined && v2 !== null && v2 !== '') {
