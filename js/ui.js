@@ -108,15 +108,6 @@
     }
   }
   function val(id) { var e = document.getElementById(id); return e ? e.value.trim() : ''; }
-  /** v1.4.60：显式列出「已录入但本模板无对应栏位」的字段，杜绝静默丢弃。 */
-  function uncarriedHtml(fillRes) {
-    var list = (fillRes && fillRes.uncarried) || [];
-    if (!list.length) return '';
-    return '<div class="vres warn"><b>🚫 本模板装不下以下 ' + list.length + ' 个已录入字段（模板没有对应栏位，未写入）：</b>' +
-      '<table class="grid" style="margin-top:6px"><tr><th style="width:36%">字段</th><th>你录入的值</th></tr>' +
-      list.map(function (u) { return '<tr><td>' + esc(u.label) + '</td><td class="mono">' + esc(u.value) + '</td></tr>'; }).join('') +
-      '</table><div style="margin-top:6px">如需体现，请改用带该栏位的模板，或在模板对应位置加上标签文字后重新上传。</div></div>';
-  }
 
   /** workbook首表 → 1:1 HTML预览表（还原列宽/行高/合并/字体/底色/边框），实现见 js/preview.js */
   function wbToHtml(wb) { return TD.preview.wbToHtml(wb); }
@@ -1215,7 +1206,6 @@
       var confirmed = w.doc && w.doc.status === 'confirmed';
       body.innerHTML = '<div class="card"><h3>发票预览（模板: ' + esc(tpl.name) + '）</h3>' +
         (fillRes.unresolved.length ? '<div class="vres warn">⚠️ 以下占位符无数据（已置空）: <span class="mono">' + fillRes.unresolved.filter(function (v, i, a) { return a.indexOf(v) === i; }).map(esc).join('　') + '</span></div>' : '') +
-        uncarriedHtml(fillRes) +
         '<div style="overflow:auto;border:1px solid #e3e8f0;border-radius:8px;padding:8px;background:#fafbfd">' + wbToHtml(wb) + '</div>' +
         '<div style="margin-top:14px;display:flex;gap:8px;align-items:center">' +
         '<button class="btn ghost" id="wz-back4">← 上一步</button>' +
@@ -1492,7 +1482,6 @@
       var confirmed = w.doc && w.doc.status === 'confirmed';
       body.innerHTML = '<div class="card"><h3>订舱单预览（模板: ' + esc(tpl.name) + '）</h3>' +
         (fillRes.unresolved.length ? '<div class="vres warn">⚠️ 空占位符: <span class="mono">' + fillRes.unresolved.filter(function (v, i, a) { return a.indexOf(v) === i; }).map(esc).join('　') + '</span></div>' : '') +
-        uncarriedHtml(fillRes) +
         '<div style="overflow:auto;border:1px solid #e3e8f0;border-radius:8px;padding:8px;background:#fafbfd">' + wbToHtml(wb) + '</div>' +
         '<div style="margin-top:14px;display:flex;gap:8px;align-items:center">' +
         '<button class="btn ghost" id="bw-back4">← 上一步</button>' +
