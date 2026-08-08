@@ -191,6 +191,42 @@
       };
     }
 
+    // ===== v1.4.60 明细排序：多订单合并时严格按「订单顺序 → 箱号数值顺序 → 装箱清单原始行序」=====
+    // 业务规则：订单A(1..5箱) + 订单B(1..8箱) 合并成一张发票时，必须先完整列出 A 的 1-5 箱，
+    // 再列 B 的 1-8 箱。旧实现用 boxNo 字符串比较且不分订单，会出现 A1,B1,A2,B2... 或 1,10,11,2 的乱序。
+    var _ordSeq = {}, _ordN = 0;
+    orderList.forEach(function (o) {
+      var k = String(o == null ? '' : o).trim();
+      if (_ordSeq[k] === undefined) _ordSeq[k] = _ordN++;
+    });
+    // 装箱清单里出现但不在订单列表中的订单号：按其在清单中首次出现顺序，排在已知订单之后
+    (packing && packing.boxes || []).forEach(function (b) {
+      var k = String(b.orderNo == null ? '' : b.orderNo).trim();
+      if (_ordSeq[k] === undefined) _ordSeq[k] = 1000 + (_ordN++);
+    });
+    function _ordRank(orderNo) {
+      var k = String(orderNo == null ? '' : orderNo).trim();
+      var v = _ordSeq[k];
+      return (v === undefined) ? 99999 : v;
+    }
+    /** 箱号数值化：'1'→1, 'B2'→2, '箱-10'→10, 'A-1'→1；无数字返回 NaN */
+    function _boxNum(v) {
+      var m = String(v == null ? '' : v).match(/(\d+(?:\.\d+)?)/);
+      return m ? parseFloat(m[1]) : NaN;
+    }
+    /** 装箱行比较器：订单序 → 箱号数值 → 箱号原文 → 清单原始行序 */
+    function _boxRowCmp(a, b) {
+      var ao = _ordRank(a.orderNo), bo = _ordRank(b.orderNo);
+      if (ao !== bo) return ao - bo;
+      var an = _boxNum(a.boxNo), bn = _boxNum(b.boxNo);
+      var aNaN = isNaN(an), bNaN = isNaN(bn);
+      if (aNaN !== bNaN) return aNaN ? 1 : -1;       // 无数字箱号排最后
+      if (!aNaN && an !== bn) return an - bn;         // 数值升序：1,2,...,9,10,11
+      var as = String(a.boxNo == null ? '' : a.boxNo), bs = String(b.boxNo == null ? '' : b.boxNo);
+      if (as !== bs) return as < bs ? -1 : 1;         // 数值相同（如 A1/B1）按原文
+      return (a._ri || 0) - (b._ri || 0);             // 同订单同箱多 SKU：保持清单原始行顺序
+    }
+
     var items = [];
     if (boxMode) {
       // 箱级规格归并：装箱清单只在「每箱首行」写 重量/长/宽/高，需按 订单号/箱号 聚合到该箱全部 SKU 行，
@@ -211,7 +247,7 @@
           boxSpecMap[bk]._set = true;
         }
       });
-      items = (packing.boxes || []).map(function (b) {
+      items = (packing.boxes || []).map(function (b, _ri) {
         var sku = String(b.sku == null ? '' : b.sku).trim();
         var d = declareMap[sku] || {};
         var bk = String(b.orderNo == null ? '' : b.orderNo) + '/' + String(b.boxNo == null ? '' : b.boxNo).trim();
@@ -235,9 +271,13 @@
         // 保持 per-SKU 装箱值（首行有、其余0），供 totals 正确累加总毛重；不为单箱重量列污染
         it.nw = Number(b.nw) || 0; it.gw = Number(b.gw) || 0; it.boxNw = it.nw;
         it._weightSource = 'packing';
+        // v1.4.60：保留排序键（订单号 + 装箱清单原始行序）
+        it.orderNo = String(b.orderNo == null ? '' : b.orderNo).trim();
+        it._ri = _ri;
         return it;
       });
-      items.sort(function (a, b) { return (a.boxNo < b.boxNo ? -1 : a.boxNo > b.boxNo ? 1 : (a.sku < b.sku ? -1 : 1)); });
+      // v1.4.60：订单顺序 → 箱号数值顺序 → 清单原始行序（A的1..5箱全列完再列B的1..8箱）
+      items.sort(_boxRowCmp);
     } else {
       // 明细合并（跨订单同SKU同价合并）
       var agg = {};
@@ -256,7 +296,30 @@
         });
       });
       items = Object.keys(agg).map(function (k) { return agg[k]; });
-      items.sort(function (a, b) { return a.sku < b.sku ? -1 : 1; });
+      // v1.4.60：非 boxMode（按 SKU 聚合）也不再用字典序，改为「SKU 在装箱清单箱号顺序中首次出现」；
+      // 无装箱清单时退化为「订单录入顺序中首次出现」。保证多订单合并时明细顺序与装箱清单一致。
+      var _skuSeq = {}, _sn = 0;
+      if (packing && (packing.boxes || []).length) {
+        (packing.boxes || []).map(function (b, i) { return { orderNo: b.orderNo, boxNo: b.boxNo, sku: b.sku, _ri: i }; })
+          .sort(_boxRowCmp)
+          .forEach(function (b) {
+            var k = String(b.sku == null ? '' : b.sku).trim();
+            if (k && _skuSeq[k] === undefined) _skuSeq[k] = _sn++;
+          });
+      }
+      orders.forEach(function (o) {
+        (o.items || []).forEach(function (it) {
+          var k = String(it.sku == null ? '' : it.sku).trim();
+          if (k && _skuSeq[k] === undefined) _skuSeq[k] = 1000 + (_sn++);
+        });
+      });
+      items.sort(function (a, b) {
+        var ax = _skuSeq[a.sku], bx = _skuSeq[b.sku];
+        if (ax === undefined) ax = 99999;
+        if (bx === undefined) bx = 99999;
+        if (ax !== bx) return ax - bx;
+        return a.sku < b.sku ? -1 : 1;
+      });
     }
 
     // 非箱模式：从装箱清单按SKU分摊净毛重，并补充箱数/体积/箱规
@@ -337,7 +400,11 @@
     // 给收发人补全常用字段默认值，避免模板占位符 unresolved
     function fillPartyDefaults(p) {
       p = p || {};
-      ['name', 'company', 'warehouseCode', 'address', 'city', 'state', 'zip', 'country', 'tel', 'email', 'contact', 'taxNo', 'eori'].forEach(function (k) { if (p[k] === undefined) p[k] = ''; });
+      ['name', 'company', 'warehouseCode', 'address', 'city', 'state', 'zip', 'country', 'tel', 'email', 'contact', 'taxNo', 'vatNo', 'eori'].forEach(function (k) { if (p[k] === undefined) p[k] = ''; });
+      // v1.4.60：VAT / EORI 拆成独立字段后，老档案只填了「税号/EORI」一个框 → 兼容回退，避免原本能填的格变空
+      if (!p.vatNo && p.taxNo) p.vatNo = p.taxNo;
+      if (!p.eori && p.taxNo) p.eori = p.taxNo;
+      if (!p.taxNo && (p.vatNo || p.eori)) p.taxNo = p.vatNo || p.eori;
       return p;
     }
     shipper = fillPartyDefaults(shipper);
@@ -458,8 +525,14 @@
     { re: /(收货人|收货|收件人|收件|CONSIGNEE|BUYER)/i, party: 'consignee' },
     { re: /(通知人|NOTIFY)/i, party: 'notify' }
   ];
+  /** v1.4.60 排除词：这些是「商品/银行/注册/销售」类标签，绝不能被当成收发人或地址字段。
+   *  典型误伤：中运通达 G20「Products Name中文品名」曾命中 /NAME/ → consignee.name；
+   *           A18「VAT注册地址」、T20「销售地址」曾命中 /地址/ → consignee.address。 */
+  var LABEL_EXCLUDE_RE = /(品名|货名|品目|商品名|产品名|货物名称|PRODUCTS?\s*NAME|NAME\s*OF\s*(GOODS|COMMODITY|PRODUCT)|销售|注册|开户|银行|BANK|规格|材质|型号|用途|品牌|海关编码|HS\s*CODE|申报要素)/i;
+
   function mapHeaderLabel(text) {
     if (!text || /\{\{/.test(text)) return null;
+    if (LABEL_EXCLUDE_RE.test(text)) return null; // v1.4.60：商品/银行/注册类标签不进 party 通道
     var party = null;
     for (var i = 0; i < PARTY_RE.length; i++) if (PARTY_RE[i].re.test(text)) { party = PARTY_RE[i].party; break; }
     if (!party) return null;
@@ -467,7 +540,10 @@
     if (/(公司|COMPANY|企业)/i.test(text)) field = 'company';
     else if (/(邮箱|EMAIL|邮件|E-?MAIL)/i.test(text)) field = 'email';
     else if (/(电话|手机|TEL|PHONE|MOBILE)/i.test(text)) field = 'tel';
-    else if (/(税号|TAX|EORI)/i.test(text)) field = 'taxNo';
+    // v1.4.60：EORI / VAT / 税号 拆成三个独立字段（原先全归 taxNo，导致 VAT号 与 EORI 两格填同一个值、eori 成死字段）
+    else if (/EORI/i.test(text)) field = 'eori';
+    else if (/(VAT|增值税)/i.test(text)) field = 'vatNo';
+    else if (/(税号|TAX)/i.test(text)) field = 'taxNo';
     else if (/(国家|国别|COUNTRY)/i.test(text)) field = 'country';
     else if (/(邮编|ZIP|POSTAL?)/i.test(text)) field = 'zip';
     else if (/(省|州|STATE|PROVINCE)/i.test(text)) field = 'state';
@@ -487,6 +563,22 @@
   /** 通用（非收发人）字段标签 -> 数据路径。用于真实承运商模板里「运输方式 / 起运国 / 客户单号」等
    *  未被 mapHeaderLabel(只认收发人三类) 覆盖的表头字段。path='' 表示已知但本系统无对应字段(跳过)。 */
   var GENERAL_LABEL_RULES = [
+    // ---- v1.4.60 最前置：明细列标签误入表头区的排除（这些是 per-item 列，不是单据字段） ----
+    { re: /总箱单?个?产品数量|单箱数量|每箱数量|单箱产品数量/, path: '' },
+    // ---- v1.4.60 新增：原先规则表完全没有、导致用户录入被静默丢弃的单据字段 ----
+    { re: /(发票号|發票號|INVOICE\s*(NO\b|NUMBER|#))/i, path: 'invoiceNo' },
+    { re: /(发票日期|开票日期|INVOICE\s*DATE)/i, path: 'invoiceDate' },
+    { re: /(合同号|合約號|CONTRACT\s*(NO\b|NUMBER))/i, path: 'contractNo' },
+    { re: /(付款方式|支付方式|付款条款|PAYMENT\s*(TERMS?|METHOD))/i, path: 'paymentTerms' },
+    { re: /(唛头|唛号|嘜頭|SHIPPING\s*MARKS?|MARKS?\s*(&|AND)\s*(NOS?|NUMBERS?))/i, path: 'shippingMarks' },
+    { re: /(船名|航次|VESSEL|VOYAGE)/i, path: 'vessel' },
+    { re: /(ETD|开船日期?|预计离港|离港日期)/i, path: 'etd' },
+    { re: /(箱型|柜型|CONTAINER\s*TYPE)/i, path: 'containerType' },
+    { re: /(箱量|柜量|柜数|CONTAINER\s*(QTY|QUANTITY))/i, path: 'containerQty' },
+    { re: /(交货条款|贸易条款|价格条款|成交条款|INCOTERMS?|TRADE\s*TERMS?|DELIVERY\s*TERMS?)/i, path: 'incoterms' },
+    // 进口商 = 收货人（云途 B2B 模板用语）。税号规则须在名称规则之前，否则「进口商税号」被名称截胡
+    { re: /进口商\s*(税号|VAT|EORI)/i, path: 'consignee.vatNo' },
+    { re: /进口商\s*(名称|公司)?/, path: 'consignee.company' },
     { re: /运输方式/, path: 'transport' },
     { re: /起运(国|港|地)/, path: 'pol' },
     { re: /目的(国|港|地区|地)/, path: 'pod' },
@@ -500,37 +592,52 @@
     { re: /(申报总价值|总申报价值)/, path: 'totals.amount' },
     { re: /(货物品名|商品品名|^品名$)/, path: 'goodsSummary' },
     { re: /备注/, path: 'remark' },
-    { re: /(VAT号|EORI)/, path: 'consignee.taxNo' },
-    { re: /仓库代码|WAREHOUSE\s*CODE|海外仓代码|仓库编号|FBA代码/, path: 'consignee.warehouseCode' },
+    // v1.4.60：EORI / VAT / 税号 三分（原先 VAT号 与 EORI 同映射到 taxNo，两格填同值）
+    { re: /EORI/i, path: 'consignee.eori', partyScoped: true },
+    { re: /(VAT|增值税)/i, path: 'consignee.vatNo', partyScoped: true },
+    { re: /(税号|TAX\s*(ID|NO))/i, path: 'consignee.taxNo', partyScoped: true },
+    { re: /仓库代码|WAREHOUSE\s*CODE|海外仓代码|仓库编号|FBA代码/, path: 'consignee.warehouseCode', partyScoped: true },
     // v1.4.57：亚丰模板「地址库编码」(FBA 货件地址库编码，无 party 前缀) → consignee.warehouseCode
-    { re: /地址库编码/, path: 'consignee.warehouseCode' },
+    { re: /地址库编码/, path: 'consignee.warehouseCode', partyScoped: true },
     // v1.4.50：补"国家/省/城市/邮编/地址/电话/邮箱/联系人/姓名/公司"等纯字段标签（无"发件人/收货人"等 party 词时也能识别）
-    { re: /国家|国别|COUNTRY/i, path: 'consignee.country' },
-    { re: /邮编|ZIP|POSTAL?/i, path: 'consignee.zip' },
-    { re: /省|州|STATE|PROVINCE/i, path: 'consignee.state' },
-    { re: /城市|CITY/i, path: 'consignee.city' },
-    { re: /地址/i, path: 'consignee.address' },
-    { re: /电话|手机|TEL|PHONE|MOBILE/i, path: 'consignee.tel' },
-    { re: /邮箱|EMAIL|邮件|E-?MAIL/i, path: 'consignee.email' },
-    { re: /联系人|CONTACT/i, path: 'consignee.contact' },
-    { re: /姓名|NAME/i, path: 'consignee.name' },
-    { re: /公司|COMPANY|企业/i, path: 'consignee.company' },
+    // v1.4.60：加 partyScoped —— 由 buildLabelMap 按「所在区块最近的 party 词」重定向，
+    //          否则带 NOTIFY 区块的模板会把通知人的国家/电话错填成收货人的值。
+    { re: /国家|国别|COUNTRY/i, path: 'consignee.country', partyScoped: true },
+    { re: /邮编|ZIP|POSTAL?/i, path: 'consignee.zip', partyScoped: true },
+    { re: /省|州|STATE|PROVINCE/i, path: 'consignee.state', partyScoped: true },
+    { re: /城市|CITY/i, path: 'consignee.city', partyScoped: true },
+    { re: /地址/i, path: 'consignee.address', partyScoped: true },
+    { re: /电话|手机|TEL|PHONE|MOBILE/i, path: 'consignee.tel', partyScoped: true },
+    { re: /邮箱|EMAIL|邮件|E-?MAIL/i, path: 'consignee.email', partyScoped: true },
+    { re: /联系人|CONTACT/i, path: 'consignee.contact', partyScoped: true },
+    { re: /姓名|NAME/i, path: 'consignee.name', partyScoped: true },
+    { re: /公司|COMPANY|企业/i, path: 'consignee.company', partyScoped: true },
     { re: /(揽货渠道|客户渠道|服务渠道|服务$)/, path: '' } // 无对应字段，跳过
   ];
 
   /** 统一字段标签识别：先试收发人三类(mapHeaderLabel)，再试通用字段词典。
    *  返回 {party, field, path, line, kind} 或 null。 */
-  function mapFieldLabel(text) {
+  function mapFieldLabel(text, ctxParty) {
     if (!text || /\{\{/.test(text)) return null;
     var p = mapHeaderLabel(text);
     if (p) return { party: p.party, field: p.field, path: p.party + '.' + p.field, line: p.line, kind: 'party' };
     var t = String(text).trim();
     for (var i = 0; i < GENERAL_LABEL_RULES.length; i++) {
-      if (GENERAL_LABEL_RULES[i].re.test(t)) {
-        var path = GENERAL_LABEL_RULES[i].path;
-        if (!path) return null; // 跳过规则：模板有此标签但系统无对应字段
-        return { party: null, field: null, path: path, line: 0, kind: 'general' };
+      var rule = GENERAL_LABEL_RULES[i];
+      if (!rule.re.test(t)) continue;
+      var path = rule.path;
+      if (!path) return null; // 跳过规则：模板有此标签但系统无对应字段
+      // v1.4.60 排除词：纯字段兜底通道（partyScoped）不得吃下「品名/销售地址/VAT注册地址/开户银行」等
+      if (rule.partyScoped && LABEL_EXCLUDE_RE.test(t)) return null;
+      // v1.4.60 区块就近归属：NOTIFY 区块内的「国家/电话/地址」归 notify，不再无脑归 consignee
+      var party = null, field = null;
+      if (rule.partyScoped && path.indexOf('consignee.') === 0) {
+        var tgt = (ctxParty === 'shipper' || ctxParty === 'notify') ? ctxParty : 'consignee';
+        field = path.slice('consignee.'.length);
+        party = tgt;
+        path = tgt + '.' + field;
       }
+      return { party: party, field: field, path: path, line: 0, kind: 'general' };
     }
     return null;
   }
@@ -545,6 +652,7 @@
     var end = (itemsRowNum && itemsRowNum !== -1) ? itemsRowNum - 1 : 25;
     end = Math.min(end, 60);
     var seen = {};
+    var curParty = '', curPartyRow = 0; // v1.4.60 区块就近归属状态
     for (var r = 1; r <= end; r++) {
       var row = ws.getRow(r);
       // v1.4.58：跳过「明细表头行」——该行有 >=3 个可 matchHeaderAlias 识别的明细列头
@@ -557,12 +665,22 @@
         if (matchHeaderAlias(_cellStr(cellH))) hdrCnt++;
       });
       if (hdrCnt >= 3) continue;
+      // v1.4.60 区块归属：本行若出现「发件人/收件人/通知人」等 party 词，则其后（8 行内）的
+      // 纯字段标签（国家/电话/邮编…）归属该 party。超过 8 行视为脱离区块，回落 consignee。
+      row.eachCell({ includeEmpty: false }, function (cellP) {
+        var sp = _cellStr(cellP);
+        if (!sp || /\{\{/.test(sp) || LABEL_EXCLUDE_RE.test(sp)) return;
+        for (var pi = 0; pi < PARTY_RE.length; pi++) {
+          if (PARTY_RE[pi].re.test(sp)) { curParty = PARTY_RE[pi].party; curPartyRow = r; return; }
+        }
+      });
+      if (curParty && (r - curPartyRow) > 8) { curParty = ''; curPartyRow = 0; }
       row.eachCell({ includeEmpty: false }, function (cell, c) {
         // 跳过合并从属格：同一合并块只在其主格处理一次，避免把值填进标签跨度破坏版式
         if (mergedMaps.masterOf[r + ',' + c]) return;
         var s = _cellStr(cell);
         if (!s || /\{\{/.test(s)) return;
-        var info = mapFieldLabel(s);
+        var info = mapFieldLabel(s, curParty);
         if (!info) return;
         var key = r + ',' + c;
         if (seen[key]) return;
@@ -804,9 +922,56 @@
   /** 模板填充：wb已加载的模板workbook，data为buildDocData输出。原地填充。
    *  支持两种模式：① {{items.xxx}} 占位符（老模板） ② 表头识别（物流商真实模板，无占位符也可填）
    *  options.logo = { dataB64, ext, from:{col,row}, to:{col,row} } 可选，用于把源模板 logo 贴回输出 workbook */
+  /** v1.4.60 —— 「本模板无法承载的字段」清单。
+   *  原则：用户录入什么就该显示什么；模板确实没有对应栏位时，系统必须当场告知，
+   *  而不是静默丢弃。返回 [{path,label,value}]，由 UI 在预览页列出。 */
+  var UNCARRIED_PARTY_CN = { shipper: '发货人', consignee: '收货人', notify: '通知人' };
+  var UNCARRIED_FIELD_CN = {
+    name: '名称', company: '公司', warehouseCode: '仓库代码', address: '地址', city: '城市',
+    state: '省/州', zip: '邮编', country: '国家', tel: '电话', email: '邮箱', contact: '联系人',
+    taxNo: '税号', vatNo: 'VAT号', eori: 'EORI'
+  };
+  var UNCARRIED_META_CN = {
+    invoiceNo: '发票号', invoiceDate: '发票日期', contractNo: '合同号', orderNos: '订单号',
+    incoterms: '成交/交货条款', paymentTerms: '付款方式', transport: '运输方式',
+    pol: '起运地', pod: '目的地', etd: 'ETD', vessel: '船名航次',
+    containerType: '箱型', containerQty: '箱量', shippingMarks: '唛头',
+    remark: '备注', customsType: '报关方式', agent: '代理'
+  };
+  // 系统默认值：不是用户录入的，不进"丢失"清单，避免噪音
+  var UNCARRIED_DEFAULTS = { transport: 'BY SEA', shippingMarks: 'N/M', dangerous: 'NON-DANGEROUS / GENERAL CARGO' };
+  function computeUncarried(data, labelMap, phPaths) {
+    var carried = {};
+    (labelMap || []).forEach(function (e) { if (e && e.resolved && e.path) carried[e.path] = 1; });
+    (phPaths || []).forEach(function (p) { if (p) carried[p] = 1; });
+    var out = [];
+    ['shipper', 'consignee', 'notify'].forEach(function (pk) {
+      var p = data && data[pk];
+      if (!p || typeof p !== 'object') return;
+      if (pk === 'notify' && String(p.name || '').toUpperCase() === 'SAME AS CONSIGNEE' && !p.address) return;
+      Object.keys(UNCARRIED_FIELD_CN).forEach(function (f) {
+        var v = p[f];
+        if (v === undefined || v === null || String(v).trim() === '') return;
+        var path = pk + '.' + f;
+        if (carried[path]) return;
+        // 地址多行占位（address1/address2…）也视为已承载
+        if (f === 'address' && (carried[pk + '.address1'] || carried[pk + '.address2'])) return;
+        out.push({ path: path, label: UNCARRIED_PARTY_CN[pk] + '·' + UNCARRIED_FIELD_CN[f], value: String(v) });
+      });
+    });
+    Object.keys(UNCARRIED_META_CN).forEach(function (k) {
+      var v = data && data[k];
+      if (v === undefined || v === null || String(v).trim() === '') return;
+      if (UNCARRIED_DEFAULTS[k] !== undefined && String(v) === UNCARRIED_DEFAULTS[k]) return;
+      if (carried[k]) return;
+      out.push({ path: k, label: UNCARRIED_META_CN[k], value: String(v) });
+    });
+    return out;
+  }
+
   function fillTemplate(wb, data, options) {
     options = options || {};
-    var filled = { replaced: [], unresolved: [] };
+    var filled = { replaced: [], unresolved: [], uncarried: [] };
     var ws = wb.worksheets[0];
     if (!ws) throw new Error('模板无工作表');
 
@@ -1151,6 +1316,10 @@
         }
       }
     });
+    // v1.4.60：统计「用户录入了但本模板装不下」的字段，交 UI 显式提示（不静默丢弃）
+    try {
+      filled.uncarried = computeUncarried(data, _labelMap, filled.replaced.concat(filled.unresolved));
+    } catch (e) { filled.uncarried = []; }
     return filled;
   }
 
