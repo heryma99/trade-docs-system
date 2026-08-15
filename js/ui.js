@@ -1020,7 +1020,10 @@
       for (i = 0; i < w.orderIds.length; i++) orders.push(await db.get('orders', w.orderIds[i]));
       var selNos = orders.map(function (o) { return o.orderNo; });
       var pks = await db.all('packings');
-      var tpls = (await db.all('templates')).filter(function (t) { return t.kind === 'invoice' && t.status === 'active'; });
+      var _allInvTpls = (await db.all('templates')).filter(function (t) { return t.kind === 'invoice' && t.status === 'active'; });
+      // v1.5.45：同步未拉完（fileBuf 空）的模板标记为残缺，排除在可用下拉外，避免用户选到 step4 才暴露
+      var brokenTpls = _allInvTpls.filter(function (t) { return !t.fileBuf || !t.fileBuf.byteLength; });
+      var tpls = _allInvTpls.filter(function (t) { return t.fileBuf && t.fileBuf.byteLength > 0; });
       // v1.4.45：当发票模板为空时，在 发票生成 页渲染一个明显的红色提示卡 + 「立即恢复」按钮，
       // 并在页面渲染时（不限 init 阶段）自动尝试一次静默远程拉取 + 拿到后立刻重渲。
       if (tpls.length === 0) {
@@ -1042,6 +1045,10 @@
       var banner = tpls.length === 0
         ? '<div id="wz-tpl-banner" class="card" style="border:2px solid #d97706;background:#fff8e1;padding:12px 14px;margin:0 0 12px 0"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><div style="flex:1;color:#92400e"><b>⚠ 本地无发票模板</b> —— 看起来团队共享库里的发票模板没拉下来。点击右侧按钮立即从团队库拉取。</div><button class="btn" id="wz-tpl-recover">立即恢复发票模板</button></div></div>'
         : '';
+      // v1.5.45：有模板同步未完成（fileBuf 空）时，显示红色提示卡 + 重新同步按钮（不再让用户选到跑不到底的模板）
+      var syncWarn = brokenTpls.length
+        ? '<div id="wz-tpl-broken" class="card" style="border:2px solid #dc2626;background:#fef2f2;padding:12px 14px;margin:0 0 12px 0"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><div style="flex:1;color:#991b1b"><b>⚠ ' + brokenTpls.length + ' 个发票模板同步未完成</b>（模板文件拉取失败，暂不可用于导出）。点击右侧按钮重新从团队库拉取模板文件。</div><button class="btn warn" id="wz-tpl-resync2">↻ 重新同步模板</button></div></div>'
+        : '';
       var pkRows = pks.map(function (p) {
         var inter = (p.orderNos || []).filter(function (n) { return selNos.indexOf(n) >= 0; });
         var hint = inter.length === selNos.length && inter.length === (p.orderNos || []).length ? '<span class="badge green">完全匹配</span>' :
@@ -1051,7 +1058,7 @@
           '<td>' + esc(p.fileName) + '</td><td class="mono">' + esc((p.orderNos || []).join(', ')) + '</td><td class="num">' + p.totals.boxCount + '</td><td class="num">' + p.totals.qty + '</td><td>' + hint + '</td></tr>';
       }).join('');
       var tplOpts = tpls.map(function (t) { return '<option value="' + t.id + '"' + (w.templateId === t.id ? ' selected' : '') + '>' + esc(t.name) + '（' + esc(t.carrier) + '）</option>'; }).join('');
-      body.innerHTML = banner + '<div class="card"><h3>① 选择装箱清单（用于单号/SKU/数量强校验及重量体积）</h3>' +
+      body.innerHTML = banner + syncWarn + '<div class="card"><h3>① 选择装箱清单（用于单号/SKU/数量强校验及重量体积）</h3>' +
         '<p class="hint">📌 装箱清单决定「长(cm) / 宽(cm) / 高(cm) / 单箱重量」能否填出。海运类模板（如亚运发货最新）必须关联装箱清单，否则这些明细列为空。下方②选择模板后将在下一步预览核对。</p>' +
         '<table class="grid"><tr><th></th><th>文件名</th><th>关联单号</th><th>箱数</th><th>数量</th><th>与所选订单</th></tr>' +
         (pkRows || '<tr><td colspan="6" class="empty">暂无装箱清单，请先到「装箱清单」页上传</td></tr>') + '</table>' +
@@ -1086,14 +1093,39 @@
           rb.disabled = false; rb.textContent = '立即恢复发票模板';
         }
       };
-      document.getElementById('wz-next1').onclick = function () {
+      document.getElementById('wz-next1').onclick = async function () {
         var pk = document.querySelector('input[name="wz-pk"]:checked');
         if (!pk) { toast('必须选择装箱清单（发票强校验依赖装箱清单）', 'err'); return; }
         var tpl = val('wz-tpl');
         if (!tpl) { toast('请选择发票模板', 'err'); return; }
+        // v1.5.45：选中即校验 fileBuf，残缺模板直接拦截并提示重新同步（不再等到 step4 才暴露）
+        var tplRec = await db.get('templates', tpl);
+        if (!tplRec || !tplRec.fileBuf || !tplRec.fileBuf.byteLength) {
+          toast('该模板文件未同步完整，请点上方「↻ 重新同步模板」', 'err');
+          render(); return;
+        }
         w.packingId = pk.value; w.templateId = tpl;
         w.carrier = val('wz-carrier'); w.channel = val('wz-channel');
         w.step = 2; render();
+      };
+      // v1.5.45：重新同步按钮 —— 重拉团队库（pullShared 对本地无 fileBuf 的模板会重新 fetch，可修复残缺）
+      var rb2 = document.getElementById('wz-tpl-resync2');
+      if (rb2) rb2.onclick = async function () {
+        rb2.disabled = true; rb2.textContent = '正在重新同步…';
+        try {
+          var pr3 = await pullShared();
+          if (pr3 && pr3.ok) {
+            var got = (await db.all('templates')).filter(function (t) { return t.kind === 'invoice' && t.status === 'active' && t.fileBuf && t.fileBuf.byteLength > 0; });
+            toast('已重新同步，可用发票模板 ' + got.length + ' 个', 'ok');
+            render();
+          } else {
+            toast('同步失败：' + ((pr3 && pr3.error) || '未知'), 'err');
+            rb2.disabled = false; rb2.textContent = '↻ 重新同步模板';
+          }
+        } catch (e) {
+          toast('同步异常：' + e.message, 'err');
+          rb2.disabled = false; rb2.textContent = '↻ 重新同步模板';
+        }
       };
       return;
     }
@@ -1481,7 +1513,8 @@
     }
 
     if (w.step === 1) {
-      var tpls = (await db.all('templates')).filter(function (t) { return t.kind === 'booking' && t.status === 'active'; });
+      var _allBkTpls = (await db.all('templates')).filter(function (t) { return t.kind === 'booking' && t.status === 'active'; });
+      var tpls = _allBkTpls.filter(function (t) { return t.fileBuf && t.fileBuf.byteLength > 0; });
       var pks = await db.all('packings');
       var orders = []; for (var i = 0; i < w.orderIds.length; i++) orders.push(await db.get('orders', w.orderIds[i]));
       var selNos = orders.map(function (o) { return o.orderNo; });
@@ -1496,9 +1529,15 @@
         '<div><label>关联装箱清单（自动带出件毛体）</label><select id="bw-pk">' + pkOpts + '</select></div></div>' +
         '<div style="margin-top:14px;display:flex;gap:8px"><button class="btn ghost" id="bw-back1">← 上一步</button><button class="btn" id="bw-next1">下一步 →</button></div></div>';
       document.getElementById('bw-back1').onclick = function () { w.step = 0; render(); };
-      document.getElementById('bw-next1').onclick = function () {
+      document.getElementById('bw-next1').onclick = async function () {
         var tpl = val('bw-tpl');
         if (!tpl) { toast('请选择订舱单模板', 'err'); return; }
+        // v1.5.45：选中即校验 fileBuf，残缺模板直接拦截
+        var tplRec = await db.get('templates', tpl);
+        if (!tplRec || !tplRec.fileBuf || !tplRec.fileBuf.byteLength) {
+          toast('该订舱模板文件未同步完整，请到「设置-数据管理-重新同步」后重试', 'err');
+          return;
+        }
         w.templateId = tpl; w.carrier = val('bw-carrier'); w.packingId = val('bw-pk');
         w.step = 2; render();
       };
@@ -2069,13 +2108,18 @@
       candidates.push(base + SYNC_TPL_DIR + encodeURIComponent(fname));
     } catch (e) {}
     candidates.push(SYNC_TPL_CDN + encodeURIComponent(fname));
+    // v1.5.45：每个候选重试 3 次（国内访问 GitHub raw 不稳，单次失败率高），单次超时 10s，
+    // 失败指数退避 0.5s/1s，整体大幅降低「模板文件拉取失败→fileBuf 空→step4 才暴露」的概率。
     for (var i = 0; i < candidates.length; i++) {
-      var ac = new AbortController();
-      var to = setTimeout(function () { try { ac.abort(); } catch (e) {} }, 8000);
-      try {
-        var res = await fetch(candidates[i], { cache: 'no-store', signal: ac.signal });
-        if (res.ok) { clearTimeout(to); return await res.arrayBuffer(); }
-      } catch (e) {} finally { clearTimeout(to); }
+      for (var attempt = 0; attempt < 3; attempt++) {
+        var ac = new AbortController();
+        var to = setTimeout(function () { try { ac.abort(); } catch (e) {} }, 10000);
+        try {
+          var res = await fetch(candidates[i], { cache: 'no-store', signal: ac.signal });
+          if (res.ok) { clearTimeout(to); return await res.arrayBuffer(); }
+        } catch (e) {} finally { clearTimeout(to); }
+        if (attempt < 2) { await new Promise(function (r) { setTimeout(r, 500 * (attempt + 1)); }); }
+      }
     }
     return null;
   }
