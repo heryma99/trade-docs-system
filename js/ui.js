@@ -1352,6 +1352,11 @@
         var mlist = ed.missed.slice(0, 30).map(esc).join('　') + (ed.missed.length > 30 ? (' …等 ' + ed.missed.length + ' 个') : '');
         embWarn += '<div class="vres warn">⚠️ 以下 ' + ed.missed.length + ' 个 SKU 在图库中无对应产品图（已跳过，不影响导出）：<span class="mono">' + mlist + '</span></div>';
       }
+      // v1.5.50 取图失败清单：网络/镜像不可达导致 embed 拿不到真图，明确列出（不再静默空白）
+      if (ed && ed.failed && ed.failed.length) {
+        var flist = ed.failed.slice(0, 40).map(esc).join('　') + (ed.failed.length > 40 ? (' …等 ' + ed.failed.length + ' 个') : '');
+        embWarn += '<div class="vres warn">⚠️ 以下 ' + ed.failed.length + ' 个 SKU 取图失败（镜像不可达/超时），导出后对应单元格为空白：<span class="mono">' + flist + '</span>。若整批都失败，请检查网络或换用 CloudStudio 国内镜像打开。</div>';
+      }
       var confirmed = w.doc && w.doc.status === 'confirmed';
       body.innerHTML = '<div class="card"><h3>发票预览（模板: ' + esc(tplName) + '）</h3>' +
         (fillRes.unresolved.length ? '<div class="vres warn">⚠️ 以下占位符无数据（已置空）: <span class="mono">' + fillRes.unresolved.filter(function (v, i, a) { return a.indexOf(v) === i; }).map(esc).join('　') + '</span></div>' : '') +

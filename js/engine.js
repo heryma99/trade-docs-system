@@ -1568,9 +1568,15 @@
         try {
           if (typeof window !== 'undefined') {
             var idxA = window.SKU_IMAGE_INDEX || {};
+            // v1.5.50 修复：idxA[ka] 已是完整相对路径（如 "images/sku_thumb/104-1_4.jpeg"），
+            // 旧代码又拼了一次 "images/sku_small_jpg/" 造成路径重复 → fetch 全 404 → 导出全空白。
+            // 现直接用 idxA[ka] 作同域相对路径，并补 GitHub Pages 绝对路径 / raw.github 两个兜底候选。
+            var GH_PAGES = 'https://heryma99.github.io/trade-docs-system/';
+            var RAW = 'https://raw.githubusercontent.com/heryma99/trade-docs-system/main/';
             for (var ka in idxA) {
-              var relA = 'images/sku_small_jpg/' + idxA[ka];
-              MAP[ka] = [relA, 'https://raw.githubusercontent.com/heryma99/trade-docs-system/main/' + relA];
+              var relA = idxA[ka];                       // 已是相对路径，禁止再拼前缀
+              if (!relA || relA.indexOf('images/') !== 0) continue;
+              MAP[ka] = [relA, GH_PAGES + relA, RAW + relA];
             }
           }
         } catch (e) {}
@@ -1696,23 +1702,54 @@
         }
         diag.tasksLen = tasks.length;
         if (!tasks.length) { diag.done = true; resolve(); return; }
-        // 3) 并发限流 + 超时 + 降级（v1.5.39 调优）
-        // 经验：单图嵌入最坏 = 同源超时(8s) + raw 兜底(15s) ≈ 23s，国内 GitHub 链接用满并发=3 + 每通道单独超时，
-        // 16 SKU ≈ 16/3 × ~10s 平均 ≈ 53s 完成（vs 之前 6 并发 + 15s 双通道 ≈ 80s，等不到完成人就走了一半）
-        var CONC = 3, TIMEOUT_SAMEORIGIN = 8000, TIMEOUT_RAW = 15000, idx = 0;
+        // 3) 并发限流 + 超时 + 降级 + 进度浮层（v1.5.50）
+        // 国内网络下同源/GitHub 可能慢，放宽超时；并发仍限 3 防卡死。
+        var CONC = 3, TIMEOUT_SAMEORIGIN = 12000, TIMEOUT_RAW = 20000, idx = 0;
+        var doneCount = 0, failCount = 0, failedSkus = [];
+        // v1.5.50 导出/嵌图进度浮层：图多（>5）时显示「已嵌 X/共 N 失败 Y」，避免用户以为卡死
+        var progEl = null;
+        if (tasks.length > 5 && typeof document !== 'undefined') {
+          progEl = document.createElement('div');
+          progEl.id = 'td-embed-progress';
+          progEl.style.cssText = 'position:fixed;left:50%;top:20px;transform:translateX(-50%);z-index:99999;background:#0f172a;color:#e2e8f0;padding:10px 16px;border-radius:10px;font:13px/1.5 system-ui,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.35);min-width:260px;text-align:center';
+          progEl.innerHTML = '🖼 正在嵌入产品图 <b>0/' + tasks.length + '</b> …';
+          document.body.appendChild(progEl);
+        }
+        function bump(okImg) {
+          doneCount++;
+          if (!okImg) failCount++;
+          if (progEl) progEl.innerHTML = '🖼 正在嵌入产品图 <b>' + doneCount + '/' + tasks.length + '</b>' + (failCount ? '　⚠️失败 ' + failCount : '') + ' …';
+        }
         function worker() {
           if (idx >= tasks.length) return Promise.resolve();
           var t = tasks[idx++];
-          return embedOne(wb, ws, t, TIMEOUT_SAMEORIGIN, TIMEOUT_RAW).then(worker);
+          return embedOne(wb, ws, t, TIMEOUT_SAMEORIGIN, TIMEOUT_RAW).then(function (okImg) {
+            bump(okImg);
+            if (!okImg) failedSkus.push(t.sku);
+            return worker();
+          });
         }
         var workers = [];
         for (var c = 0; c < Math.min(CONC, tasks.length); c++) workers.push(worker());
         await Promise.all(workers);
-        diag.done = true;
+        if (progEl) {
+          progEl.innerHTML = (failCount ? '⚠️ 产品图嵌入完成（共 ' + tasks.length + '，失败 ' + failCount + '）' : '✅ 产品图嵌入完成（共 ' + tasks.length + '）');
+          (function (el) { setTimeout(function () { if (el && el.parentNode) el.parentNode.removeChild(el); }, failCount ? 6000 : 1800); })(progEl);
+        }
+        diag.done = true; diag.failed = failedSkus;
         try { wb._productImagesEmbedded = true; } catch (e) {}
         resolve();
       } catch (e) { diag.err = String(e && e.stack || e); if (typeof console !== 'undefined') console.error('[emb-err]', e); diag.done = true; resolve(); }
     });
+  }
+
+  // v1.5.50 真图校验：拒绝把 HTML 错误页（如 CloudStudio 对缺图路径返回的 200 假页）当 JPEG 嵌进去
+  function isRealImage(u8) {
+    if (!u8 || u8.length < 4) return false;
+    if (u8[0] === 0xFF && u8[1] === 0xD8) return true;            // JPEG
+    if (u8[0] === 0x89 && u8[1] === 0x50 && u8[2] === 0x4E && u8[3] === 0x47) return true; // PNG
+    if (u8[0] === 0x47 && u8[1] === 0x49 && u8[2] === 0x46) return true; // GIF
+    return false;
   }
 
   function embedOne(wb, ws, t, TIMEOUT_SAMEORIGIN, TIMEOUT_RAW) {
@@ -1740,6 +1777,8 @@
             if (settled || buf === undefined) return;
             settled = true; clearTimeout(timer);
             var u8 = (buf instanceof Uint8Array) ? buf : new Uint8Array(buf);
+            // v1.5.50 真图校验：假图（HTML 错误页）直接判失败，跳到下一个镜像候选，不嵌坏图
+            if (!isRealImage(u8)) { res({ ok: false, err: 'not-image', nextIdx: i + 1 }); return; }
             _imgCache[t.sku] = u8;
             applyImg(wb, ws, t, u8);
             res({ ok: true });
@@ -1750,10 +1789,11 @@
           });
         });
       }
-      // 链式：同源 → raw → raw 再退化为同源（如 raw 404 但同源其实是 5xx 抽风时，可再回到同源一次）
+      // 链式：同域相对 → GitHub Pages 绝对 → raw.github（v1.5.50 全部候选都试，首个真图即止）
       var plan = [];
-      plan.push({ url: rels[0], ms: TIMEOUT_SAMEORIGIN || 8000 });
-      if (rels.length > 1) plan.push({ url: rels[1], ms: TIMEOUT_RAW || 15000 });
+      for (var ri = 0; ri < rels.length; ri++) {
+        plan.push({ url: rels[ri], ms: (ri === 0 ? (TIMEOUT_SAMEORIGIN || 12000) : (TIMEOUT_RAW || 20000)) });
+      }
       function step(i, p) {
         if (i >= plan.length) { resolve(false); return; }
         fetchOne(p.url, p.ms, i).then(function (r) {
