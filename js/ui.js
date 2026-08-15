@@ -1355,7 +1355,12 @@
       // v1.5.50 取图失败清单：网络/镜像不可达导致 embed 拿不到真图，明确列出（不再静默空白）
       if (ed && ed.failed && ed.failed.length) {
         var flist = ed.failed.slice(0, 40).map(esc).join('　') + (ed.failed.length > 40 ? (' …等 ' + ed.failed.length + ' 个') : '');
-        embWarn += '<div class="vres warn">⚠️ 以下 ' + ed.failed.length + ' 个 SKU 取图失败（镜像不可达/超时），导出后对应单元格为空白：<span class="mono">' + flist + '</span>。若整批都失败，请检查网络或换用 CloudStudio 国内镜像打开。</div>';
+        var isOnGH = (typeof location!=='undefined') && location.hostname.indexOf('github.io')!==-1;
+        var csUrl = 'https://a2012d426ebf40b8906cfe5f338c7516.app.workbuddy.link/';
+        var tip = isOnGH
+          ? '若整批都失败，多半是国内到 github.io 不稳，请<a href="'+csUrl+'" target="_blank" rel="noopener" style="color:#2563eb;text-decoration:underline">点此打开 CloudStudio 国内镜像</a>重导。'
+          : '若整批都失败，请检查网络或在 CloudStudio 国内镜像中打开重导。';
+        embWarn += '<div class="vres warn">⚠️ 以下 ' + ed.failed.length + ' 个 SKU 取图失败（镜像不可达/超时），导出后对应单元格为空白：<span class="mono">' + flist + '</span>。' + tip + '</div>';
       }
       var confirmed = w.doc && w.doc.status === 'confirmed';
       body.innerHTML = '<div class="card"><h3>发票预览（模板: ' + esc(tplName) + '）</h3>' +
