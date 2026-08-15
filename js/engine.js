@@ -1570,13 +1570,19 @@
             var idxA = window.SKU_IMAGE_INDEX || {};
             // v1.5.50 修复：idxA[ka] 已是完整相对路径（如 "images/sku_thumb/104-1_4.jpeg"），
             // 旧代码又拼了一次 "images/sku_small_jpg/" 造成路径重复 → fetch 全 404 → 导出全空白。
-            // 现直接用 idxA[ka] 作同域相对路径，并补 GitHub Pages 绝对路径 / raw.github 两个兜底候选。
+            // 现直接用 idxA[ka] 作同域相对路径，并补 GitHub Pages / raw.github / 国内 CloudStudio 镜像三个兜底候选。
+            //   国内用户在国内时 github.io / raw.githubusercontent.com 常超时，
+            //   CloudStudio 国内镜像（app.workbuddy.link）走国内 CDN 必须放在候选链中段（第 1 位）兜底。
+            //   若当前页面就是 CloudStudio 镜像, 候选 0 直接用 './' 原地命中(同域, 无网络)。
             var GH_PAGES = 'https://heryma99.github.io/trade-docs-system/';
             var RAW = 'https://raw.githubusercontent.com/heryma99/trade-docs-system/main/';
+            var CS_DOMAIN = (typeof location!=='undefined' && location.hostname.indexOf('app.workbuddy.link')!==-1)
+              ? './'   // 当前就在 CloudStudio 镜像内, 用同域相对路径(必命中且最快)
+              : 'https://a2012d426ebf40b8906cfe5f338c7516.app.workbuddy.link/';
             for (var ka in idxA) {
               var relA = idxA[ka];                       // 已是相对路径，禁止再拼前缀
               if (!relA || relA.indexOf('images/') !== 0) continue;
-              MAP[ka] = [relA, GH_PAGES + relA, RAW + relA];
+              MAP[ka] = [relA, CS_DOMAIN + relA, GH_PAGES + relA, RAW + relA];
             }
           }
         } catch (e) {}
