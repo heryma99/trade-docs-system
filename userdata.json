@@ -1,1 +1,1486 @@
-{"_meta":{"app":"trade-docs-system","ver":"1.4.35","updatedAt":"2026-08-14T07:34:59.680Z","stores":["parties","templates"],"mergedBy":"client-3way"},"stores":{"parties":[{"type":"shipper","name":"A","company":"","warehouseCode":"","address":"","city":"","state":"","zip":"","tel":"","contact":"","email":"","country":"","taxNo":"","vatNo":"","eori":"","id":"msratqqi0bh2sh","createdAt":1786612286106,"updatedAt":1786692674367,"fileBufBroken":true},{"type":"shipper","name":"JW PEI AP LIMITED","company":"","warehouseCode":"","address":"UNIT 1102 11/F，29 AUSTIN ROAD，TSIM SHA TSUI，KL，Hong Kong，CHINA","city":"HONG KONG","state":"","zip":"","tel":"","contact":"","email":"","country":"中国香港","taxNo":"","vatNo":"","eori":"","id":"msratvv8xntnni","createdAt":1786612292756,"updatedAt":1786692893323},{"type":"shipper","name":"井太兰（东莞）贸易有限公司","company":"","warehouseCode":"","address":"广东省东莞市厚街镇恒通路6号3栋601室","city":"","state":"","zip":"","tel":"","contact":"","email":"","country":"CN","taxNo":"","vatNo":"","eori":"","id":"mss9lqa0022dmr","createdAt":1786670698824,"updatedAt":1786692867038},{"type":"consignee","name":"Leading Trade One Limited","company":"","warehouseCode":"","address":"FLAT/RM1911LEEGARDEN ONE 33HYSAN AVENUE CAUSEWAY BAY, HONGKONG","city":"HONG KONG","state":"","zip":"","tel":"","contact":"","email":"","country":"HK","taxNo":"","vatNo":"","eori":"","id":"mss9m3t5ry0tmu","createdAt":1786670716361,"updatedAt":1786692674367,"fileBufBroken":true}],"templates":[{"id":"tpl_msecxi8k_68l223","name":"中运通达-发票模板","kind":"invoice","carrier":"中运通达","status":"active","isSeed":false,"updatedAt":1786692697792,"filePath":"templates/tpl_msecxi8k_68l223.xlsx","fileSize":16628,"fileBufBroken":true,"createdAt":1786673194761,"fileName":"中运通达-发票模板.xlsx","mapping":{"required":[{"path":"invoiceNo","label":"发票号","fileBufBroken":true},{"path":"invoiceDate","label":"发票日期","fileBufBroken":true},{"path":"shipper.name","label":"SHIPPER名称","fileBufBroken":true},{"path":"consignee.name","label":"CONSIGNEE名称","fileBufBroken":true},{"path":"incoterms","label":"贸易条款","fileBufBroken":true},{"path":"pol","label":"起运港","fileBufBroken":true},{"path":"pod","label":"目的港","fileBufBroken":true},{"path":"currency","label":"币种","fileBufBroken":true}],"scanned":{"fields":[],"itemFields":[],"itemsRow":21,"itemHeaderMap":{"1":"no","3":"gw","4":"lengthCm","5":"widthCm","6":"heightCm","7":"nameCn","8":"nameEn","9":"qty","10":"gw","11":"lengthCm","12":"hsCode","13":"material","14":"usage","15":"electrified","16":"magnetic","17":"imageUrl","18":"productLink","19":"productPrice","21":"batteryType","22":"brand","23":"model","24":"singleNw","25":"nw","26":"currency","27":"origin"},"sheetName":"多个订单可以建立多个sheet"},"labelMap":[{"r":2,"c":1,"label":"客户订单号(FBA号)","path":"orderNos","party":null,"field":null,"line":0,"kind":"general","resolved":true,"fileBufBroken":true},{"r":3,"c":1,"label":"运输方式","path":"transport","party":null,"field":null,"line":0,"kind":"general","resolved":true,"fileBufBroken":true},{"r":5,"c":1,"label":"收件人(仓库代码)","path":"consignee.warehouseCode","party":"consignee","field":"warehouseCode","line":0,"kind":"general","resolved":true,"fileBufBroken":true},{"r":6,"c":1,"label":"收件人公司","path":"consignee.company","party":"consignee","field":"company","line":0,"kind":"party","resolved":true,"fileBufBroken":true},{"r":11,"c":1,"label":"收件电话","path":"consignee.tel","party":"consignee","field":"tel","line":0,"kind":"party","resolved":true,"fileBufBroken":true},{"r":12,"c":1,"label":"邮编","path":"consignee.zip","party":"consignee","field":"zip","line":0,"kind":"general","resolved":true,"fileBufBroken":true},{"r":15,"c":1,"label":"VAT号","path":"consignee.vatNo","party":"consignee","field":"vatNo","line":0,"kind":"general","resolved":true,"fileBufBroken":true},{"r":16,"c":1,"label":"EORI","path":"consignee.eori","party":"consignee","field":"eori","line":0,"kind":"general","resolved":true,"fileBufBroken":true}],"fileBufBroken":true}},{"id":"tpl_msecxi8l_djdtsn","name":"云途-B2B模板","kind":"invoice","carrier":"云途","status":"active","isSeed":false,"updatedAt":1786692677681,"filePath":"templates/tpl_msecxi8l_djdtsn.xlsx","fileSize":122262,"fileBufBroken":true,"createdAt":1786673194761,"fileName":"云途-B2B发票模板.xlsx","mapping":{"required":[{"path":"invoiceNo","label":"发票号","fileBufBroken":true},{"path":"invoiceDate","label":"发票日期","fileBufBroken":true},{"path":"shipper.name","label":"SHIPPER名称","fileBufBroken":true},{"path":"consignee.name","label":"CONSIGNEE名称","fileBufBroken":true},{"path":"incoterms","label":"贸易条款","fileBufBroken":true},{"path":"pol","label":"起运港","fileBufBroken":true},{"path":"pod","label":"目的港","fileBufBroken":true},{"path":"currency","label":"币种","fileBufBroken":true}],"scanned":{"fields":[],"itemFields":[],"itemsRow":2,"itemHeaderMap":{"3":"destCountry","22":"magnetic","23":"electrified","24":"boxNo","27":"lengthCm","28":"widthCm","29":"heightCm","30":"singleGw","31":"nameEn","32":"nameEn","33":"qty","34":"qty","35":"price","36":"currency","38":"hsCode","39":"material","40":"brand","41":"model","42":"usage","44":"remark","fileBufBroken":true},"sheetName":"批量下单","fileBufBroken":true},"labelMap":[],"fileBufBroken":true}},{"id":"tpl_msecxi8l_kci4s4","name":"买单要素模板","kind":"invoice","carrier":"买单","status":"active","isSeed":false,"updatedAt":1786692677681,"filePath":"templates/tpl_msecxi8l_kci4s4.xlsx","fileSize":264562,"fileBufBroken":true,"createdAt":1786673194761,"fileName":"买单要素模板-发票模板.xlsx","mapping":{"required":[{"path":"invoiceNo","label":"发票号","fileBufBroken":true},{"path":"invoiceDate","label":"发票日期","fileBufBroken":true},{"path":"shipper.name","label":"SHIPPER名称","fileBufBroken":true},{"path":"consignee.name","label":"CONSIGNEE名称","fileBufBroken":true},{"path":"incoterms","label":"贸易条款","fileBufBroken":true},{"path":"pol","label":"起运港","fileBufBroken":true},{"path":"pod","label":"目的港","fileBufBroken":true},{"path":"currency","label":"币种","fileBufBroken":true}],"scanned":{"fields":[],"itemFields":[],"itemsRow":5,"itemHeaderMap":{"1":"nameCn","2":"qty","3":"price","4":"brand","5":"model","11":"material","12":"nw","13":"gw","14":"boxCount","15":"sku","16":"usage","17":"usage","18":"brand","fileBufBroken":true},"sheetName":"Sheet1","fileBufBroken":true},"labelMap":[{"r":2,"c":4,"label":"起运国","path":"pol","party":null,"field":null,"line":0,"kind":"general","resolved":true,"fileBufBroken":true},{"r":2,"c":7,"label":"总包装件数：","path":"totals.boxCount","party":null,"field":null,"line":0,"kind":"general","resolved":true,"fileBufBroken":true},{"r":2,"c":11,"label":"总毛重：\n（如卡板包装，需加卡板重量）","path":"totals.gw","party":null,"field":null,"line":0,"kind":"general","resolved":true,"fileBufBroken":true},{"r":2,"c":16,"label":"申报总价值","path":"totals.amount","party":null,"field":null,"line":0,"kind":"general","resolved":true,"fileBufBroken":true}],"fileBufBroken":true}},{"id":"tpl_msecxi8m_8py8vf","name":"云途-单票申报信息模板(B2B)","kind":"declare","carrier":"云途","status":"active","isSeed":false,"updatedAt":1786692677681,"filePath":"templates/tpl_msecxi8m_8py8vf.xlsx","fileSize":68346,"fileBufBroken":true,"createdAt":1786673194761},{"id":"tpl_msecxi8m_bpvzhv","name":"亚丰-发票模板","kind":"invoice","carrier":"亚丰","status":"active","isSeed":false,"updatedAt":1786692677681,"filePath":"templates/tpl_msecxi8m_bpvzhv.xlsx","fileSize":51556,"fileBufBroken":true,"createdAt":1786673194761},{"id":"tpl_msecxi8m_f1uv94","name":"亚丰-海运发票最新模板","kind":"invoice","carrier":"海运","status":"active","isSeed":false,"updatedAt":1786692677681,"filePath":"templates/tpl_msecxi8m_f1uv94.xlsx","fileSize":68294,"fileBufBroken":true,"createdAt":1786673194761},{"id":"tpl_msecxi8m_ulv90a","name":"装箱单 格式","kind":"packing","carrier":"通用","status":"active","isSeed":false,"updatedAt":1786692677681,"filePath":"templates/tpl_msecxi8m_ulv90a.xlsx","fileSize":17708,"fileBufBroken":true,"createdAt":1786673194761},{"id":"tpl_booking_mssnhsirnhzg","name":"Aramex-订舱单","kind":"booking","carrier":"Aramex","status":"active","isSeed":false,"updatedAt":1786694029731,"filePath":"templates/tpl_booking_mssnhsirnhzg.xlsx","fileSize":16004,"fileName":"Aramex  Booking Form-Aramex.xlsx","mapping":{"required":[{"path":"invoiceNo","label":"委托号"},{"path":"shipper.name","label":"托运人"},{"path":"consignee.name","label":"收货人"},{"path":"pol","label":"起运港"},{"path":"pod","label":"目的港"},{"path":"freightTerms","label":"运费条款"}],"scanned":{"fields":[],"itemFields":[],"itemsRow":4,"itemHeaderMap":{"1":"no","2":"no","3":"no","4":"no","5":"no","6":"no","7":"no","8":"no","9":"no","10":"no","11":"no"},"sheetName":"Sheet1"},"labelMap":[]}},{"id":"tpl_booking_mssnhsj6ni6f","name":"ANHAI-订舱单","kind":"booking","carrier":"ANHAI","status":"active","isSeed":false,"updatedAt":1786694029746,"filePath":"templates/tpl_booking_mssnhsj6ni6f.xlsx","fileSize":8241,"fileName":"BOOKING  FORM-ANHAI.xlsx","mapping":{"required":[{"path":"invoiceNo","label":"委托号"},{"path":"shipper.name","label":"托运人"},{"path":"consignee.name","label":"收货人"},{"path":"pol","label":"起运港"},{"path":"pod","label":"目的港"},{"path":"freightTerms","label":"运费条款"}],"scanned":{"fields":[],"itemFields":[],"itemsRow":11,"itemHeaderMap":{"6":"lengthCm","7":"lengthCm","8":"lengthCm","9":"lengthCm"},"sheetName":"Sheet1"},"labelMap":[{"r":9,"c":6,"label":"深圳安海华南物流有限公司\n","path":"consignee.company","party":"consignee","field":"company","line":0,"kind":"general","resolved":true}]}},{"id":"tpl_booking_mssnhsjl9u3s","name":"CHR-订舱单","kind":"booking","carrier":"CHR","status":"active","isSeed":false,"updatedAt":1786694029761,"filePath":"templates/tpl_booking_mssnhsjl9u3s.xlsx","fileSize":16994,"fileName":"CHR Shenzhen Booking Form-CHR.xlsx","mapping":{"required":[{"path":"invoiceNo","label":"委托号"},{"path":"shipper.name","label":"托运人"},{"path":"consignee.name","label":"收货人"},{"path":"pol","label":"起运港"},{"path":"pod","label":"目的港"},{"path":"freightTerms","label":"运费条款"}],"scanned":{"fields":[],"itemFields":[],"itemsRow":2,"itemHeaderMap":{"1":"lengthCm","2":"lengthCm","3":"lengthCm","4":"lengthCm","5":"lengthCm","6":"lengthCm","7":"lengthCm","8":"lengthCm","9":"lengthCm"},"sheetName":"BOOKING FORM-SEA "},"labelMap":[]}},{"id":"tpl_booking_mssnhsk4hn77","name":"DETRANS-订舱单","kind":"booking","carrier":"DETRANS","status":"active","isSeed":false,"updatedAt":1786694029780,"filePath":"templates/tpl_booking_mssnhsk4hn77.xlsx","fileSize":10597,"fileName":"DETRANS  BOOKING air -DETRANS.xlsx","mapping":{"required":[{"path":"invoiceNo","label":"委托号"},{"path":"shipper.name","label":"托运人"},{"path":"consignee.name","label":"收货人"},{"path":"pol","label":"起运港"},{"path":"pod","label":"目的港"},{"path":"freightTerms","label":"运费条款"}],"scanned":{"fields":[],"itemFields":[],"itemsRow":9,"itemHeaderMap":{"1":"heightCm","2":"heightCm","3":"heightCm","4":"heightCm","5":"heightCm","6":"heightCm","7":"heightCm","8":"heightCm","9":"no","10":"no","11":"no","12":"no","13":"no","14":"no","15":"no","16":"no"},"sheetName":"Booking Form"},"labelMap":[]}},{"id":"tpl_booking_mssnhsmd6dzv","name":"GEODIS-订舱单","kind":"booking","carrier":"GEODIS","status":"active","isSeed":false,"updatedAt":1786694029861,"filePath":"templates/tpl_booking_mssnhsmd6dzv.xlsx","fileSize":70647,"fileName":"DETRANS  BOOKING air -GEODIS.xlsx","mapping":{"required":[{"path":"invoiceNo","label":"委托号"},{"path":"shipper.name","label":"托运人"},{"path":"consignee.name","label":"收货人"},{"path":"pol","label":"起运港"},{"path":"pod","label":"目的港"},{"path":"freightTerms","label":"运费条款"}],"scanned":{"fields":[],"itemFields":[],"itemsRow":2,"itemHeaderMap":{"2":"heightCm","3":"heightCm","4":"heightCm","5":"heightCm","6":"heightCm","7":"heightCm","8":"heightCm","9":"heightCm","10":"heightCm","11":"heightCm","12":"heightCm","13":"heightCm","14":"heightCm","15":"heightCm","16":"heightCm","17":"heightCm","18":"heightCm","19":"heightCm","20":"heightCm"},"sheetName":"SHIPPING ORDER V8.0"},"labelMap":[]}},{"id":"tpl_booking_mssnhsnoyn9v","name":"KLN-订舱单","kind":"booking","carrier":"KLN","status":"active","isSeed":false,"updatedAt":1786694029908,"filePath":"templates/tpl_booking_mssnhsnoyn9v.xlsx","fileSize":119895,"fileName":"DETRANS  BOOKING air -KLN.xlsx","mapping":{"required":[{"path":"invoiceNo","label":"委托号"},{"path":"shipper.name","label":"托运人"},{"path":"consignee.name","label":"收货人"},{"path":"pol","label":"起运港"},{"path":"pod","label":"目的港"},{"path":"freightTerms","label":"运费条款"}],"scanned":{"fields":[],"itemFields":[],"itemsRow":17,"itemHeaderMap":{"1":"no","2":"no","3":"no","4":"no","5":"no","6":"no","7":"no","8":"tradeTerm","9":"tradeTerm","10":"heightCm","11":"heightCm","12":"heightCm","13":"heightCm"},"sheetName":"Booking_SI_VGM Form"},"labelMap":[]}}]}}
+{
+  "_meta": {
+    "app": "trade-docs-system",
+    "ver": "1.4.35",
+    "updatedAt": "2026-08-17T10:38:09.347Z",
+    "stores": [
+      "parties",
+      "templates"
+    ],
+    "mergedBy": "client-3way"
+  },
+  "stores": {
+    "parties": [
+      {
+        "type": "shipper",
+        "name": "A",
+        "company": "",
+        "warehouseCode": "",
+        "address": "",
+        "city": "",
+        "state": "",
+        "zip": "",
+        "tel": "",
+        "contact": "",
+        "email": "",
+        "country": "",
+        "taxNo": "",
+        "vatNo": "",
+        "eori": "",
+        "id": "msratqqi0bh2sh",
+        "createdAt": 1786612286106,
+        "updatedAt": 1786692674367,
+        "fileBufBroken": true
+      },
+      {
+        "type": "shipper",
+        "name": "JW PEI AP LIMITED",
+        "company": "",
+        "warehouseCode": "",
+        "address": "UNIT 1102 11/F，29 AUSTIN ROAD，TSIM SHA TSUI，KL，Hong Kong，CHINA",
+        "city": "HONG KONG",
+        "state": "",
+        "zip": "",
+        "tel": "",
+        "contact": "",
+        "email": "",
+        "country": "中国香港",
+        "taxNo": "",
+        "vatNo": "",
+        "eori": "",
+        "id": "msratvv8xntnni",
+        "createdAt": 1786612292756,
+        "updatedAt": 1786692893323
+      },
+      {
+        "type": "shipper",
+        "name": "井太兰（东莞）贸易有限公司",
+        "company": "",
+        "warehouseCode": "",
+        "address": "广东省东莞市厚街镇恒通路6号3栋601室",
+        "city": "",
+        "state": "",
+        "zip": "",
+        "tel": "",
+        "contact": "",
+        "email": "",
+        "country": "CN",
+        "taxNo": "",
+        "vatNo": "",
+        "eori": "",
+        "id": "mss9lqa0022dmr",
+        "createdAt": 1786670698824,
+        "updatedAt": 1786692867038
+      },
+      {
+        "type": "consignee",
+        "name": "Leading Trade One Limited",
+        "company": "",
+        "warehouseCode": "",
+        "address": "FLAT/RM1911LEEGARDEN ONE 33HYSAN AVENUE CAUSEWAY BAY, HONGKONG",
+        "city": "HONG KONG",
+        "state": "",
+        "zip": "",
+        "tel": "",
+        "contact": "",
+        "email": "",
+        "country": "HK",
+        "taxNo": "",
+        "vatNo": "",
+        "eori": "",
+        "id": "mss9m3t5ry0tmu",
+        "createdAt": 1786670716361,
+        "updatedAt": 1786692674367,
+        "fileBufBroken": true
+      },
+      {
+        "id": "p_cons_macy_s_dc_pd",
+        "type": "consignee",
+        "name": "MACY'S LOGISTICS DC (DC PD)",
+        "company": "MACY'S LOGISTICS DC",
+        "address": "1155 VAUGHN PKWY",
+        "city": "PORTLAND",
+        "state": "TN",
+        "zip": "37148",
+        "country": "US",
+        "tel": "+1 615-745-2000",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=MACY'S | 代码=DC PD",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_macy_s_dc_ok",
+        "type": "consignee",
+        "name": "MACY'S LOGISTICS DC (DC OK)",
+        "company": "MACY'S LOGISTICS DC",
+        "address": "7120 E 76TH ST N",
+        "city": "OWASSA",
+        "state": "OK",
+        "zip": "74055",
+        "country": "US",
+        "tel": "+1 918-401-2828",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=MACY'S | 代码=DC OK",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_macy_s_dc_mb",
+        "type": "consignee",
+        "name": "MACY'S LOGISTICS DC (DC MB)",
+        "company": "MACY'S LOGISTICS DC",
+        "address": "333 CAPERTON BLVD",
+        "city": "MARTINSBURG",
+        "state": "WV",
+        "zip": "25403",
+        "country": "US",
+        "tel": "+1 304-901-3100",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=MACY'S | 代码=DC MB",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_macy_s_dc_az",
+        "type": "consignee",
+        "name": "MACY'S LOGISTICS DC (DC AZ)",
+        "company": "MACY'S LOGISTICS DC",
+        "address": "16575 W COMMERCE LANE",
+        "city": "GOODYEAR",
+        "state": "AZ",
+        "zip": "85338",
+        "country": "US",
+        "tel": "+1 623-925-3600",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=MACY'S | 代码=DC AZ",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_macy_s_dc_ci",
+        "type": "consignee",
+        "name": "MACY'S LOGISTICS DC (DC CI)",
+        "company": "MACY'S LOGISTICS DC",
+        "address": "15541 EAST GATE AVE",
+        "city": "CITY OF INDUSTRY",
+        "state": "CA",
+        "zip": "91745",
+        "country": "US",
+        "tel": "+1 626-855-4142",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=MACY'S | 代码=DC CI",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_macy_s_dc_cl",
+        "type": "consignee",
+        "name": "MACY'S LOGISTICS DC (DC CL)",
+        "company": "MACY'S LOGISTICS DC",
+        "address": "601 MIDPOINT RD",
+        "city": "MINOOKA",
+        "state": "IL",
+        "zip": "60447",
+        "country": "US",
+        "tel": "+1 815-521-3533",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=MACY'S | 代码=DC CL",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_macy_s_dc_ha",
+        "type": "consignee",
+        "name": "MACY'S LOGISTICS DC (DC HA)",
+        "company": "MACY'S LOGISTICS DC",
+        "address": "28701 HALL RD",
+        "city": "HAYWARD",
+        "state": "CA",
+        "zip": "94545",
+        "country": "US",
+        "tel": "+1 510-887-7333",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=MACY'S | 代码=DC HA",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_macy_s_dc_jp",
+        "type": "consignee",
+        "name": "MACY'S LOGISTICS DC (DC JP)",
+        "company": "MACY'S LOGISTICS DC",
+        "address": "3300 FASHION WAY",
+        "city": "JOPPA",
+        "state": "MD",
+        "zip": "21085",
+        "country": "US",
+        "tel": "+1 410-612-8189",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=MACY'S | 代码=DC JP",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_macy_s_dc_sc",
+        "type": "consignee",
+        "name": "MACY'S LOGISTICS DC (DC SC)",
+        "company": "MACY'S LOGISTICS DC",
+        "address": "500 MEADOWLANDS PKWY",
+        "city": "SECAUCUS",
+        "state": "NJ",
+        "zip": "07094",
+        "country": "US",
+        "tel": "+1 201-863-3250",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=MACY'S | 代码=DC SC",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_macy_s_dc_st",
+        "type": "consignee",
+        "name": "MACY'S LOGISTICS DC (DC ST)",
+        "company": "MACY'S LOGISTICS DC",
+        "address": "4401 SARR PKWY",
+        "city": "STONE MOUNTAIN",
+        "state": "GA",
+        "zip": "30083",
+        "country": "US",
+        "tel": "+1 770-491-2211",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=MACY'S | 代码=DC ST",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_macy_s_dc_sw",
+        "type": "consignee",
+        "name": "MACY'S LOGISTICS DC (DC SW)",
+        "company": "MACY'S LOGISTICS DC",
+        "address": "301 GOVERNORS HWY",
+        "city": "S WINDSOR",
+        "state": "CT",
+        "zip": "06074",
+        "country": "US",
+        "tel": "+1 860-282-3019",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=MACY'S | 代码=DC SW",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_macy_s_dc_tm",
+        "type": "consignee",
+        "name": "MACY'S LOGISTICS DC (DC TM)",
+        "company": "MACY'S LOGISTICS DC",
+        "address": "19201 HAMISH ROAD",
+        "city": "TOMBALL",
+        "state": "TX",
+        "zip": "77377",
+        "country": "US",
+        "tel": "+1 281-803-6603",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=MACY'S | 代码=DC TM",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_macy_s_dc_tu",
+        "type": "consignee",
+        "name": "MACY'S LOGISTICS DC (DC TU)",
+        "company": "MACY'S LOGISTICS DC",
+        "address": "17000 SOUTHCENTER PKWY",
+        "city": "TUKWILA",
+        "state": "WA",
+        "zip": "98188",
+        "country": "US",
+        "tel": "+1 206-575-2060",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=MACY'S | 代码=DC TU",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_macy_s_dc_cg",
+        "type": "consignee",
+        "name": "MACY'S (DC CG)",
+        "company": "MACY'S",
+        "address": "1305 LIBERTY RIDGE RD",
+        "city": "CHINA GROVE",
+        "state": "NC",
+        "zip": "28023",
+        "country": "US",
+        "tel": "",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=MACY'S | 代码=DC CG",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_macy_s_dc_dv",
+        "type": "consignee",
+        "name": "MACY'S LOGISTICS DC (DC DV)",
+        "company": "MACY'S LOGISTICS DC",
+        "address": "510 E 51ST AVE",
+        "city": "DENVER",
+        "state": "CO",
+        "zip": "80216",
+        "country": "US",
+        "tel": "",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=MACY'S | 代码=DC DV",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_macy_s_dc_bn",
+        "type": "consignee",
+        "name": "MACY'S LOGISTICS DC (DC BN)",
+        "company": "MACY'S LOGISTICS DC",
+        "address": "270 DANIELS WAY",
+        "city": "BURLINGTON",
+        "state": "NJ",
+        "zip": "08016",
+        "country": "US",
+        "tel": "",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=MACY'S | 代码=DC BN",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_nordstrom_ship_to_569",
+        "type": "consignee",
+        "name": "NORDSTROM FC (SHIP TO 569)",
+        "company": "NORDSTROM FC",
+        "address": "30 DISTRIBUTION DR",
+        "city": "ELIZABETHTOWN",
+        "state": "PA",
+        "zip": "17022",
+        "country": "US",
+        "tel": "+1 717-366-1300",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=NORDSTROM线上 | 代码=SHIP TO 569",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_nordstrom_ship_to_584",
+        "type": "consignee",
+        "name": "NORDSTROM INVENTORY (SHIP TO 584)",
+        "company": "NORDSTROM INVENTORY",
+        "address": "490 COLUMBIA AVE",
+        "city": "RIVERSIDE",
+        "state": "CA",
+        "zip": "92507",
+        "country": "US",
+        "tel": "+1 951-892-7140",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=NORDSTROM线上 | 代码=SHIP TO 584",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_nordstrom_ship_to_599",
+        "type": "consignee",
+        "name": "NORDSTROM FC (SHIP TO 599)",
+        "company": "NORDSTROM FC",
+        "address": "7700 18TH ST SW",
+        "city": "CEDAR RAPIDS",
+        "state": "IA",
+        "zip": "52404",
+        "country": "US",
+        "tel": "+1 319-846-4000",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=NORDSTROM线上 | 代码=SHIP TO 599",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_nordstrom_ship_to_89",
+        "type": "consignee",
+        "name": "NORDSTROM DC (SHIP TO 89)",
+        "company": "NORDSTROM DC",
+        "address": "5703 N MARINE DR",
+        "city": "PORTLAND",
+        "state": "OR",
+        "zip": "97203",
+        "country": "US",
+        "tel": "+1 503-240-6071",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=NORDSTROM线下 | 代码=SHIP TO 89",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_nordstrom_ship_to_299",
+        "type": "consignee",
+        "name": "NORDSTROM DC (SHIP TO 299)",
+        "company": "NORDSTROM DC",
+        "address": "5050 CHAVENELLE DR",
+        "city": "DUBUQUE",
+        "state": "IA",
+        "zip": "52002",
+        "country": "US",
+        "tel": "+1 563-556-4050",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=NORDSTROM线下 | 代码=SHIP TO 299",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_nordstrom_ship_to_399",
+        "type": "consignee",
+        "name": "NORDSTROM DC (SHIP TO 399)",
+        "company": "NORDSTROM DC",
+        "address": "1600 S MILLIKEN AVE",
+        "city": "ONTARIO",
+        "state": "CA",
+        "zip": "91761",
+        "country": "US",
+        "tel": "+1 909-390-1040",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=NORDSTROM线下 | 代码=SHIP TO 399",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_nordstrom_ship_to_499",
+        "type": "consignee",
+        "name": "NORDSTROM DC (SHIP TO 499)",
+        "company": "NORDSTROM DC",
+        "address": "37599 FILBERT ST",
+        "city": "NEWARK",
+        "state": "CA",
+        "zip": "94560",
+        "country": "US",
+        "tel": "+1 510-794-5440",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=NORDSTROM线下 | 代码=SHIP TO 499",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_nordstrom_ship_to_699",
+        "type": "consignee",
+        "name": "NORDSTROM DC (SHIP TO 699)",
+        "company": "NORDSTROM DC",
+        "address": "839 COMMERCE DR",
+        "city": "UPPER MARLBORO",
+        "state": "MD",
+        "zip": "20774",
+        "country": "US",
+        "tel": "+1 301-390-7800",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=NORDSTROM线下 | 代码=SHIP TO 699",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_nordstrom_ship_to_799",
+        "type": "consignee",
+        "name": "NORDSTROM DC (SHIP TO 799)",
+        "company": "NORDSTROM DC",
+        "address": "5497 NE 49TH TERRACE",
+        "city": "GAINESVILLE",
+        "state": "FL",
+        "zip": "32609",
+        "country": "US",
+        "tel": "+1 352-384-2111",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=NORDSTROM线下 | 代码=SHIP TO 799",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_anthropologies_wedding_kansas_city_kansas_fulfillment_center_kc1",
+        "type": "consignee",
+        "name": "Kansas City, Kansas Fulfillment Center (KC1)",
+        "company": "Kansas City, Kansas Fulfillment Center (KC1)",
+        "address": "11681 State Avenue",
+        "city": "Kansas City",
+        "state": "KS",
+        "zip": "66111",
+        "country": "US",
+        "tel": "+1 913-980-7216",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=Anthropologies&Wedding | 代码=Kansas City, Kansas Fulfillment Center (KC1)",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_anthropologies_wedding_gap_direct_fc_gfc",
+        "type": "consignee",
+        "name": "Gap Direct FC (GFC)",
+        "company": "Gap Direct FC (GFC)",
+        "address": "766 Brackbill Rd.",
+        "city": "Gap",
+        "state": "PA",
+        "zip": "17527",
+        "country": "US",
+        "tel": "+1 717-442-1000",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=Anthropologies&Wedding | 代码=Gap Direct FC (GFC)",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_anthropologies_wedding_reno_direct_fc_rno",
+        "type": "consignee",
+        "name": "Reno Direct FC (RNO)",
+        "company": "Reno Direct FC (RNO)",
+        "address": "12055 Moya Blvd.",
+        "city": "Reno",
+        "state": "NV",
+        "zip": "89506",
+        "country": "US",
+        "tel": "+1 775-971-1362",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=Anthropologies&Wedding | 代码=Reno Direct FC (RNO)",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_anthropologies_wedding_reno_retail_dc_ren",
+        "type": "consignee",
+        "name": "Reno Retail DC (REN)",
+        "company": "Reno Retail DC (REN)",
+        "address": "6640 Echo Ave.",
+        "city": "Reno",
+        "state": "NV",
+        "zip": "89506",
+        "country": "US",
+        "tel": "+1 775-971-1316",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=Anthropologies&Wedding | 代码=Reno Retail DC (REN)",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_anthropologies_wedding_gap_retail_dc_gap",
+        "type": "consignee",
+        "name": "Gap Retail DC (GAP)",
+        "company": "Gap Retail DC (GAP)",
+        "address": "755 Brackbill Rd.",
+        "city": "Gap",
+        "state": "PA",
+        "zip": "17527",
+        "country": "US",
+        "tel": "+1 717-442-1218",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=Anthropologies&Wedding | 代码=Gap Retail DC (GAP)",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_nordstrom_rack_ship_to_0562",
+        "type": "consignee",
+        "name": "NORDSTROM FC (SHIP TO 0562)",
+        "company": "NORDSTROM FC",
+        "address": "30 DISTRIBUTION DR",
+        "city": "ELIZABETHTOWN",
+        "state": "PA",
+        "zip": "17022",
+        "country": "US",
+        "tel": "+1 717-366-1300",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=Nordstrom Rack | 代码=SHIP TO 0562",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      },
+      {
+        "id": "p_cons_nordstrom_rack_ship_to_5629",
+        "type": "consignee",
+        "name": "NORDSTROM FC (SHIP TO 5629)",
+        "company": "NORDSTROM FC",
+        "address": "490 COLUMBIA AVE",
+        "city": "RIVERSIDE",
+        "state": "CA",
+        "zip": "92507",
+        "country": "US",
+        "tel": "",
+        "contact": "",
+        "email": "",
+        "remark": "品牌=Nordstrom Rack | 代码=SHIP TO 5629",
+        "isSeed": false,
+        "updatedAt": "2026-08-17T10:38:09.347Z"
+      }
+    ],
+    "templates": [
+      {
+        "id": "tpl_msecxi8k_68l223",
+        "name": "中运通达-发票模板",
+        "kind": "invoice",
+        "carrier": "中运通达",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1786692697792,
+        "filePath": "templates/tpl_msecxi8k_68l223.xlsx",
+        "fileSize": 16628,
+        "fileBufBroken": true,
+        "createdAt": 1786673194761,
+        "fileName": "中运通达-发票模板.xlsx",
+        "mapping": {
+          "required": [
+            {
+              "path": "invoiceNo",
+              "label": "发票号",
+              "fileBufBroken": true
+            },
+            {
+              "path": "invoiceDate",
+              "label": "发票日期",
+              "fileBufBroken": true
+            },
+            {
+              "path": "shipper.name",
+              "label": "SHIPPER名称",
+              "fileBufBroken": true
+            },
+            {
+              "path": "consignee.name",
+              "label": "CONSIGNEE名称",
+              "fileBufBroken": true
+            },
+            {
+              "path": "incoterms",
+              "label": "贸易条款",
+              "fileBufBroken": true
+            },
+            {
+              "path": "pol",
+              "label": "起运港",
+              "fileBufBroken": true
+            },
+            {
+              "path": "pod",
+              "label": "目的港",
+              "fileBufBroken": true
+            },
+            {
+              "path": "currency",
+              "label": "币种",
+              "fileBufBroken": true
+            }
+          ],
+          "scanned": {
+            "fields": [],
+            "itemFields": [],
+            "itemsRow": 21,
+            "itemHeaderMap": {
+              "1": "no",
+              "3": "gw",
+              "4": "lengthCm",
+              "5": "widthCm",
+              "6": "heightCm",
+              "7": "nameCn",
+              "8": "nameEn",
+              "9": "qty",
+              "10": "gw",
+              "11": "lengthCm",
+              "12": "hsCode",
+              "13": "material",
+              "14": "usage",
+              "15": "electrified",
+              "16": "magnetic",
+              "17": "imageUrl",
+              "18": "productLink",
+              "19": "productPrice",
+              "21": "batteryType",
+              "22": "brand",
+              "23": "model",
+              "24": "singleNw",
+              "25": "nw",
+              "26": "currency",
+              "27": "origin"
+            },
+            "sheetName": "多个订单可以建立多个sheet"
+          },
+          "labelMap": [
+            {
+              "r": 2,
+              "c": 1,
+              "label": "客户订单号(FBA号)",
+              "path": "orderNos",
+              "party": null,
+              "field": null,
+              "line": 0,
+              "kind": "general",
+              "resolved": true,
+              "fileBufBroken": true
+            },
+            {
+              "r": 3,
+              "c": 1,
+              "label": "运输方式",
+              "path": "transport",
+              "party": null,
+              "field": null,
+              "line": 0,
+              "kind": "general",
+              "resolved": true,
+              "fileBufBroken": true
+            },
+            {
+              "r": 5,
+              "c": 1,
+              "label": "收件人(仓库代码)",
+              "path": "consignee.warehouseCode",
+              "party": "consignee",
+              "field": "warehouseCode",
+              "line": 0,
+              "kind": "general",
+              "resolved": true,
+              "fileBufBroken": true
+            },
+            {
+              "r": 6,
+              "c": 1,
+              "label": "收件人公司",
+              "path": "consignee.company",
+              "party": "consignee",
+              "field": "company",
+              "line": 0,
+              "kind": "party",
+              "resolved": true,
+              "fileBufBroken": true
+            },
+            {
+              "r": 11,
+              "c": 1,
+              "label": "收件电话",
+              "path": "consignee.tel",
+              "party": "consignee",
+              "field": "tel",
+              "line": 0,
+              "kind": "party",
+              "resolved": true,
+              "fileBufBroken": true
+            },
+            {
+              "r": 12,
+              "c": 1,
+              "label": "邮编",
+              "path": "consignee.zip",
+              "party": "consignee",
+              "field": "zip",
+              "line": 0,
+              "kind": "general",
+              "resolved": true,
+              "fileBufBroken": true
+            },
+            {
+              "r": 15,
+              "c": 1,
+              "label": "VAT号",
+              "path": "consignee.vatNo",
+              "party": "consignee",
+              "field": "vatNo",
+              "line": 0,
+              "kind": "general",
+              "resolved": true,
+              "fileBufBroken": true
+            },
+            {
+              "r": 16,
+              "c": 1,
+              "label": "EORI",
+              "path": "consignee.eori",
+              "party": "consignee",
+              "field": "eori",
+              "line": 0,
+              "kind": "general",
+              "resolved": true,
+              "fileBufBroken": true
+            }
+          ],
+          "fileBufBroken": true
+        }
+      },
+      {
+        "id": "tpl_msecxi8l_djdtsn",
+        "name": "云途-B2B模板",
+        "kind": "invoice",
+        "carrier": "云途",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1786692677681,
+        "filePath": "templates/tpl_msecxi8l_djdtsn.xlsx",
+        "fileSize": 122262,
+        "fileBufBroken": true,
+        "createdAt": 1786673194761,
+        "fileName": "云途-B2B发票模板.xlsx",
+        "mapping": {
+          "required": [
+            {
+              "path": "invoiceNo",
+              "label": "发票号",
+              "fileBufBroken": true
+            },
+            {
+              "path": "invoiceDate",
+              "label": "发票日期",
+              "fileBufBroken": true
+            },
+            {
+              "path": "shipper.name",
+              "label": "SHIPPER名称",
+              "fileBufBroken": true
+            },
+            {
+              "path": "consignee.name",
+              "label": "CONSIGNEE名称",
+              "fileBufBroken": true
+            },
+            {
+              "path": "incoterms",
+              "label": "贸易条款",
+              "fileBufBroken": true
+            },
+            {
+              "path": "pol",
+              "label": "起运港",
+              "fileBufBroken": true
+            },
+            {
+              "path": "pod",
+              "label": "目的港",
+              "fileBufBroken": true
+            },
+            {
+              "path": "currency",
+              "label": "币种",
+              "fileBufBroken": true
+            }
+          ],
+          "scanned": {
+            "fields": [],
+            "itemFields": [],
+            "itemsRow": 2,
+            "itemHeaderMap": {
+              "3": "destCountry",
+              "22": "magnetic",
+              "23": "electrified",
+              "24": "boxNo",
+              "27": "lengthCm",
+              "28": "widthCm",
+              "29": "heightCm",
+              "30": "singleGw",
+              "31": "nameEn",
+              "32": "nameEn",
+              "33": "qty",
+              "34": "qty",
+              "35": "price",
+              "36": "currency",
+              "38": "hsCode",
+              "39": "material",
+              "40": "brand",
+              "41": "model",
+              "42": "usage",
+              "44": "remark",
+              "fileBufBroken": true
+            },
+            "sheetName": "批量下单",
+            "fileBufBroken": true
+          },
+          "labelMap": [],
+          "fileBufBroken": true
+        }
+      },
+      {
+        "id": "tpl_msecxi8l_kci4s4",
+        "name": "买单要素模板",
+        "kind": "invoice",
+        "carrier": "买单",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1786692677681,
+        "filePath": "templates/tpl_msecxi8l_kci4s4.xlsx",
+        "fileSize": 264562,
+        "fileBufBroken": true,
+        "createdAt": 1786673194761,
+        "fileName": "买单要素模板-发票模板.xlsx",
+        "mapping": {
+          "required": [
+            {
+              "path": "invoiceNo",
+              "label": "发票号",
+              "fileBufBroken": true
+            },
+            {
+              "path": "invoiceDate",
+              "label": "发票日期",
+              "fileBufBroken": true
+            },
+            {
+              "path": "shipper.name",
+              "label": "SHIPPER名称",
+              "fileBufBroken": true
+            },
+            {
+              "path": "consignee.name",
+              "label": "CONSIGNEE名称",
+              "fileBufBroken": true
+            },
+            {
+              "path": "incoterms",
+              "label": "贸易条款",
+              "fileBufBroken": true
+            },
+            {
+              "path": "pol",
+              "label": "起运港",
+              "fileBufBroken": true
+            },
+            {
+              "path": "pod",
+              "label": "目的港",
+              "fileBufBroken": true
+            },
+            {
+              "path": "currency",
+              "label": "币种",
+              "fileBufBroken": true
+            }
+          ],
+          "scanned": {
+            "fields": [],
+            "itemFields": [],
+            "itemsRow": 5,
+            "itemHeaderMap": {
+              "1": "nameCn",
+              "2": "qty",
+              "3": "price",
+              "4": "brand",
+              "5": "model",
+              "11": "material",
+              "12": "nw",
+              "13": "gw",
+              "14": "boxCount",
+              "15": "sku",
+              "16": "usage",
+              "17": "usage",
+              "18": "brand",
+              "fileBufBroken": true
+            },
+            "sheetName": "Sheet1",
+            "fileBufBroken": true
+          },
+          "labelMap": [
+            {
+              "r": 2,
+              "c": 4,
+              "label": "起运国",
+              "path": "pol",
+              "party": null,
+              "field": null,
+              "line": 0,
+              "kind": "general",
+              "resolved": true,
+              "fileBufBroken": true
+            },
+            {
+              "r": 2,
+              "c": 7,
+              "label": "总包装件数：",
+              "path": "totals.boxCount",
+              "party": null,
+              "field": null,
+              "line": 0,
+              "kind": "general",
+              "resolved": true,
+              "fileBufBroken": true
+            },
+            {
+              "r": 2,
+              "c": 11,
+              "label": "总毛重：\n（如卡板包装，需加卡板重量）",
+              "path": "totals.gw",
+              "party": null,
+              "field": null,
+              "line": 0,
+              "kind": "general",
+              "resolved": true,
+              "fileBufBroken": true
+            },
+            {
+              "r": 2,
+              "c": 16,
+              "label": "申报总价值",
+              "path": "totals.amount",
+              "party": null,
+              "field": null,
+              "line": 0,
+              "kind": "general",
+              "resolved": true,
+              "fileBufBroken": true
+            }
+          ],
+          "fileBufBroken": true
+        }
+      },
+      {
+        "id": "tpl_msecxi8m_8py8vf",
+        "name": "云途-单票申报信息模板(B2B)",
+        "kind": "declare",
+        "carrier": "云途",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1786692677681,
+        "filePath": "templates/tpl_msecxi8m_8py8vf.xlsx",
+        "fileSize": 68346,
+        "fileBufBroken": true,
+        "createdAt": 1786673194761
+      },
+      {
+        "id": "tpl_msecxi8m_bpvzhv",
+        "name": "亚丰-发票模板",
+        "kind": "invoice",
+        "carrier": "亚丰",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1786692677681,
+        "filePath": "templates/tpl_msecxi8m_bpvzhv.xlsx",
+        "fileSize": 51556,
+        "fileBufBroken": true,
+        "createdAt": 1786673194761
+      },
+      {
+        "id": "tpl_msecxi8m_f1uv94",
+        "name": "亚丰-海运发票最新模板",
+        "kind": "invoice",
+        "carrier": "海运",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1786692677681,
+        "filePath": "templates/tpl_msecxi8m_f1uv94.xlsx",
+        "fileSize": 68294,
+        "fileBufBroken": true,
+        "createdAt": 1786673194761
+      },
+      {
+        "id": "tpl_msecxi8m_ulv90a",
+        "name": "装箱单 格式",
+        "kind": "packing",
+        "carrier": "通用",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1786692677681,
+        "filePath": "templates/tpl_msecxi8m_ulv90a.xlsx",
+        "fileSize": 17708,
+        "fileBufBroken": true,
+        "createdAt": 1786673194761
+      },
+      {
+        "id": "tpl_booking_mssnhsirnhzg",
+        "name": "Aramex-订舱单",
+        "kind": "booking",
+        "carrier": "Aramex",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1786694029731,
+        "filePath": "templates/tpl_booking_mssnhsirnhzg.xlsx",
+        "fileSize": 16004,
+        "fileName": "Aramex  Booking Form-Aramex.xlsx",
+        "mapping": {
+          "required": [
+            {
+              "path": "invoiceNo",
+              "label": "委托号"
+            },
+            {
+              "path": "shipper.name",
+              "label": "托运人"
+            },
+            {
+              "path": "consignee.name",
+              "label": "收货人"
+            },
+            {
+              "path": "pol",
+              "label": "起运港"
+            },
+            {
+              "path": "pod",
+              "label": "目的港"
+            },
+            {
+              "path": "freightTerms",
+              "label": "运费条款"
+            }
+          ],
+          "scanned": {
+            "fields": [],
+            "itemFields": [],
+            "itemsRow": 4,
+            "itemHeaderMap": {
+              "1": "no",
+              "2": "no",
+              "3": "no",
+              "4": "no",
+              "5": "no",
+              "6": "no",
+              "7": "no",
+              "8": "no",
+              "9": "no",
+              "10": "no",
+              "11": "no"
+            },
+            "sheetName": "Sheet1"
+          },
+          "labelMap": []
+        }
+      },
+      {
+        "id": "tpl_booking_mssnhsj6ni6f",
+        "name": "ANHAI-订舱单",
+        "kind": "booking",
+        "carrier": "ANHAI",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1786694029746,
+        "filePath": "templates/tpl_booking_mssnhsj6ni6f.xlsx",
+        "fileSize": 8241,
+        "fileName": "BOOKING  FORM-ANHAI.xlsx",
+        "mapping": {
+          "required": [
+            {
+              "path": "invoiceNo",
+              "label": "委托号"
+            },
+            {
+              "path": "shipper.name",
+              "label": "托运人"
+            },
+            {
+              "path": "consignee.name",
+              "label": "收货人"
+            },
+            {
+              "path": "pol",
+              "label": "起运港"
+            },
+            {
+              "path": "pod",
+              "label": "目的港"
+            },
+            {
+              "path": "freightTerms",
+              "label": "运费条款"
+            }
+          ],
+          "scanned": {
+            "fields": [],
+            "itemFields": [],
+            "itemsRow": 11,
+            "itemHeaderMap": {
+              "6": "lengthCm",
+              "7": "lengthCm",
+              "8": "lengthCm",
+              "9": "lengthCm"
+            },
+            "sheetName": "Sheet1"
+          },
+          "labelMap": [
+            {
+              "r": 9,
+              "c": 6,
+              "label": "深圳安海华南物流有限公司\n",
+              "path": "consignee.company",
+              "party": "consignee",
+              "field": "company",
+              "line": 0,
+              "kind": "general",
+              "resolved": true
+            }
+          ]
+        }
+      },
+      {
+        "id": "tpl_booking_mssnhsjl9u3s",
+        "name": "CHR-订舱单",
+        "kind": "booking",
+        "carrier": "CHR",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1786694029761,
+        "filePath": "templates/tpl_booking_mssnhsjl9u3s.xlsx",
+        "fileSize": 16994,
+        "fileName": "CHR Shenzhen Booking Form-CHR.xlsx",
+        "mapping": {
+          "required": [
+            {
+              "path": "invoiceNo",
+              "label": "委托号"
+            },
+            {
+              "path": "shipper.name",
+              "label": "托运人"
+            },
+            {
+              "path": "consignee.name",
+              "label": "收货人"
+            },
+            {
+              "path": "pol",
+              "label": "起运港"
+            },
+            {
+              "path": "pod",
+              "label": "目的港"
+            },
+            {
+              "path": "freightTerms",
+              "label": "运费条款"
+            }
+          ],
+          "scanned": {
+            "fields": [],
+            "itemFields": [],
+            "itemsRow": 2,
+            "itemHeaderMap": {
+              "1": "lengthCm",
+              "2": "lengthCm",
+              "3": "lengthCm",
+              "4": "lengthCm",
+              "5": "lengthCm",
+              "6": "lengthCm",
+              "7": "lengthCm",
+              "8": "lengthCm",
+              "9": "lengthCm"
+            },
+            "sheetName": "BOOKING FORM-SEA "
+          },
+          "labelMap": []
+        }
+      },
+      {
+        "id": "tpl_booking_mssnhsk4hn77",
+        "name": "DETRANS-订舱单",
+        "kind": "booking",
+        "carrier": "DETRANS",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1786694029780,
+        "filePath": "templates/tpl_booking_mssnhsk4hn77.xlsx",
+        "fileSize": 10597,
+        "fileName": "DETRANS  BOOKING air -DETRANS.xlsx",
+        "mapping": {
+          "required": [
+            {
+              "path": "invoiceNo",
+              "label": "委托号"
+            },
+            {
+              "path": "shipper.name",
+              "label": "托运人"
+            },
+            {
+              "path": "consignee.name",
+              "label": "收货人"
+            },
+            {
+              "path": "pol",
+              "label": "起运港"
+            },
+            {
+              "path": "pod",
+              "label": "目的港"
+            },
+            {
+              "path": "freightTerms",
+              "label": "运费条款"
+            }
+          ],
+          "scanned": {
+            "fields": [],
+            "itemFields": [],
+            "itemsRow": 9,
+            "itemHeaderMap": {
+              "1": "heightCm",
+              "2": "heightCm",
+              "3": "heightCm",
+              "4": "heightCm",
+              "5": "heightCm",
+              "6": "heightCm",
+              "7": "heightCm",
+              "8": "heightCm",
+              "9": "no",
+              "10": "no",
+              "11": "no",
+              "12": "no",
+              "13": "no",
+              "14": "no",
+              "15": "no",
+              "16": "no"
+            },
+            "sheetName": "Booking Form"
+          },
+          "labelMap": []
+        }
+      },
+      {
+        "id": "tpl_booking_mssnhsmd6dzv",
+        "name": "GEODIS-订舱单",
+        "kind": "booking",
+        "carrier": "GEODIS",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1786694029861,
+        "filePath": "templates/tpl_booking_mssnhsmd6dzv.xlsx",
+        "fileSize": 70647,
+        "fileName": "DETRANS  BOOKING air -GEODIS.xlsx",
+        "mapping": {
+          "required": [
+            {
+              "path": "invoiceNo",
+              "label": "委托号"
+            },
+            {
+              "path": "shipper.name",
+              "label": "托运人"
+            },
+            {
+              "path": "consignee.name",
+              "label": "收货人"
+            },
+            {
+              "path": "pol",
+              "label": "起运港"
+            },
+            {
+              "path": "pod",
+              "label": "目的港"
+            },
+            {
+              "path": "freightTerms",
+              "label": "运费条款"
+            }
+          ],
+          "scanned": {
+            "fields": [],
+            "itemFields": [],
+            "itemsRow": 2,
+            "itemHeaderMap": {
+              "2": "heightCm",
+              "3": "heightCm",
+              "4": "heightCm",
+              "5": "heightCm",
+              "6": "heightCm",
+              "7": "heightCm",
+              "8": "heightCm",
+              "9": "heightCm",
+              "10": "heightCm",
+              "11": "heightCm",
+              "12": "heightCm",
+              "13": "heightCm",
+              "14": "heightCm",
+              "15": "heightCm",
+              "16": "heightCm",
+              "17": "heightCm",
+              "18": "heightCm",
+              "19": "heightCm",
+              "20": "heightCm"
+            },
+            "sheetName": "SHIPPING ORDER V8.0"
+          },
+          "labelMap": []
+        }
+      },
+      {
+        "id": "tpl_booking_mssnhsnoyn9v",
+        "name": "KLN-订舱单",
+        "kind": "booking",
+        "carrier": "KLN",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1786694029908,
+        "filePath": "templates/tpl_booking_mssnhsnoyn9v.xlsx",
+        "fileSize": 119895,
+        "fileName": "DETRANS  BOOKING air -KLN.xlsx",
+        "mapping": {
+          "required": [
+            {
+              "path": "invoiceNo",
+              "label": "委托号"
+            },
+            {
+              "path": "shipper.name",
+              "label": "托运人"
+            },
+            {
+              "path": "consignee.name",
+              "label": "收货人"
+            },
+            {
+              "path": "pol",
+              "label": "起运港"
+            },
+            {
+              "path": "pod",
+              "label": "目的港"
+            },
+            {
+              "path": "freightTerms",
+              "label": "运费条款"
+            }
+          ],
+          "scanned": {
+            "fields": [],
+            "itemFields": [],
+            "itemsRow": 17,
+            "itemHeaderMap": {
+              "1": "no",
+              "2": "no",
+              "3": "no",
+              "4": "no",
+              "5": "no",
+              "6": "no",
+              "7": "no",
+              "8": "tradeTerm",
+              "9": "tradeTerm",
+              "10": "heightCm",
+              "11": "heightCm",
+              "12": "heightCm",
+              "13": "heightCm"
+            },
+            "sheetName": "Booking_SI_VGM Form"
+          },
+          "labelMap": []
+        }
+      }
+    ]
+  }
+}
