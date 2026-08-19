@@ -1810,12 +1810,31 @@
             if (settled) return;
             if (!r.ok) { settled = true; clearTimeout(timer); res({ ok: false, err: 'http' + r.status, nextIdx: i + 1 }); return; }
             return r.arrayBuffer();
-          }).then(function (buf) {
+          }).then(async function (buf) {
             if (settled || buf === undefined) return;
             settled = true; clearTimeout(timer);
             var u8 = (buf instanceof Uint8Array) ? buf : new Uint8Array(buf);
             // v1.5.50 真图校验：假图（HTML 错误页）直接判失败，跳到下一个镜像候选，不嵌坏图
-            if (!isRealImage(u8)) { res({ ok: false, err: 'not-image', nextIdx: i + 1 }); return; }
+            if (!isRealImage(u8)) {
+              // v1.6.2 兜底：webp 伪装文件（扩展名 .jpeg/.png 但内容实为 RIFF/WebP）→ 浏览器端 canvas 实时转 jpeg 再嵌
+              //   根因：线上 sku_thumb 历史上混入 webp 伪装（恢复 git 历史 blob 时引入），engine 此前判 not-image 失败导致导出缺图。
+              //   ExcelJS 不支持 webp extension，但浏览器 createImageBitmap 支持 webp 解码+canvas→jpeg，
+              //   故在浏览器端即时转码，不动任何图片文件，零存储修复（如 8T117-31 即可恢复导出）。
+              if (typeof createImageBitmap !== 'undefined' && u8[0] === 0x52 && u8[1] === 0x49 && u8[2] === 0x46 && u8[3] === 0x46) {
+                try {
+                  var blob = new Blob([u8]);
+                  var bm = await createImageBitmap(blob);
+                  var c = document.createElement('canvas');
+                  c.width = bm.width; c.height = bm.height;
+                  c.getContext('2d').drawImage(bm, 0, 0);
+                  var jb = await new Promise(function (res2) { c.toBlob(res2, 'image/jpeg', 0.9); });
+                  u8 = new Uint8Array(await jb.arrayBuffer());
+                  t.extension = 'jpeg';
+                } catch (e) { res({ ok: false, err: 'webp-decode-fail', nextIdx: i + 1 }); return; }
+              } else {
+                res({ ok: false, err: 'not-image', nextIdx: i + 1 }); return;
+              }
+            }
             _imgCache[t.sku] = u8;
             applyImg(wb, ws, t, u8);
             res({ ok: true });
