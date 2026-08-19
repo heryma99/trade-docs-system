@@ -1567,16 +1567,37 @@
         var MAP = {};
         try {
           if (typeof window !== 'undefined') {
-            var idxA = window.SKU_IMAGE_INDEX || {};
-            // v1.5.50 修复：idxA[ka] 已是完整相对路径（如 "images/sku_thumb/104-1_4.jpeg"），
-            // 旧代码又拼了一次 "images/sku_thumb/" 造成路径重复 → fetch 全 404 → 导出全空白。
-            // 现直接用 idxA[ka] 作同域相对路径，并补 GitHub Pages 绝对路径 / raw.github 两个兜底候选。
+            // v1.5.50 修复：本地索引已是完整相对路径（如 "images/sku_thumb/104-1_4.jpeg"），禁止再拼前缀。
+            var localIdx = window.SKU_IMAGE_INDEX || {};
+            // v1.6.1 远程 URL 索引：飞书表 N 列商品图链接（Shopify/阿里 CDN 等，已实测 ACAO=* 可跨域 fetch）
+            var urlIdx = window.SKU_IMAGE_URL_INDEX || {};
             var GH_PAGES = 'https://heryma99.github.io/trade-docs-system/';
             var RAW = 'https://raw.githubusercontent.com/heryma99/trade-docs-system/main/';
-            for (var ka in idxA) {
-              var relA = idxA[ka];                       // 已是相对路径，禁止再拼前缀
+            var JSDELIVR = 'https://cdn.jsdelivr.net/gh/heryma99/trade-docs-system@main/';
+            var CS_DOMAIN = (typeof location!=='undefined' && location.hostname.indexOf('app.workbuddy.link')!==-1)
+              ? './'   // 当前就在 CloudStudio 镜像内, 用同域相对路径(必命中且最快)
+              : 'https://a2012d426ebf40b8906cfe5f338c7516.app.workbuddy.link/';
+            // v1.6.1 远程优先：候选链 = [远程URL] + [同 SKU 本地 sku_thumb 镜像](本地有则兜底)。
+            //   少数 http://(https页混合内容)、需鉴权(飞书内部流401)、无 CORS(个别 host) 的远程链接，
+            //   会在 fetch 失败后自然落到本地兜底候选，最大覆盖、绝不错图。
+            for (var ku in urlIdx) {
+              var ru = urlIdx[ku];
+              if (!ru || !/^https?:/.test(ru)) continue;
+              var lrel = localIdx[ku];
+              var chain = [ru];
+              if (lrel && lrel.indexOf('images/') === 0) {
+                chain.push(lrel, GH_PAGES + lrel, JSDELIVR + lrel, RAW + lrel, CS_DOMAIN + lrel);
+              }
+              MAP[ku] = chain;
+            }
+            // 本地索引兜底：远程索引没有的 sku 沿用原有候选链
+            // 候选链优先级(同域→GH Pages→jsDelivr CDN→Statically CDN→raw→CloudStudio),
+            // 全部走完才记为取图失败; 每个候选内部还会重试, 不轻易放弃。
+            for (var ka in localIdx) {
+              var relA = localIdx[ka];                       // 已是相对路径，禁止再拼前缀
               if (!relA || relA.indexOf('images/') !== 0) continue;
-              MAP[ka] = [relA, GH_PAGES + relA, RAW + relA];
+              if (MAP[ka]) continue;
+              MAP[ka] = [relA, GH_PAGES + relA, JSDELIVR + relA, RAW + relA, CS_DOMAIN + relA];
             }
           }
         } catch (e) {}
@@ -1737,6 +1758,22 @@
           (function (el) { setTimeout(function () { if (el && el.parentNode) el.parentNode.removeChild(el); }, failCount ? 6000 : 1800); })(progEl);
         }
         diag.done = true; diag.failed = failedSkus;
+        // v1.5.53 诊断增强：把失败 SKU 按「图库缺图(missing)」vs「网络/CORS 拦截(network)」分类。
+        // 依据：window.__embDiagFail[sku] 形如 "host@err → host@err → ..."，
+        //   若所有候选均为 http4xx(典型 404) ⇒ 图库确实无此文件(missing)；
+        //   否则存在 timeout/fetch-err/not-image ⇒ 图可能线上有、但浏览器取不到(network)。
+        // UI 据此一眼区分"是没图还是网络卡"，不再笼统写"网络不可达"误导用户。
+        try {
+          diag.failDetail = {};
+          for (var _fi = 0; _fi < failedSkus.length; _fi++) {
+            var _fsku = String(failedSkus[_fi]);
+            var _raw = (typeof window !== 'undefined' && window.__embDiagFail && window.__embDiagFail[_fsku]) || '';
+            var _parts = _raw.split(' → ').filter(Boolean);
+            var _errs = _parts.map(function (p) { var m = /@(.+)$/.exec(p); return m ? m[1] : 'fail'; });
+            var _all404 = _errs.length > 0 && _errs.every(function (e) { return /^http4\d\d$/.test(e); });
+            diag.failDetail[_fsku] = { type: _all404 ? 'missing' : 'network', codes: _errs.slice(0, 6) };
+          }
+        } catch (e) {}
         try { wb._productImagesEmbedded = true; } catch (e) {}
         resolve();
       } catch (e) { diag.err = String(e && e.stack || e); if (typeof console !== 'undefined') console.error('[emb-err]', e); diag.done = true; resolve(); }
@@ -1789,23 +1826,31 @@
           });
         });
       }
-      // 链式：同域相对 → GitHub Pages 绝对 → raw.github（v1.5.50 全部候选都试，首个真图即止）
+      // v1.5.52 候选链：每候选独立超时(按其在 MAP 中的优先级), 单候选失败重试 1 次(退避),
+      // 全部候选穷尽才记失败。超时大幅放宽(同域/GH 30s, CDN 15s, raw 45s), 不再因限流/抖动轻易放弃。
+      var PLAN_MS = [30000, 30000, 15000, 45000, 30000];
       var plan = [];
       for (var ri = 0; ri < rels.length; ri++) {
-        plan.push({ url: rels[ri], ms: (ri === 0 ? (TIMEOUT_SAMEORIGIN || 12000) : (TIMEOUT_RAW || 20000)) });
+        plan.push({ url: rels[ri], ms: PLAN_MS[ri] || 20000 });
       }
-      function step(i, p) {
+      function step(i, p, attempt) {
+        attempt = attempt || 0;
         if (i >= plan.length) { resolve(false); return; }
         fetchOne(p.url, p.ms, i).then(function (r) {
           if (r.ok) { resolve(true); return; }
-          // 失败：推进到下一个候选
+          // 诊断：记录每个失败候选
           if (typeof window !== 'undefined') {
             try { if (!window.__embDiagFail) window.__embDiagFail = {}; window.__embDiagFail[t.sku] = (window.__embDiagFail[t.sku] || '') + (plan[i].url.replace(/^https?:\/\//, '') + '@' + (r.err || 'fail') + ' → '); } catch (e) {}
           }
-          step(i + 1, plan[i + 1] || { url: rels[0], ms: TIMEOUT_SAMEORIGIN || 8000 });
+          // 单候选重试 1 次(指数退避 1.5s), 仍失败再跳下一候选
+          if (attempt < 1) {
+            setTimeout(function () { step(i, p, attempt + 1); }, 1500 * (attempt + 1));
+            return;
+          }
+          step(i + 1, plan[i + 1] || { url: rels[0], ms: 30000 }, 0);
         });
       }
-      step(0, plan[0]);
+      step(0, plan[0], 0);
     });
   }
 
