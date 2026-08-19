@@ -1560,7 +1560,7 @@
         // v1.5.14 去重守卫：同一 wb 只嵌一次产品图（预览 step4 嵌过、导出复用同一 wb 时跳过，避免每行图嵌两遍重叠）。
         // fillTemplate 开头已把 wb._productImagesEmbedded 重置为 false，故"换数据重填→重嵌"仍正常。
         if (wb._productImagesEmbedded) { diag.done = true; resolve(); return; }
-        // v1.5.20 fetch 模式: 图文件原封不动放 GitHub 仓库 images/sku_small_jpg/
+        // v1.5.20 fetch 模式: 图文件原封不动放 GitHub 仓库 images/sku_thumb/
         // v1.5.38 双镜像兜底：CloudStudio(国内快) 同源先试，GitHub raw 兜底——任何镜像的匿名用户都能拉到图
         // v1.5.44 唯一索引：SKU_IMAGE_INDEX(JW PEI G Unit 抽 153 张 SPU 真图，逐张核对内容正确，非占位图)
         //   + SPU 前缀兜底：J3120505X006-4-10 找不到时→ 自动用 J3120505X006-4(同款不同尺码共用产品图，正确行为非错图)
@@ -1569,25 +1569,14 @@
           if (typeof window !== 'undefined') {
             var idxA = window.SKU_IMAGE_INDEX || {};
             // v1.5.50 修复：idxA[ka] 已是完整相对路径（如 "images/sku_thumb/104-1_4.jpeg"），
-            // 旧代码又拼了一次 "images/sku_small_jpg/" 造成路径重复 → fetch 全 404 → 导出全空白。
-            // 现直接用 idxA[ka] 作同域相对路径，并补 GitHub Pages / raw.github / 国内 CloudStudio 镜像三个兜底候选。
-            //   国内用户在国内时 github.io / raw.githubusercontent.com 常超时，
-            //   CloudStudio 国内镜像（app.workbuddy.link）走国内 CDN 必须放在候选链中段（第 1 位）兜底。
-            //   若当前页面就是 CloudStudio 镜像, 候选 0 直接用 './' 原地命中(同域, 无网络)。
+            // 旧代码又拼了一次 "images/sku_thumb/" 造成路径重复 → fetch 全 404 → 导出全空白。
+            // 现直接用 idxA[ka] 作同域相对路径，并补 GitHub Pages 绝对路径 / raw.github 两个兜底候选。
             var GH_PAGES = 'https://heryma99.github.io/trade-docs-system/';
             var RAW = 'https://raw.githubusercontent.com/heryma99/trade-docs-system/main/';
-            // v1.5.52：GitHub 内容官方/兼容 CDN —— 真源仍是 GitHub（部署方式不变, push 后自动同步），
-            // 仅作为浏览器取图的高可用候选, 解决国内直连 github.io 不稳的问题。
-            var JSDELIVR = 'https://cdn.jsdelivr.net/gh/heryma99/trade-docs-system@main/';
-            var CS_DOMAIN = (typeof location!=='undefined' && location.hostname.indexOf('app.workbuddy.link')!==-1)
-              ? './'   // 当前就在 CloudStudio 镜像内, 用同域相对路径(必命中且最快)
-              : 'https://a2012d426ebf40b8906cfe5f338c7516.app.workbuddy.link/';
             for (var ka in idxA) {
               var relA = idxA[ka];                       // 已是相对路径，禁止再拼前缀
               if (!relA || relA.indexOf('images/') !== 0) continue;
-              // 候选链优先级(同域→GH Pages→jsDelivr CDN→Statically CDN→raw→CloudStudio),
-              // 全部走完才记为取图失败; 每个候选内部还会重试, 不轻易放弃。
-              MAP[ka] = [relA, GH_PAGES + relA, JSDELIVR + relA, RAW + relA, CS_DOMAIN + relA];
+              MAP[ka] = [relA, GH_PAGES + relA, RAW + relA];
             }
           }
         } catch (e) {}
@@ -1800,31 +1789,23 @@
           });
         });
       }
-      // v1.5.52 候选链：每候选独立超时(按其在 MAP 中的优先级), 单候选失败重试 1 次(退避),
-      // 全部候选穷尽才记失败。超时大幅放宽(同域/GH 30s, CDN 15s, raw 45s), 不再因限流/抖动轻易放弃。
-      var PLAN_MS = [30000, 30000, 15000, 45000, 30000];
+      // 链式：同域相对 → GitHub Pages 绝对 → raw.github（v1.5.50 全部候选都试，首个真图即止）
       var plan = [];
       for (var ri = 0; ri < rels.length; ri++) {
-        plan.push({ url: rels[ri], ms: PLAN_MS[ri] || 20000 });
+        plan.push({ url: rels[ri], ms: (ri === 0 ? (TIMEOUT_SAMEORIGIN || 12000) : (TIMEOUT_RAW || 20000)) });
       }
-      function step(i, p, attempt) {
-        attempt = attempt || 0;
+      function step(i, p) {
         if (i >= plan.length) { resolve(false); return; }
         fetchOne(p.url, p.ms, i).then(function (r) {
           if (r.ok) { resolve(true); return; }
-          // 诊断：记录每个失败候选
+          // 失败：推进到下一个候选
           if (typeof window !== 'undefined') {
             try { if (!window.__embDiagFail) window.__embDiagFail = {}; window.__embDiagFail[t.sku] = (window.__embDiagFail[t.sku] || '') + (plan[i].url.replace(/^https?:\/\//, '') + '@' + (r.err || 'fail') + ' → '); } catch (e) {}
           }
-          // 单候选重试 1 次(指数退避 1.5s), 仍失败再跳下一候选
-          if (attempt < 1) {
-            setTimeout(function () { step(i, p, attempt + 1); }, 1500 * (attempt + 1));
-            return;
-          }
-          step(i + 1, plan[i + 1] || { url: rels[0], ms: 30000 }, 0);
+          step(i + 1, plan[i + 1] || { url: rels[0], ms: TIMEOUT_SAMEORIGIN || 8000 });
         });
       }
-      step(0, plan[0], 0);
+      step(0, plan[0]);
     });
   }
 
