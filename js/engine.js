@@ -1806,7 +1806,9 @@
           var timer = setTimeout(function () {
             if (!settled) { settled = true; res({ ok: false, err: 'timeout', nextIdx: i + 1 }); }
           }, ms);
-          fetch(url).then(function (r) {
+          // v1.6.6 防盗链：sursung/部分图床对带 Referer 的跨域请求返回 403 无 CORS 头 → 浏览器拦截。
+          //   referrerPolicy:'no-referrer' 让浏览器不带 Referer，图床按无 Referer 放行(200+ACAO=*)。
+          fetch(url, { referrerPolicy: 'no-referrer' }).then(function (r) {
             if (settled) return;
             if (!r.ok) { settled = true; clearTimeout(timer); res({ ok: false, err: 'http' + r.status, nextIdx: i + 1 }); return; }
             return r.arrayBuffer();
