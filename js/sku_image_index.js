@@ -1,4 +1,4 @@
-// v1.6.4 本地兜底：飞书无+远程不可靠+恢复2T321-35，共98条
+// v1.6.7 本地兜底：飞书无/歧义/境外不可达兜底，共101条
 window.SKU_IMAGE_INDEX={
 "20021-16": "images/sku_thumb/20021-16_4.jpeg",
 "20021-18": "images/sku_thumb/20021-18_4.jpeg",
@@ -97,5 +97,8 @@ window.SKU_IMAGE_INDEX={
 "765-2W": "images/sku_thumb/765-2W_4.jpeg",
 "7C58-10W": "images/sku_thumb/7C58-10W_4.jpeg",
 "7C58-40W": "images/sku_thumb/7C58-40W_4.jpeg",
-"2T321-35": "images/sku_thumb/2T321-35_4.jpeg"
+"2T321-35": "images/sku_thumb/2T321-35_4.jpeg",
+"7C613-1": "images/sku_thumb/7C613-1_4.jpeg",
+"8T117-31": "images/sku_thumb/8T117-31_4.jpeg",
+"2T398-30": "images/sku_thumb/2T398-30_4.jpeg"
 };
