@@ -1835,6 +1835,24 @@
                 res({ ok: false, err: 'not-image', nextIdx: i + 1 }); return;
               }
             }
+            // v1.6.5 大图压缩：>300KB 的图（如 sursung 3MB PNG）下载后 canvas 缩放最长边≤480px 转 jpeg。
+            //   原因：飞书表里部分变体图是 ERP 大 PNG（1~3MB），国内访问慢 → 下载超时/嵌入 Excel 卡死。
+            //   压缩后约 30~80KB，下载快、嵌入稳；压缩失败用原图继续（不阻断导出）。
+            if (u8.length > 300 * 1024 && typeof createImageBitmap !== 'undefined' && typeof document !== 'undefined') {
+              try {
+                var blobL = new Blob([u8]);
+                var bmL = await createImageBitmap(blobL);
+                var maxS = 480;
+                var sc = Math.min(1, maxS / Math.max(bmL.width, bmL.height));
+                var cwL = Math.max(1, Math.round(bmL.width * sc));
+                var chL = Math.max(1, Math.round(bmL.height * sc));
+                var cL = document.createElement('canvas');
+                cL.width = cwL; cL.height = chL;
+                cL.getContext('2d').drawImage(bmL, 0, 0, cwL, chL);
+                var jbL = await new Promise(function (res3) { cL.toBlob(res3, 'image/jpeg', 0.85); });
+                if (jbL) { u8 = new Uint8Array(await jbL.arrayBuffer()); t.extension = 'jpeg'; }
+              } catch (e) {}
+            }
             _imgCache[t.sku] = u8;
             applyImg(wb, ws, t, u8);
             res({ ok: true });
