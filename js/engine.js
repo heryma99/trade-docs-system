@@ -1706,12 +1706,13 @@
         // 优先复用 fillTemplate 写数据时的真实起始行；无记录时回退 headerRow+1
         var itemsRowNum = (wb._fillItemsRowNum && wb._fillItemsRowNum > 0) ? wb._fillItemsRowNum : (headerRow > 0 ? headerRow + 1 : 1);
         var tasks = [];
+        var markCells = []; // v1.6.8 缺图标注：记录需写红/黄底「图片缺失」的单元格 {row,col,sku,type}
         for (var i = 0; i < items.length; i++) {
           var it = items[i];
           var sku = it && it.sku;
           if (!sku) continue;
           var rel = lookupImg(sku);
-          if (!rel) { if (diag.missed.indexOf(String(sku)) < 0) diag.missed.push(String(sku)); continue; }
+          if (!rel) { if (diag.missed.indexOf(String(sku)) < 0) diag.missed.push(String(sku)); markCells.push({ row: itemsRowNum + i, col: imgCol, sku: String(sku), type: 'missing' }); continue; }
           tasks.push({ row: itemsRowNum + i, col: imgCol, sku: String(sku), rel: rel });
         }
         // 导出单次嵌图上限（防浏览器卡死）：超过部分切片跳过，并记录溢出供 UI 警告
@@ -1746,7 +1747,7 @@
           var t = tasks[idx++];
           return embedOne(wb, ws, t, TIMEOUT_SAMEORIGIN, TIMEOUT_RAW).then(function (okImg) {
             bump(okImg);
-            if (!okImg) failedSkus.push(t.sku);
+            if (!okImg) { failedSkus.push(t.sku); markCells.push({ row: t.row, col: t.col, sku: t.sku, type: 'network' }); }
             return worker();
           });
         }
@@ -1757,6 +1758,20 @@
           progEl.innerHTML = (failCount ? '⚠️ 产品图嵌入完成（共 ' + tasks.length + '，失败 ' + failCount + '）' : '✅ 产品图嵌入完成（共 ' + tasks.length + '）');
           (function (el) { setTimeout(function () { if (el && el.parentNode) el.parentNode.removeChild(el); }, failCount ? 6000 : 1800); })(progEl);
         }
+        // v1.6.8 缺图标注：嵌不上的单元格写入红/黄底「图片缺失」标记，预览与导出一致可见
+        for (var mc = 0; mc < markCells.length; mc++) {
+          var mk = markCells[mc];
+          try {
+            var mcell = ws.getCell(mk.row, mk.col);
+            var isMiss = mk.type === 'missing';
+            mcell.value = '图片缺失\n' + mk.sku + '\n(' + (isMiss ? '图库无图源' : '取图失败') + ')';
+            mcell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isMiss ? 'FFFFC7CE' : 'FFFFE699' } };
+            mcell.font = { bold: true, size: 9, color: { argb: isMiss ? 'FF9C0006' : 'FF9C5700' } };
+            mcell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+            var mrow = ws.getRow(mk.row); if (!mrow.height || mrow.height < 46) mrow.height = 46;
+          } catch (e) {}
+        }
+        diag.marked = markCells.length;
         diag.done = true; diag.failed = failedSkus;
         // v1.5.53 诊断增强：把失败 SKU 按「图库缺图(missing)」vs「网络/CORS 拦截(network)」分类。
         // 依据：window.__embDiagFail[sku] 形如 "host@err → host@err → ..."，
