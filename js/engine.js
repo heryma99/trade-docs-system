@@ -1726,7 +1726,7 @@
         if (!tasks.length) { diag.done = true; resolve(); return; }
         // 3) 并发限流 + 超时 + 降级 + 进度浮层（v1.5.50）
         // 国内网络下同源/GitHub 可能慢，放宽超时；并发仍限 3 防卡死。
-        var CONC = 3, TIMEOUT_SAMEORIGIN = 12000, TIMEOUT_RAW = 20000, idx = 0;
+        var CONC = 6, TIMEOUT_SAMEORIGIN = 12000, TIMEOUT_RAW = 20000, idx = 0;
         var doneCount = 0, failCount = 0, failedSkus = [];
         // v1.5.50 导出/嵌图进度浮层：图多（>5）时显示「已嵌 X/共 N 失败 Y」，避免用户以为卡死
         var progEl = null;
