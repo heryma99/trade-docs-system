@@ -3875,7 +3875,7 @@
 
 
   // v1.6.11：向导分页状态（仅存于内存，不写入 state.wiz / 不入库）
-  var _wzPg = { ord: { page: 1, size: 20 }, pk: { page: 1, size: 20 } };
+  var _wzPg = { ord: { page: 1, size: 10 }, pk: { page: 1, size: 10 } };
 
   // v1.6.11：向导分页条 HTML（复用 styles.css 既有 .pager 样式；不新增样式、不读写业务数据）
   function _wzPagerHtml(pfx, total, page, size) {
@@ -3914,7 +3914,7 @@
     var bar = document.getElementById(pfx + '-pager');
     if (!bar) return;
     var sel = document.getElementById(pfx + '-pagesize');
-    if (sel) sel.onchange = function () { st.size = parseInt(sel.value, 10) || 20; st.page = 1; rerender(); };
+    if (sel) sel.onchange = function () { st.size = parseInt(sel.value, 10) || 10; st.page = 1; rerender(); };
     var jump = document.getElementById(pfx + '-jump');
     if (jump) jump.onchange = function () {
       var tp = Math.max(1, Math.ceil(total / st.size));
