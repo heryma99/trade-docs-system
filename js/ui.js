@@ -4166,6 +4166,8 @@
 
 
       var pks = await db.all('packings');
+      // v1.6.12：装箱清单按最新上传在前（与装箱清单管理页 / 订单页排序口径一致；仅改内存数组顺序，不写库）
+      pks.sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
 
 
 
