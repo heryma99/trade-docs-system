@@ -3874,6 +3874,69 @@
 
 
 
+  // v1.6.11：向导分页状态（仅存于内存，不写入 state.wiz / 不入库）
+  var _wzPg = { ord: { page: 1, size: 20 }, pk: { page: 1, size: 20 } };
+
+  // v1.6.11：向导分页条 HTML（复用 styles.css 既有 .pager 样式；不新增样式、不读写业务数据）
+  function _wzPagerHtml(pfx, total, page, size) {
+    var tp = Math.max(1, Math.ceil(total / size));
+    if (page > tp) page = tp;
+    if (page < 1) page = 1;
+    var h = '<div class="pager" id="' + pfx + '-pager"><div class="pg-left">每页显示 ' +
+      '<select id="' + pfx + '-pagesize" class="pg-sel">' +
+      [10, 20, 50].map(function (n) { return '<option value="' + n + '"' + (n === size ? ' selected' : '') + '>' + n + '</option>'; }).join('') +
+      '</select> 条 <span style="color:#889;margin-left:8px">共 <b>' + total + '</b> 条</span></div><div class="pg-right">';
+    h += '<button class="chip pg" data-act="first"' + (page <= 1 ? ' disabled' : '') + '>« 首页</button>';
+    h += '<button class="chip pg" data-act="prev"' + (page <= 1 ? ' disabled' : '') + '>‹ 上一页</button>';
+    var pages = [];
+    if (tp <= 7) { for (var i = 1; i <= tp; i++) pages.push(i); }
+    else {
+      pages.push(1);
+      var s = Math.max(2, page - 2), e = Math.min(tp - 1, page + 2);
+      if (s > 2) pages.push('...');
+      for (var j = s; j <= e; j++) pages.push(j);
+      if (e < tp - 1) pages.push('...');
+      pages.push(tp);
+    }
+    pages.forEach(function (p) {
+      if (p === '...') h += '<span class="pg-gap">…</span>';
+      else h += '<button class="chip pg' + (p === page ? ' active' : '') + '" data-page="' + p + '">' + p + '</button>';
+    });
+    h += '<button class="chip pg" data-act="next"' + (page >= tp ? ' disabled' : '') + '>下一页 ›</button>';
+    h += '<button class="chip pg" data-act="last"' + (page >= tp ? ' disabled' : '') + '>末页 »</button>';
+    h += ' 跳至 <input id="' + pfx + '-jump" class="pg-jump" type="number" min="1" max="' + tp + '" value="' + page + '"> 页';
+    h += '</div></div>';
+    return h;
+  }
+
+  // v1.6.11：向导分页条事件绑定（翻页 / 改每页条数 → 重渲当前步骤；不影响已选数据）
+  function _wzBindPager(pfx, st, total, rerender) {
+    var bar = document.getElementById(pfx + '-pager');
+    if (!bar) return;
+    var sel = document.getElementById(pfx + '-pagesize');
+    if (sel) sel.onchange = function () { st.size = parseInt(sel.value, 10) || 20; st.page = 1; rerender(); };
+    var jump = document.getElementById(pfx + '-jump');
+    if (jump) jump.onchange = function () {
+      var tp = Math.max(1, Math.ceil(total / st.size));
+      var v = parseInt(jump.value, 10);
+      st.page = (v >= 1 && v <= tp) ? v : 1;
+      rerender();
+    };
+    bar.addEventListener('click', function (e) {
+      var b = e.target && e.target.closest ? e.target.closest('button.pg') : null;
+      if (!b) return;
+      var act = b.getAttribute('data-act'), pg = b.getAttribute('data-page');
+      var tp = Math.max(1, Math.ceil(total / st.size));
+      if (act === 'first') st.page = 1;
+      else if (act === 'prev') st.page = Math.max(1, st.page - 1);
+      else if (act === 'next') st.page = Math.min(tp, st.page + 1);
+      else if (act === 'last') st.page = tp;
+      else if (pg) st.page = parseInt(pg, 10) || 1;
+      else return;
+      rerender();
+    });
+  }
+
   async function renderWizStep() {
 
 
@@ -3983,10 +4046,17 @@
 
 
       orders.sort(function (a, b) { return b.createdAt - a.createdAt; });
+      // v1.6.11：订单列表分页（仅影响渲染切片；不改变 orders 数据与任何业务逻辑）
+      var _ordTotal = orders.length;
+      var _ordTP = Math.max(1, Math.ceil(_ordTotal / _wzPg.ord.size));
+      if (_wzPg.ord.page > _ordTP) _wzPg.ord.page = _ordTP;
+      if (_wzPg.ord.page < 1) _wzPg.ord.page = 1;
+      var _ordStart = (_wzPg.ord.page - 1) * _wzPg.ord.size;
+      var _ordList = orders.slice(_ordStart, _ordStart + _wzPg.ord.size);
 
 
 
-      var rows = orders.map(function (o) {
+      var rows = _ordList.map(function (o) {
 
 
 
@@ -4022,7 +4092,7 @@
 
 
 
-        (rows || '<tr><td colspan="6" class="empty">暂无订单，请先到「订单」或「装箱清单」页导入</td></tr>') + '</table>' +
+        (rows || '<tr><td colspan="6" class="empty">暂无订单，请先到「订单」或「装箱清单」页导入</td></tr>') + '</table>' + _wzPagerHtml('wz0', _ordTotal, _wzPg.ord.page, _wzPg.ord.size) +
 
 
 
@@ -4030,11 +4100,24 @@
 
 
 
+      _wzBindPager('wz0', _wzPg.ord, _ordTotal, function () { renderWizStep(); });
+      // v1.6.11：勾选即同步 w.orderIds（翻页不丢已勾订单）
+      Array.prototype.forEach.call(document.querySelectorAll('.wz-ord'), function (cb) {
+        cb.onchange = function () {
+          var _id = cb.value;
+          if (cb.checked) { if (w.orderIds.indexOf(_id) < 0) w.orderIds.push(_id); }
+          else { var _ix = w.orderIds.indexOf(_id); if (_ix >= 0) w.orderIds.splice(_ix, 1); }
+        };
+      });
       document.getElementById('wz-next0').onclick = function () {
 
 
 
-        var ids = Array.from(document.querySelectorAll('.wz-ord:checked')).map(function (c) { return c.value; });
+        // v1.6.11：跨页勾选 —— 以 w.orderIds 为权威，合并当前页 DOM 勾选（不再只扫当前页）
+        var _curIds = Array.from(document.querySelectorAll('.wz-ord')).map(function (c) { return c.value; });
+        var _ckIds = Array.from(document.querySelectorAll('.wz-ord:checked')).map(function (c) { return c.value; });
+        w.orderIds = w.orderIds.filter(function (id) { return _curIds.indexOf(id) < 0; }).concat(_ckIds);
+        var ids = w.orderIds;
 
 
 
@@ -4209,6 +4292,14 @@
         if (_inter.length > 0) _relatedPks.push(pks[_ri]);
       }
       var pkRows;
+      // v1.6.11：装箱清单分页（_relatedPks 合并判断始终基于全量 pks，分页仅切渲染，不拆散合并项）
+      var _pkTotal = pks.length;
+      var _pkTP = Math.max(1, Math.ceil(_pkTotal / _wzPg.pk.size));
+      if (_wzPg.pk.page > _pkTP) _wzPg.pk.page = _pkTP;
+      if (_wzPg.pk.page < 1) _wzPg.pk.page = 1;
+      var _pkStart = (_wzPg.pk.page - 1) * _wzPg.pk.size;
+      var _pkList = pks.slice(_pkStart, _pkStart + _wzPg.pk.size);
+      var _pkPagerStr = '';
       if (_relatedPks.length > 1) {
         // 多个关联 packing → 合并成 1 行（预选中，用户无需手动选）
         var _mBoxes = [], _mOrderNos = {}, _mBoxCount = 0, _mQty = 0, _mFileNames = [];
@@ -4229,7 +4320,7 @@
           '<td><span class="badge green">✅ 自动合并（' + _relatedPks.length + '份 → 1 张发票）</span></td></tr>';
       } else {
         // 单/零个关联 → 保持原始逐行渲染
-        pkRows = pks.map(function (p) {
+        pkRows = _pkList.map(function (p) {
           var inter = (p.orderNos || []).filter(function (n) { return selNos.indexOf(n) >= 0; });
           var hint = inter.length === selNos.length && inter.length === (p.orderNos || []).length ? '<span class="badge green">完全匹配</span>' :
             inter.length ? '<span class="badge yellow">部分匹配(' + inter.length + '/' + selNos.length + ')</span>' : '<span class="badge gray">无交集</span>';
@@ -4237,6 +4328,7 @@
           return '<tr class="checkrow"><td><input type="radio" name="wz-pk" value="' + p.id + '"' + ck + '></td>' +
             '<td>' + esc(p.fileName) + '</td><td class="mono">' + esc((p.orderNos || []).join(', ')) + '</td><td class="num">' + p.totals.boxCount + '</td><td class="num">' + p.totals.qty + '</td><td>' + hint + '</td></tr>';
         }).join('');
+        _pkPagerStr = _wzPagerHtml('wz1', _pkTotal, _wzPg.pk.page, _wzPg.pk.size);
       }
 
 
@@ -4257,7 +4349,7 @@
 
 
 
-        (pkRows || '<tr><td colspan="6" class="empty">暂无装箱清单，请先到「装箱清单」页上传</td></tr>') + '</table>' +
+        (pkRows || '<tr><td colspan="6" class="empty">暂无装箱清单，请先到「装箱清单」页上传</td></tr>') + '</table>' + _pkPagerStr +
 
 
 
@@ -4385,11 +4477,18 @@
 
 
 
+      _wzBindPager('wz1', _wzPg.pk, _pkTotal, function () { renderWizStep(); });
+      // v1.6.11：装箱清单选中即同步 w.packingId（翻页不丢手选项）
+      Array.prototype.forEach.call(document.querySelectorAll('input[name="wz-pk"]'), function (rd) {
+        rd.onchange = function () { if (rd.checked) w.packingId = rd.value; };
+      });
       document.getElementById('wz-next1').onclick = async function () {
 
 
 
         var pk = document.querySelector('input[name="wz-pk"]:checked');
+        // v1.6.11：跨页兜底 —— 手选项不在当前页时，用 w.packingId 还原（不丢用户手选）
+        if (!pk && w.packingId) pk = { value: w.packingId };
 
 
 
