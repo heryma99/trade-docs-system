@@ -634,6 +634,42 @@
     return map;
   }
   /** 扫描模板占位符，并尝试用表头识别兜底：返回 {fields, itemFields, itemsRow, itemHeaderMap, sheetName} */
+  /** v1.6.17（仅订舱单调用）：该行是否被「大合并块」覆盖。
+   *  背景：Aramex 模板真实明细槽位只有 R21-R22，但 R23「重要通知：…」是 A23:K27
+   *  （跨 5 行 x 11 列）的大合并块，R28/R30/R32 等表尾行也都是整行合并且带边框，
+   *  旧逻辑靠「有边框 + 文本不含表尾关键词」计数，一路数到 R32 才停 -> templateSlots = 11
+   *  （真实应为 2），导致只插入 10 行、第 15 条起的明细溢出覆盖通知区/签字区。
+   *  判据：纵向跨 >=3 行 或 横向跨 >=8 列 的合并区 = 通知/页脚块，不是明细槽位。 */
+  function _isMergedBlockRow(ws, rowNumber) {
+    var list = [];
+    try { list = (ws.model.merges || []).slice(); } catch (e) { return false; }
+    for (var i = 0; i < list.length; i++) {
+      var mm = String(list[i]).match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+      if (!mm) continue;
+      var r1 = parseInt(mm[2], 10), r2 = parseInt(mm[4], 10);
+      if (!(r1 <= rowNumber && rowNumber <= r2)) continue;
+      var c1 = _colNum(mm[1]), c2 = _colNum(mm[3]);
+      if ((r2 - r1 + 1) >= 3) return true;
+      if ((c2 - c1 + 1) >= 8) return true;
+    }
+    return false;
+  }
+
+  /** v1.6.17（仅订舱单调用）：订舱单明细列表头「直配表」，优先级高于通用别名匹配。
+   *  背景：别名 'L(CM)'/'W(CM)'/'H(CM)' 被 normalizeHeader 删括号后退化成单字母 L/W/H，
+   *  于是「运价类别 RATE CLASS」(含 L)、「收费重量 CHARGEABLE WEIGHT」(含 L) 被误映射为 lengthCm；
+   *  另「件数 NO. OF PIECES」被别名 'NO.'(3) 抢占为 no、「货物品名及数量」被 'QUANTITY'(8) 抢占为 qty。
+   *  返回：字段名 | '__BLANK__'（该列留空不写值）| null（不干预，走通用 matchHeaderAlias）。
+   *  注意：通用匹配算法 matchHeaderAlias / HEADER_ALIASES 一行未改，故其他类型模板零影响。 */
+  function _bookingHeaderOverride(s) {
+    var ns = normalizeHeader(s);
+    if (!ns) return null;
+    if (/运价类别|收费重量|RATECLASS|CHARGEABLEWEIGHT/.test(ns)) return '__BLANK__';        // 承运人填，留空
+    if (/NO\.?OFPIECES|件数NO|PIECESNO/.test(ns)) return 'boxCount';                        // 件数 = 箱数
+    if (/货物品名|NATUREANDQUANTITY|DESCRIPTIONOFGOODS/.test(ns)) return 'nameEn';          // 货描 = 英文品名
+    return null;
+  }
+
   /** v1.6.16：判断某行是否「可能」是明细表头行——用于兜底识别的合理性闸门。
    *  背景 bug：Aramex 模板第 3 行公司名 "Aramex-Si·no·trans ..." 因含子串 "no"，
    *  被 matchHeaderAlias 整行判成 no 字段（11 列同一字段），进而被当成明细表头行 →
@@ -1232,6 +1268,10 @@
 
   function fillTemplate(wb, data, options) {
     options = options || {};
+    // v1.6.17：本版新增逻辑一律只作用于【订舱单】（data.kind === 'booking'）。
+    //   发票(kind='invoice') / 申报(declare) / 装箱单(packing) 模板走原逻辑，代码路径完全不变。
+    var IS_BOOKING = String((data && data.kind) || '') === 'booking';
+    var MIN_ITEM_ROWS = 5; // 订舱单明细区最少显示行数（不足时补空白带框行；超过则按实际条数）
     var filled = { replaced: [], unresolved: [], uncarried: [] };
     var ws = wb.worksheets[0];
     if (!ws) throw new Error('模板无工作表');
@@ -1301,8 +1341,11 @@
         var map = {}, count = 0;
         row.eachCell({ includeEmpty: false }, function (cell, colNumber) {
           if (map[colNumber]) return;
-          var f = matchHeaderAlias(cellString(cell));
-          if (f) { map[colNumber] = f; count++; }
+          var _hs = cellString(cell);
+          // v1.6.17（仅订舱单）：直配表优先于通用别名（运价类别/收费重量留空、件数->箱数、货描->品名）
+          var f = IS_BOOKING ? _bookingHeaderOverride(_hs) : null;
+          if (f === '__BLANK__') f = null; else if (!f) f = matchHeaderAlias(_hs);
+          if (f && !map[colNumber]) { map[colNumber] = f; count++; }
         });
         // v1.6.16：同 scanTemplate 的合理性闸门
         if (count > best.count && _isPlausibleHeaderRow(ws, rowNumber, map, count)) {
@@ -1354,6 +1397,8 @@
       while (true) {
         var nextRow = ws.getRow(itemsRowNum + templateSlots);
         if (!hasItemRowBorder(nextRow)) break;
+        // v1.6.17（仅订舱单）：撞上「大合并块」= 通知/页脚区，立即停止计数（不再依赖关键词表）
+        if (IS_BOOKING && _isMergedBlockRow(ws, itemsRowNum + templateSlots)) break;
         var isFooter = false;
         nextRow.eachCell({ includeEmpty: false }, function (cellF) {
           var sf = _cellStr(cellF);
@@ -1373,7 +1418,9 @@
       tplRow.eachCell({ includeEmpty: true }, function (cell, colNumber) {
         tplCells.push({ col: colNumber, value: cell.value, style: cell.style });
       });
-      var slotDelta = items.length - templateSlots; // 正=需插入；负=需删除
+      // v1.6.17（仅订舱单）：行数 = max(实际条数, 5)；不足补空白带框行，超过按实际条数
+      var _wantRows = (IS_BOOKING && items.length > 0) ? Math.max(items.length, MIN_ITEM_ROWS) : items.length;
+      var slotDelta = _wantRows - templateSlots; // 正=需插入；负=需删除
       if (slotDelta > 0) {
         // 模板槽位不足 → 插入 (items.length - templateSlots) 行
         var _insertArgs = [];
@@ -1495,6 +1542,23 @@
           });
         }
       }
+      // v1.6.17（仅订舱单）：「最少 5 行」补出的空白行 = 空框，清掉从模板槽位行复制来的
+      //   文字/样张数字/{{items.*}} 占位符（公式除外），仅保留边框与样式。
+      if (IS_BOOKING && _wantRows > items.length) {
+        for (var _bf = items.length; _bf < _wantRows; _bf++) {
+          (function (_r) {
+            var _bo = ws.getRow(itemsRowNum + _r);
+            _bo.eachCell({ includeEmpty: true }, function (bc) {
+              if (mergedMaps.subordinate[(itemsRowNum + _r) + ',' + bc.col]) return;
+              var _bv = bc.value;
+              if (_bv === undefined || _bv === null || _bv === '') return;
+              if (typeof _bv === 'object' && _bv.formula) return; // 保留公式，不破坏合计逻辑
+              bc.value = '';                                      // 空框：清文字/数字，保留边框与样式
+            });
+          })(_bf);
+        }
+      }
+
       // 2.2) 列宽自适应：按 items 各字段最长值（中文字符按 2 倍宽估算）动态加宽
       //   itemHeaderMap 映射的列，避免长字符溢出覆盖相邻列；wrapText 关掉放末尾（避免 ④ 还原 alignment 被覆盖）。
       Object.keys(itemHeaderMap).forEach(function (colStr) {
