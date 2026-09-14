@@ -1412,14 +1412,15 @@
 
     // 2) 明细区展开：先复制模板行样式与占位内容 N-1 次
     var items = data.items || [];
-    if (itemsRowNum !== -1 && items.length > 0) {
+    // v1.6.17（仅订舱单）：即使 0 条明细也要铺满 MIN_ITEM_ROWS 个空框
+    if (itemsRowNum !== -1 && (items.length > 0 || IS_BOOKING)) {
       var tplRow = ws.getRow(itemsRowNum);
       var tplCells = [];
       tplRow.eachCell({ includeEmpty: true }, function (cell, colNumber) {
         tplCells.push({ col: colNumber, value: cell.value, style: cell.style });
       });
       // v1.6.17（仅订舱单）：行数 = max(实际条数, 5)；不足补空白带框行，超过按实际条数
-      var _wantRows = (IS_BOOKING && items.length > 0) ? Math.max(items.length, MIN_ITEM_ROWS) : items.length;
+      var _wantRows = IS_BOOKING ? Math.max(items.length, MIN_ITEM_ROWS) : items.length;
       var slotDelta = _wantRows - templateSlots; // 正=需插入；负=需删除
       if (slotDelta > 0) {
         // 模板槽位不足 → 插入 (items.length - templateSlots) 行
