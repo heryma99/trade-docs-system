@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>商单易 · 模板保真核验</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #f4f6f9; color: #222; font-size: 14px; }
+  .topbar { background: #17335c; color: #fff; padding: 12px 18px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .topbar b { font-size: 16px; }
+  .topbar .tag { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: rgba(255,255,255,.16); }
+  main { padding: 18px; max-width: 1280px; margin: 0 auto; }
+  .card { background: #fff; border-radius: 10px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(20,40,80,.08); }
+  .row { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
+  .row label { font-size: 12px; color: #556; display: block; }
+  .row label input[type=file] { display: block; margin-top: 4px; font-size: 12px; }
+  button.btn { background: #2563eb; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  button.btn:hover { background: #1d4fd8; }
+  button.btn:disabled { background: #b7c3d8; cursor: not-allowed; }
+  button.btn.ghost { background: #fff; color: #2563eb; border: 1px solid #2563eb; }
+  .hint { font-size: 12px; color: #778; margin-top: 10px; line-height: 1.7; }
+  .stat { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .sbox { background: #fff; border-radius: 10px; padding: 12px 16px; min-width: 132px; box-shadow: 0 1px 3px rgba(20,40,80,.08); border-left: 4px solid #cbd5e1; }
+  .sbox .n { font-size: 22px; font-weight: 700; }
+  .sbox .t { font-size: 12px; color: #667; margin-top: 2px; }
+  .sbox.b { border-left-color: #dc2626; } .sbox.b .n { color: #dc2626; }
+  .sbox.a { border-left-color: #16a34a; } .sbox.a .n { color: #16a34a; }
+  .sbox.i { border-left-color: #2563eb; } .sbox.i .n { color: #2563eb; }
+  .toolbar { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; font-size: 13px; }
+  .toolbar label { cursor: pointer; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #e3e8f0; padding: 6px 9px; text-align: left; font-size: 12.5px; vertical-align: top; }
+  th { background: #eef2f8; color: #334; font-weight: 600; position: sticky; top: 0; z-index: 2; white-space: nowrap; }
+  tr.lvB td { background: #fef2f2; }
+  tr.lvA td { background: #f7fbf7; color: #556; }
+  .k { display: inline-block; padding: 1px 7px; border-radius: 9px; font-size: 11px; font-weight: 600; background: #e5e7eb; color: #4b5563; }
+  .k.style { background: #fee2e2; color: #991b1b; }
+  .k.value { background: #dbeafe; color: #1e40af; }
+  .k.merge { background: #ede9fe; color: #5b21b6; }
+  .k.width, .k.height { background: #fef3c7; color: #92400e; }
+  .k.sheet { background: #ffedd5; color: #9a3412; }
+  .okbadge { display: inline-block; background: #dcfce7; color: #166534; padding: 8px 14px; border-radius: 8px; font-weight: 600; }
+  .mono { font-family: Consolas, "Courier New", monospace; }
+  .alignbox { font-size: 12.5px; line-height: 1.9; color: #445; }
+  .alignbox b { color: #17335c; }
+  .err { background: #fee2e2; color: #991b1b; padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; display: none; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <b>商单易 · 模板保真核验</b>
+  <span class="tag">模板 vs 导出成品 · 逐单元格比对</span>
+</div>
+<main>
+  <div class="err" id="err"></div>
+
+  <div class="card">
+    <div class="row">
+      <label>① 模板文件（基准 = 你上传的那份）
+        <input type="file" id="f-tpl" accept=".xlsx,.xlsm">
+      </label>
+      <label>② 成品文件（系统导出的）
+        <input type="file" id="f-out" accept=".xlsx,.xlsm">
+      </label>
+      <button class="btn" id="go">开始对比</button>
+      <button class="btn ghost" id="dl" disabled>下载报告 (JSON)</button>
+      <button class="btn ghost" id="cp" disabled>复制摘要</button>
+    </div>
+    <p class="hint">
+      · 只对比模板的<b>第 1 个 sheet</b>（生成引擎实际只读第一张表，这正是参与生成的那张）。<br>
+      · 自动分两类：<b style="color:#16a34a">A 类 = 占位符已填充</b>（预期行为，不算问题）；<b style="color:#dc2626">B 类 = 保真差异</b>（样式/边框/底色/字体/对齐/数字格式/合并区/列宽/行高 不一致）。<br>
+      · 明细区插行导致的整体下移会被自动对齐，不会误报；<b>新增明细行是否继承了模板行的边框样式</b>会单独检查。
+    </p>
+  </div>
+
+  <div class="stat" id="stat" style="display:none"></div>
+
+  <div class="card" id="alignCard" style="display:none">
+    <h3 style="font-size:14px;margin-bottom:8px;color:#17335c">对齐与结构</h3>
+    <div class="alignbox" id="alignBox"></div>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none">
+    <div class="toolbar">
+      <label><input type="radio" name="flt" value="B" checked> 只看保真差异 (B)</label>
+      <label><input type="radio" name="flt" value="A"> 只看预期填充 (A)</label>
+      <label><input type="radio" name="flt" value="all"> 全部</label>
+      <span id="cnt" style="color:#667"></span>
+    </div>
+    <div style="overflow:auto;max-height:62vh">
+      <table id="tbl">
+        <thead><tr><th>Sheet</th><th>模板坐标</th><th>成品坐标</th><th>类型</th><th>说明</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<script src="../vendor/exceljs.min.js"></script>
+<script src="fidelity-core.js"></script>
+<script>
+(function () {
+  'use strict';
+  var last = null;
+  var $ = function (id) { return document.getElementById(id); };
+
+  function showErr(m) {
+    var e = $('err'); e.style.display = 'block';
+    e.innerHTML = '⚠️ ' + m;
+  }
+  function clearErr() { $('err').style.display = 'none'; }
+
+  function loadWb(file) {
+    return file.arrayBuffer().then(function (buf) {
+      var wb = new ExcelJS.Workbook();
+      return wb.xlsx.load(buf).then(function () { return wb; });
+    });
+  }
+
+  $('go').onclick = function () {
+    clearErr();
+    var f1 = $('f-tpl').files[0], f2 = $('f-out').files[0];
+    if (!f1 || !f2) { showErr('请同时选择「模板」和「成品」两个文件。'); return; }
+    var btn = $('go'); btn.disabled = true; btn.textContent = '对比中…';
+    Promise.all([loadWb(f1), loadWb(f2)]).then(function (r) {
+      var res = FidelityCore.compareWorkbooks(r[0], r[1], {});
+      last = res; last._files = { tpl: f1.name, out: f2.name };
+      render(res);
+    }).catch(function (e) {
+      showErr('解析失败：' + (e && e.message ? e.message : e) + '（只支持 .xlsx/.xlsm）');
+    }).then(function () {
+      btn.disabled = false; btn.textContent = '开始对比';
+    });
+  };
+
+  function render(res) {
+    if (!res.ok) { showErr(res.error || '对比失败'); return; }
+    var s = res.stats;
+
+    /* 统计卡 */
+    var st = $('stat'); st.style.display = 'flex';
+    st.innerHTML =
+      box('b', s.B, '保真差异 (B) 需关注') +
+      box('a', s.A, '预期填充 (A) 正常') +
+      box('i', s.cellChecked, '已检查单元格') +
+      box('', s.styleDiff, '样式差异数') +
+      box('', s.widthDiff, '列宽差异数') +
+      box('', s.total, '差异合计');
+
+    /* 对齐信息 */
+    var a = res.align[0] || {};
+    var ab = $('alignBox'); $('alignCard').style.display = 'block';
+    var tplSheets = (res.tplSheets || []).join(' / ');
+    var outSheets = (res.outSheets || []).join(' / ');
+    ab.innerHTML =
+      '模板第 1 个 sheet：<b>' + esc(res.sheet) + '</b>　|　模板 sheet 列表：' + esc(tplSheets) + '<br>' +
+      '成品 sheet 列表：' + esc(outSheets) + '<br>' +
+      '模板行数 <b>' + a.tplRowCount + '</b>　成品行数 <b>' + a.outRowCount + '</b>　' +
+      '→ 检测到明细区<b>插入 ' + (a.delta > 0 ? a.delta : 0) + ' 行</b>（已据此对齐下方行，避免误报）<br>' +
+      '模板明细占位行：<b>' + (a.tplItemRow > 0 ? ('第 ' + a.tplItemRow + ' 行') : '未检测到 {{items.*}}') + '</b>　|　对齐分界行：第 ' + a.alignBase + ' 行';
+
+    /* 差异表 */
+    var tb = $('tbl').querySelector('tbody');
+    var flt = document.querySelector('input[name=flt]:checked').value;
+    var rows = res.diffs.filter(function (d) {
+      if (flt === 'all') return true;
+      return d.level === flt;
+    });
+    if (!rows.length) {
+      tb.innerHTML = '<tr><td colspan="5"><span class="okbadge">✅ 该筛选下没有差异</span>' +
+        (flt === 'B' ? '　—— 样式/边框/合并/列宽/行高 与模板一致' : '') + '</td></tr>';
+    } else {
+      tb.innerHTML = rows.map(function (d) {
+        return '<tr class="lv' + d.level + '">' +
+          '<td>' + esc(d.sheet || '') + '</td>' +
+          '<td class="mono">' + esc(d.addr || '-') + '</td>' +
+          '<td class="mono">' + esc(d.addrOut || d.addr || '-') + '</td>' +
+          '<td><span class="k ' + esc(d.kind) + '">' + kindName(d.kind) + '</span>' +
+          ' <span class="k">' + d.level + '类</span></td>' +
+          '<td>' + esc(d.desc || '') + '</td></tr>';
+      }).join('');
+    }
+    $('cnt').textContent = '显示 ' + rows.length + ' / ' + res.diffs.length + ' 条';
+    $('resultCard').style.display = 'block';
+    $('dl').disabled = false; $('cp').disabled = false;
+  }
+
+  function box(cls, n, t) {
+    return '<div class="sbox ' + cls + '"><div class="n">' + n + '</div><div class="t">' + t + '</div></div>';
+  }
+  function kindName(k) {
+    return ({ style: '样式', value: '值', merge: '合并区', width: '列宽', height: '行高', sheet: '工作表' })[k] || k;
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
+  }
+
+  document.querySelectorAll('input[name=flt]').forEach(function (r) {
+    r.onchange = function () { if (last) render(last); };
+  });
+
+  $('dl').onclick = function () {
+    if (!last) return;
+    var blob = new Blob([JSON.stringify(last, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'fidelity-report.json';
+    a.click();
+  };
+  $('cp').onclick = function () {
+    if (!last) return;
+    var s = last.stats, a = last.align[0] || {};
+    var lines = [
+      '模板保真核验 · ' + last._files.tpl + ' → ' + last._files.out,
+      '保真差异(B)：' + s.B + '　预期填充(A)：' + s.A + '　差异合计：' + s.total,
+      '已检查单元格：' + s.cellChecked + '　样式差异：' + s.styleDiff + '　列宽差异：' + s.widthDiff,
+      '行数：模板 ' + a.tplRowCount + ' → 成品 ' + a.outRowCount + '（明细插行 ' + (a.delta > 0 ? a.delta : 0) + '）'
+    ];
+    var b = last.diffs.filter(function (d) { return d.level === 'B'; }).slice(0, 30);
+    if (b.length) { lines.push('—— B 类明细（前 30 条）——'); b.forEach(function (d) { lines.push('· ' + (d.desc || '')); }); }
+    navigator.clipboard.writeText(lines.join('\n')).then(function () {
+      $('cp').textContent = '已复制 ✓';
+      setTimeout(function () { $('cp').textContent = '复制摘要'; }, 1600);
+    });
+  };
+})();
+</script>
+</body>
+</html>
