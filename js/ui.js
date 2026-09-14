@@ -6104,7 +6104,9 @@
 
 
 
-    var boxMode = !!(packing && (itemFields.some(function (f) { return /(boxNo|length|width|height)/.test(f); }) || (headerHasBoxCols && packingHasBoxes)));
+    // v1.6.18：订舱单/提单口径 = 明细按品名汇总，恒不进入「逐箱」模式；
+    //   同时避免「模板列头被退化别名误映射成 lengthCm/heightCm」把订舱单误判成逐箱（Aramex 21 行 → 汇总行数）。
+    var boxMode = (kind === 'booking') ? false : !!(packing && (itemFields.some(function (f) { return /(boxNo|length|width|height)/.test(f); }) || (headerHasBoxCols && packingHasBoxes)));
 
 
 
