@@ -605,9 +605,11 @@
         if (!_names.length) { (orders || []).forEach(function (o) { (o.items || []).forEach(function (it) { _add(it.nameEn || it.nameCn); }); }); }
         return _names.slice(0, 3).join(', ');
       })(),
-      // v1.6.18（仅订舱单）：明细按「英文品名 + HS CODE」汇总（订舱单/提单口径：一行一个品名）。
-      //   上游已按 SKU 聚合出箱数/数量/毛重/净重/体积；此处把同品名同 HS 的多个 SKU 再合并为一行，
-      //   箱数/数量/毛重/净重/体积各自求和并取整（避免浮点尾巴如 12.600000000000001）。
+      // v1.6.19（仅订舱单）：按「英文品名 + HS CODE」归并——一行一个品名（箱数/数量/毛重/净重/体积求和取整）。
+      //   ① 行级数据供「逐行表」类订舱单模板使用（每行各自带该品名的箱数/重量/体积）；
+      //   ② 「单值」类模板在 fillTemplate 里再折叠为 1 条（件数/重量/体积各只有一个数）。
+      //   ③ HS 编码：订舱单必须在单上体现，而 6 个订舱单模板都没有 HS 列 → 追加到品名文字里
+      //      （nameEn / nameCn / description 三处都带，保证任何映射到品名的列都能看到 HS）。
       //   非订舱单（kind !== 'booking'）items 原样返回，零影响。
       items: (function () {
         if (String(opts.kind || '') !== 'booking' || !items || items.length <= 1) return items;
@@ -622,6 +624,7 @@
             _bk[_k].qty = 0; _bk[_k].nw = 0; _bk[_k].gw = 0; _bk[_k].volume = 0;
             _bk[_k].boxCount = 0; _bk[_k].amount = 0; _bk[_k].volumeWeight = 0;
             _bk[_k]._firstOfBox = true; _bk[_k]._mergedByName = true;
+            _bk[_k]._name = _nm; _bk[_k]._nameCn = it.nameCn || _nm; _bk[_k]._hs = _hs;
             delete _bk[_k].boxNo;
             _seq.push(_k);
           }
@@ -634,7 +637,14 @@
           _t.amount = round((Number(_t.amount) || 0) + (Number(it.amount) || 0), 2);
           _t.volumeWeight = round((Number(_t.volumeWeight) || 0) + (Number(it.volumeWeight) || 0), 3);
         });
-        var _out = _seq.map(function (k) { return _bk[k]; });
+        var _out = _seq.map(function (k) {
+          var t = _bk[k];
+          var _nm2 = t._name + (t._hs ? (' ' + t._hs) : '');
+          t.nameEn = _nm2;
+          t.description = _nm2;
+          t.nameCn = t._nameCn + (t._hs ? (' ' + t._hs) : '');
+          return t;
+        });
         _out.forEach(function (it, i) { it.no = i + 1; });
         return _out;
       })(),
@@ -685,6 +695,73 @@
       if ((c2 - c1 + 1) >= 8) return true;
     }
     return false;
+  }
+
+  /** v1.6.19（仅订舱单专用）：明细块是否为「单值网格」——列纵向合并贯穿明细块（如 Aramex
+   *  A21:A22 / B21:C22 / G21:H22 / I21:K22），模板意图就是每列只有一个值。 */
+  function _isMergedValueGrid(ws, itemsRow, slots) {
+    if (!ws || !itemsRow || itemsRow < 1 || !slots || slots < 2) return false;
+    var list = [];
+    try { list = (ws.model.merges || []).slice(); } catch (e) { return false; }
+    var cnt = 0;
+    for (var i = 0; i < list.length; i++) {
+      var mm = String(list[i]).match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+      if (!mm) continue;
+      var r1 = parseInt(mm[2], 10), r2 = parseInt(mm[4], 10);
+      if (r1 <= itemsRow && r2 >= itemsRow + 1) cnt++;
+    }
+    return cnt >= 2;
+  }
+
+  /** v1.6.19（仅订舱单专用）：明细口径判别 —— 返回 true = 单值口径（件数/重量/体积各只有一个数）。
+   *  优先级：① data.bookingItemMode 显式设置；② 明细表头出现「总件数/总毛重/总体积/合计/TOTAL」等"总"字样
+   *  （如 CHR R32「总件数 / 总毛重 / 总体积」）→ 单值；③ 明细块列纵向合并 >=2（如 Aramex）→ 单值；
+   *  ④ 明细表头含「唛头 / 箱号 / Marks」等逐箱列（如 ANHAI「Marks & Numbers」）→ 逐行；
+   *  ⑤ 其余默认单值（多数订舱单表单式模板）。 */
+  function _isBookingSingleMode(ws, itemsRow, slots) {
+    if (!ws || !itemsRow || itemsRow < 1) return true;
+    var txt = '';
+    for (var r = Math.max(1, itemsRow - 2); r < itemsRow; r++) {
+      try { ws.getRow(r).eachCell({ includeEmpty: false }, function (c) { txt += ' ' + cellString(c); }); } catch (e) {}
+    }
+    if (/总件数|总毛重|总净重|总体积|合\s*计|总计|TOTAL|GRAND/i.test(txt)) return true;
+    if (_isMergedValueGrid(ws, itemsRow, slots)) return true;
+    if (/唛头|箱号|Marks|CTN\s*NO|CARTON\s*NO|NO\.\s*OF\s*(PKG|PACKAGES|PIECES)/i.test(txt)) return false;
+    return true;
+  }
+
+  /** v1.6.19（仅订舱单专用）：单值口径折叠 —— 把「一行一个品名」的明细折叠成 1 条记录：
+   *  件数/箱数、数量、毛重、净重、体积、金额各取全票合计（各只有一个数）；
+   *  货描 = 每行「品名(+HS) + 数量 PCS」多行文本（同一格里分行显示）。 */
+  function _collapseBookingItems(items, totals) {
+    var list = items || [];
+    if (!list.length) return list;
+    var lines = [], names = [];
+    list.forEach(function (it) {
+      var nm = String(it.nameEn || it.nameCn || it.description || '').trim();
+      var q = round(Number(it.qty) || 0, 3);
+      if (nm) { lines.push(nm + (q ? ('  ' + q + ' PCS') : '')); names.push(nm); }
+    });
+    var one = {};
+    var src = list[0];
+    for (var p in src) if (Object.prototype.hasOwnProperty.call(src, p)) one[p] = src[p];
+    one.no = 1;
+    one.nameEn = lines.join('\n');
+    one.description = one.nameEn;
+    one.nameCn = names.join(' / ');
+    var t = totals || {};
+    one.qty = (Number(t.qty) || 0);
+    one.nw = (Number(t.nw) || 0);
+    one.gw = (Number(t.gw) || 0);
+    one.volume = (Number(t.volume) || 0);
+    one.boxCount = (Number(t.boxCount) || 0);
+    one.amount = (Number(t.amount) || 0);
+    one.volumeWeight = (Number(t.volumeWeight) || 0);
+    one._firstOfBox = true;
+    one._mergedByName = true;
+    one._bookingSingle = true;
+    delete one.boxNo;
+    return [one];
   }
 
   /** v1.6.17（仅订舱单调用）：订舱单明细列表头「直配表」，优先级高于通用别名匹配。
@@ -1505,7 +1582,22 @@
         tplCells.push({ col: colNumber, value: cell.value, style: cell.style });
       });
       // v1.6.17（仅订舱单）：行数 = max(实际条数, 5)；不足补空白带框行，超过按实际条数
-      var _wantRows = IS_BOOKING ? Math.max(items.length, MIN_ITEM_ROWS) : items.length;
+      // v1.6.19（仅订舱单）口径二选一：
+      //   单值口径（模板表单式，如 Aramex / CHR）→ 折叠成 1 条：件数/重量/体积各只有一个数，只有品名(+HS)分行；
+      //   逐行口径（模板逐行表，如 ANHAI）→ 一行一个品名，各自带该品名的箱数/重量/体积，沿用 v1.6.17 的「最少 5 行」。
+      var _bkSingle = false;
+      if (IS_BOOKING && itemsRowNum !== -1) {
+        var _m = String(data.bookingItemMode || '');
+        if (_m !== 'single' && _m !== 'rows') _m = _isBookingSingleMode(ws, itemsRowNum, templateSlots) ? 'single' : 'rows';
+        _bkSingle = (_m === 'single');
+        var _collapsed = _bkSingle ? _collapseBookingItems(items, data.totals) : items;
+        if (_collapsed !== items) {
+          items = _collapsed;
+          data = Object.assign({}, data, { items: items });
+        }
+      }
+      // 单值口径 → 不插行、保持模板原高度；逐行口径 → max(实际条数, 5)
+      var _wantRows = IS_BOOKING ? (_bkSingle ? items.length : Math.max(items.length, MIN_ITEM_ROWS)) : items.length;
       var slotDelta = _wantRows - templateSlots; // 正=需插入；负=需删除
       if (slotDelta > 0) {
         // 模板槽位不足 → 插入 (items.length - templateSlots) 行
@@ -1726,6 +1818,18 @@
         rrowW.eachCell({ includeEmpty: true }, function (cell) {
           if (cell.alignment && cell.alignment.wrapText) {
             cell.alignment = Object.assign({}, cell.alignment, { wrapText: false });
+          }
+        });
+      }
+    }
+    // v1.6.19（仅订舱单）：货描为按「品名 + HS」分行的多行文本，必须保留自动换行，
+    //   否则 Excel 不渲染 \n（多行会被挤成一行）。仅对确实含换行的明细格生效，其余仍按 ⑤.5 关掉 wrap。
+    if (IS_BOOKING && itemsRowNum !== -1) {
+      for (var rrN = 0; rrN < Math.max(1, items.length); rrN++) {
+        ws.getRow(itemsRowNum + rrN).eachCell({ includeEmpty: true }, function (cell) {
+          var _sn = cellString(cell);
+          if (_sn && _sn.indexOf('\n') >= 0) {
+            cell.alignment = Object.assign({}, cell.alignment || {}, { wrapText: true });
           }
         });
       }
