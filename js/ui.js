@@ -4700,49 +4700,81 @@
       // 注意：仅影响 <option> 的显示与检索，value 仍是 parties.id，取值链路 val() 完全不变
       function opts(list, sel) { return '<option value="">请选择</option>' + list.map(function (p) { var _wh = p.warehouseCode || ''; var _label = [p.name, _wh, p.country].filter(Boolean).join(' \u00b7 '); var _q = [p.name, p.company, _wh, p.country, p.city].filter(Boolean).join(' '); return '<option value="' + p.id + '"' + (sel === p.id ? ' selected' : '') + ' data-q="' + esc(_q) + '">' + esc(_label) + '</option>'; }).join(''); }
 
-      // v1.6.14：搜索框（放在下拉上方）
+      // v1.6.15：可搜索下拉（combobox）—— 输入框 + 候选面板；原生 select 转为隐藏的取值载体
       function _wzSearchHtml(targetId) {
-        return '<input class="wz-pq" data-target="' + targetId + '" placeholder="\ud83d\udd0d 搜索：名称 / 仓库代码 / 公司 / 国家" style="margin:0 0 6px 0">' +
-          '<span class="wz-pq-hint" data-target="' + targetId + '" style="display:block;font-size:12px;color:#889;margin:0 0 4px 0"></span>';
+        return '<span class="wz-cb-wrap" style="position:relative;display:block">' +
+          '<input class="wz-cb" data-target="' + targetId + '" autocomplete="off" placeholder="\u70b9\u51fb\u6216\u8f93\u5165\u5173\u952e\u5b57\u641c\u7d22\u2026">' +
+          '<div class="wz-cb-list" data-target="' + targetId + '" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:60;max-height:280px;overflow:auto;background:#fff;border:1px solid #cbd5e1;border-radius:6px;box-shadow:0 6px 18px rgba(20,40,80,.18);margin-top:2px"></div>' +
+          '</span>';
       }
 
-      // v1.6.14：输入即过滤 <option>（多词 AND，不区分大小写）。绝不把「当前选中项」过滤掉，避免 select.value 被静默清空
-      function _wzBindPartySearch() {
-        Array.prototype.forEach.call(document.querySelectorAll('.wz-pq'), function (inp) {
+      // v1.6.15：combobox 绑定 —— 输入即模糊过滤候选；选中写回隐藏 select（取值链路 val() 完全不变）
+      function _wzBindPartyCombo() {
+        Array.prototype.forEach.call(document.querySelectorAll('.wz-cb'), function (inp) {
           var tid = inp.getAttribute('data-target');
           var sel = document.getElementById(tid);
-          if (!sel) return;
-          var hint = document.querySelector('.wz-pq-hint[data-target="' + tid + '"]');
+          var panel = document.querySelector('.wz-cb-list[data-target="' + tid + '"]');
+          if (!sel || !panel) return;
+          sel.style.display = 'none'; // 隐藏原生 select：它仍是取值载体，val()/renderPartyInfo 照常读它的 value
           var all = Array.prototype.slice.call(sel.querySelectorAll('option')).map(function (o) {
             return { val: o.value, label: o.textContent, q: (o.getAttribute('data-q') || o.textContent || '').toLowerCase() };
           });
-          function build(items) {
-            sel.innerHTML = '';
-            items.forEach(function (it) {
-              var o = document.createElement('option');
-              o.value = it.val;
-              o.textContent = it.label;
-              if (it.q) o.setAttribute('data-q', it.q);
-              sel.appendChild(o);
-            });
+          var real = all.filter(function (it) { return it.val; });
+          var CLEAR = { val: '', label: '（不选择）', q: '' };
+          var rows = [], hi = 0;
+          function labelOf(v) { var f = all.filter(function (it) { return it.val === v; })[0]; return f ? f.label : ''; }
+          function paint() {
+            panel.innerHTML = rows.map(function (it, i) {
+              return '<div class="wz-cb-item" data-idx="' + i + '" style="padding:7px 10px;font-size:13px;cursor:pointer;' +
+                (i === hi ? 'background:#eef2f8;' : '') + (it.val ? '' : 'color:#889;') + '">' + esc(it.label) + '</div>';
+            }).join('');
           }
-          inp.oninput = function () {
-            var kw = inp.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
-            var cur = sel.value;
-            var ph = all.filter(function (it) { return !it.val; });
-            var curIt = all.filter(function (it) { return it.val && it.val === cur; });
-            var rest = all.filter(function (it) {
-              if (!it.val || it.val === cur) return false;
-              if (!kw.length) return true;
-              return kw.every(function (w) { return it.q.indexOf(w) >= 0; });
-            });
-            build(ph.concat(curIt).concat(rest));
-            sel.value = cur; // 关键：恢复选中，绝不因过滤而清空
-            // 命中数只统计「关键字真正匹配到的项」（不含为保留选中而置顶的那条），无匹配时显示 0
-            var hit = kw.length ? all.filter(function (it) { return it.val && kw.every(function (w) { return it.q.indexOf(w) >= 0; }); }).length : 0;
-            var total = all.length - ph.length;
-            if (hint) hint.innerHTML = kw.length ? ('命中 <b>' + hit + '</b> / 共 ' + total + (hit === 0 ? ' —— 无匹配' : '')) : '';
+          function open(kw) {
+            var k = (kw || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+            var hit = real.filter(function (it) { return !k.length || k.every(function (w) { return it.q.indexOf(w) >= 0; }); });
+            rows = [CLEAR].concat(hit);
+            hi = hit.length ? 1 : 0;
+            paint();
+            if (!hit.length && k.length) panel.innerHTML += '<div style="padding:6px 10px;font-size:12px;color:#889">无匹配 —— 可去「收发货人」页维护主数据</div>';
+            else if (!k.length) panel.innerHTML += '<div style="padding:6px 10px;font-size:12px;color:#889">共 ' + real.length + ' 条，输入关键字可模糊搜索</div>';
+            panel.style.display = 'block';
+          }
+          function close() { panel.style.display = 'none'; }
+          function pick(v) {
+            sel.value = v;
+            inp.value = v ? labelOf(v) : '';
+            close();
+            if (typeof sel.onchange === 'function') sel.onchange();
+          }
+          inp.onfocus = function () { inp.select(); open(inp.value === labelOf(sel.value) ? '' : inp.value); };
+          inp.onclick = function () { if (panel.style.display === 'none') { inp.select(); open(''); } };
+          inp.oninput = function () { open(inp.value); };
+          inp.onblur = function () { setTimeout(function () { close(); inp.value = labelOf(sel.value); }, 170); };
+          panel.onmousedown = function (e) {
+            var t = e.target && e.target.closest ? e.target.closest('.wz-cb-item') : null;
+            if (!t) return;
+            e.preventDefault();
+            var it = rows[parseInt(t.getAttribute('data-idx'), 10)];
+            if (it) pick(it.val);
           };
+          inp.onkeydown = function (e) {
+            if (e.key === 'Escape') { close(); inp.value = labelOf(sel.value); inp.blur(); return; }
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              e.preventDefault();
+              if (panel.style.display === 'none') open(inp.value === labelOf(sel.value) ? '' : inp.value);
+              if (!rows.length) return;
+              hi = e.key === 'ArrowDown' ? Math.min(rows.length - 1, hi + 1) : Math.max(0, hi - 1);
+              paint();
+              return;
+            }
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              if (panel.style.display === 'none') return;
+              if (rows.length <= 1) return; // 无匹配时列表只剩「不选择」：不误清空原选中
+              if (rows[hi]) pick(rows[hi].val);
+            }
+          };
+          inp.value = labelOf(sel.value); // 初始回填当前选中项名称
         });
       }
 
@@ -4984,11 +5016,11 @@
 
 
 
-      // v1.6.14：三个下拉（发货人/收货人/通知人）挂搜索
+      // v1.6.15：三个收发货人下拉挂「可搜索下拉」combobox
 
 
 
-      _wzBindPartySearch();
+      _wzBindPartyCombo();
 
 
 
