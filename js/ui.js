@@ -4696,7 +4696,55 @@
 
 
 
-      function opts(list, sel) { return '<option value="">请选择</option>' + list.map(function (p) { return '<option value="' + p.id + '"' + (sel === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>'; }).join(''); }
+      // v1.6.14：选项文本增强为「名称 · 仓库代码 · 国家」，并携带 data-q（名称/公司/仓库代码/国家/城市）供搜索
+      // 注意：仅影响 <option> 的显示与检索，value 仍是 parties.id，取值链路 val() 完全不变
+      function opts(list, sel) { return '<option value="">请选择</option>' + list.map(function (p) { var _wh = p.warehouseCode || ''; var _label = [p.name, _wh, p.country].filter(Boolean).join(' \u00b7 '); var _q = [p.name, p.company, _wh, p.country, p.city].filter(Boolean).join(' '); return '<option value="' + p.id + '"' + (sel === p.id ? ' selected' : '') + ' data-q="' + esc(_q) + '">' + esc(_label) + '</option>'; }).join(''); }
+
+      // v1.6.14：搜索框（放在下拉上方）
+      function _wzSearchHtml(targetId) {
+        return '<input class="wz-pq" data-target="' + targetId + '" placeholder="\ud83d\udd0d 搜索：名称 / 仓库代码 / 公司 / 国家" style="margin:0 0 6px 0">' +
+          '<span class="wz-pq-hint" data-target="' + targetId + '" style="display:block;font-size:12px;color:#889;margin:0 0 4px 0"></span>';
+      }
+
+      // v1.6.14：输入即过滤 <option>（多词 AND，不区分大小写）。绝不把「当前选中项」过滤掉，避免 select.value 被静默清空
+      function _wzBindPartySearch() {
+        Array.prototype.forEach.call(document.querySelectorAll('.wz-pq'), function (inp) {
+          var tid = inp.getAttribute('data-target');
+          var sel = document.getElementById(tid);
+          if (!sel) return;
+          var hint = document.querySelector('.wz-pq-hint[data-target="' + tid + '"]');
+          var all = Array.prototype.slice.call(sel.querySelectorAll('option')).map(function (o) {
+            return { val: o.value, label: o.textContent, q: (o.getAttribute('data-q') || o.textContent || '').toLowerCase() };
+          });
+          function build(items) {
+            sel.innerHTML = '';
+            items.forEach(function (it) {
+              var o = document.createElement('option');
+              o.value = it.val;
+              o.textContent = it.label;
+              if (it.q) o.setAttribute('data-q', it.q);
+              sel.appendChild(o);
+            });
+          }
+          inp.oninput = function () {
+            var kw = inp.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+            var cur = sel.value;
+            var ph = all.filter(function (it) { return !it.val; });
+            var curIt = all.filter(function (it) { return it.val && it.val === cur; });
+            var rest = all.filter(function (it) {
+              if (!it.val || it.val === cur) return false;
+              if (!kw.length) return true;
+              return kw.every(function (w) { return it.q.indexOf(w) >= 0; });
+            });
+            build(ph.concat(curIt).concat(rest));
+            sel.value = cur; // 关键：恢复选中，绝不因过滤而清空
+            // 命中数只统计「关键字真正匹配到的项」（不含为保留选中而置顶的那条），无匹配时显示 0
+            var hit = kw.length ? all.filter(function (it) { return it.val && kw.every(function (w) { return it.q.indexOf(w) >= 0; }); }).length : 0;
+            var total = all.length - ph.length;
+            if (hint) hint.innerHTML = kw.length ? ('命中 <b>' + hit + '</b> / 共 ' + total + (hit === 0 ? ' —— 无匹配' : '')) : '';
+          };
+        });
+      }
 
 
 
@@ -4704,7 +4752,7 @@
 
 
 
-        '<div><label class="req">SHIPPER 发货人</label><select id="wz-shipper">' + opts(shippers, w.shipperId) + '</select>' + (shippers.length === 0 ? '<p class="hint">📌 无发货人主数据。<button class="btn sm ghost" id="wz-use-ord-shipper">抓取订单的卖家/承运商为发货人</button></p>' : '') + '</div>' +
+        '<div><label class="req">SHIPPER 发货人</label>' + _wzSearchHtml('wz-shipper') + '<select id="wz-shipper">' + opts(shippers, w.shipperId) + '</select>' + (shippers.length === 0 ? '<p class="hint">📌 无发货人主数据。<button class="btn sm ghost" id="wz-use-ord-shipper">抓取订单的卖家/承运商为发货人</button></p>' : '') + '</div>' +
 
 
 
@@ -4712,7 +4760,7 @@
 
 
 
-        '<div><label class="req">CONSIGNEE 收货人</label><select id="wz-consignee">' + opts(consignees, w.consigneeId) + '</select>' +
+        '<div><label class="req">CONSIGNEE 收货人</label>' + _wzSearchHtml('wz-consignee') + '<select id="wz-consignee">' + opts(consignees, w.consigneeId) + '</select>' +
 
 
 
@@ -4724,7 +4772,7 @@
 
 
 
-        '<div><label>NOTIFY 通知人</label><select id="wz-notify">' + opts(notifies, w.notifyId) + '</select></div></div>' +
+        '<div><label>NOTIFY 通知人</label>' + _wzSearchHtml('wz-notify') + '<select id="wz-notify">' + opts(notifies, w.notifyId) + '</select></div></div>' +
 
 
 
@@ -4933,6 +4981,14 @@
 
 
       if (coSel) coSel.onchange = renderPartyInfo;
+
+
+
+      // v1.6.14：三个下拉（发货人/收货人/通知人）挂搜索
+
+
+
+      _wzBindPartySearch();
 
 
 
