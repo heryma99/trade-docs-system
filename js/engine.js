@@ -634,6 +634,55 @@
     return map;
   }
   /** 扫描模板占位符，并尝试用表头识别兜底：返回 {fields, itemFields, itemsRow, itemHeaderMap, sheetName} */
+  /** v1.6.16：判断某行是否「可能」是明细表头行——用于兜底识别的合理性闸门。
+   *  背景 bug：Aramex 模板第 3 行公司名 "Aramex-Si·no·trans ..." 因含子串 "no"，
+   *  被 matchHeaderAlias 整行判成 no 字段（11 列同一字段），进而被当成明细表头行 →
+   *  itemsRow 错判为 4 → 第 4 行表头 "SHIPPER'S LETTER OF INSTRUCTION" 被数据覆盖。
+   *  闸门 1：列头必须映射到 >=3 个「不同字段」（整行同一字段必为误判）。
+   *  闸门 2：该行不能是「大跨度合并区」行（标题/公司名常整行合并，真表头行每列独立）。 */
+  function _isPlausibleHeaderRow(ws, rowNumber, map, count) {
+    if (!(count >= 3)) return false;
+    var seen = {}, kinds = 0;
+    Object.keys(map).forEach(function (c) { if (!seen[map[c]]) { seen[map[c]] = 1; kinds++; } });
+    if (kinds < 3) return false;
+    var spans = [];
+    try {
+      (ws.model.merges || []).forEach(function (m) {
+        var mm = String(m).match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+        if (!mm) return;
+        if (parseInt(mm[2], 10) !== rowNumber || parseInt(mm[4], 10) !== rowNumber) return;
+        var c1 = _colNum(mm[1]), c2 = _colNum(mm[3]);
+        if (c2 - c1 + 1 >= 3) spans.push({ c1: c1, c2: c2 });
+      });
+    } catch (e) {}
+    if (!spans.length) return true;
+    var inside = 0, total = 0;
+    Object.keys(map).forEach(function (c) {
+      var cn = parseInt(c, 10); total++;
+      for (var i = 0; i < spans.length; i++) {
+        if (cn >= spans[i].c1 && cn <= spans[i].c2) { inside++; break; }
+      }
+    });
+    // 阈值取 0.85：只有「几乎整行都被同一个大合并区覆盖」才判为标题/公司名行。
+    // 真实明细表头行常含跨列合并（如「货物描述」跨 3 列），阈值过低会误伤（KLN 曾因此被拒）。
+    return !(total > 0 && (inside / total) >= 0.85);
+  }
+
+  /** v1.6.16：整行「同一长文本重复 >=3 格」= 合并区标签行的铁证（数据行不会这样）。
+   *  用于写明细值之前的最后一道防御，避免表头被数据覆盖。 */
+  function _looksLikeMergedLabelRow(ws, rowNumber) {
+    var cnt = {}, hit = false;
+    try {
+      ws.getRow(rowNumber).eachCell({ includeEmpty: false }, function (cell) {
+        var s = cellString(cell);
+        if (!s || s.length < 8 || /\{\{/.test(s)) return;
+        cnt[s] = (cnt[s] || 0) + 1;
+        if (cnt[s] >= 3) hit = true;
+      });
+    } catch (e) {}
+    return hit;
+  }
+
   function scanTemplate(wb) {
     var result = { fields: [], itemFields: [], itemsRow: -1, itemHeaderMap: {}, sheetName: '' };
     var ws = wb.worksheets[0];
@@ -667,7 +716,10 @@
           var f = matchHeaderAlias(s);
           if (f && !map[colNumber]) { map[colNumber] = f; count++; }
         });
-        if (count > best.count) best = { row: rowNumber, count: count, map: map };
+        // v1.6.16：加合理性闸门，避免公司名/标题行（整行合并 + 同字段）被当成明细表头行
+        if (count > best.count && _isPlausibleHeaderRow(ws, rowNumber, map, count)) {
+          best = { row: rowNumber, count: count, map: map };
+        }
       });
       if (best.count >= 3) {
         result.itemsRow = best.row + 1;
@@ -1252,9 +1304,17 @@
           var f = matchHeaderAlias(cellString(cell));
           if (f) { map[colNumber] = f; count++; }
         });
-        if (count > best.count) best = { row: rowNumber, count: count, map: map };
+        // v1.6.16：同 scanTemplate 的合理性闸门
+        if (count > best.count && _isPlausibleHeaderRow(ws, rowNumber, map, count)) {
+          best = { row: rowNumber, count: count, map: map };
+        }
       });
       if (best.count >= 3) { itemsRowNum = best.row + 1; itemHeaderMap = best.map; }
+      // v1.6.16：最后的防御——若推算出的明细起始行是「同一长文本重复 >=3 格」的合并区标签行，
+      //   说明定位仍不可靠，宁可放弃按表头映射写明细值，也不覆盖表头。
+      if (itemsRowNum !== -1 && _looksLikeMergedLabelRow(ws, itemsRowNum)) {
+        itemsRowNum = -1; itemHeaderMap = {};
+      }
     }
     // 记录实际明细起始行 + 列字段映射，供 embedProductImages 复用，避免两函数各自推算行/列号导致图片错位
     // （尤其用户上传的定制模板：{{items}}占位符行 / 表头行 / 产品图片表头行 可能不在同一行）
