@@ -605,7 +605,39 @@
         if (!_names.length) { (orders || []).forEach(function (o) { (o.items || []).forEach(function (it) { _add(it.nameEn || it.nameCn); }); }); }
         return _names.slice(0, 3).join(', ');
       })(),
-      items: items,
+      // v1.6.18（仅订舱单）：明细按「英文品名 + HS CODE」汇总（订舱单/提单口径：一行一个品名）。
+      //   上游已按 SKU 聚合出箱数/数量/毛重/净重/体积；此处把同品名同 HS 的多个 SKU 再合并为一行，
+      //   箱数/数量/毛重/净重/体积各自求和并取整（避免浮点尾巴如 12.600000000000001）。
+      //   非订舱单（kind !== 'booking'）items 原样返回，零影响。
+      items: (function () {
+        if (String(opts.kind || '') !== 'booking' || !items || items.length <= 1) return items;
+        var _bk = {}, _seq = [];
+        (items || []).forEach(function (it) {
+          var _nm = it.nameEn || it.nameCn || it.description || '';
+          var _hs = it.hsCode || '';
+          var _k = String(_nm) + '\u0001' + String(_hs);
+          if (!_bk[_k]) {
+            _bk[_k] = {};
+            for (var _p in it) if (Object.prototype.hasOwnProperty.call(it, _p)) _bk[_k][_p] = it[_p];
+            _bk[_k].qty = 0; _bk[_k].nw = 0; _bk[_k].gw = 0; _bk[_k].volume = 0;
+            _bk[_k].boxCount = 0; _bk[_k].amount = 0; _bk[_k].volumeWeight = 0;
+            _bk[_k]._firstOfBox = true; _bk[_k]._mergedByName = true;
+            delete _bk[_k].boxNo;
+            _seq.push(_k);
+          }
+          var _t = _bk[_k];
+          _t.qty = round((Number(_t.qty) || 0) + (Number(it.qty) || 0), 3);
+          _t.nw = round((Number(_t.nw) || 0) + (Number(it.nw) || 0), 3);
+          _t.gw = round((Number(_t.gw) || 0) + (Number(it.gw) || 0), 3);
+          _t.volume = round((Number(_t.volume) || 0) + (Number(it.volume) || 0), 6);
+          _t.boxCount = (Number(_t.boxCount) || 0) + (Number(it.boxCount) || 0);
+          _t.amount = round((Number(_t.amount) || 0) + (Number(it.amount) || 0), 2);
+          _t.volumeWeight = round((Number(_t.volumeWeight) || 0) + (Number(it.volumeWeight) || 0), 3);
+        });
+        var _out = _seq.map(function (k) { return _bk[k]; });
+        _out.forEach(function (it, i) { it.no = i + 1; });
+        return _out;
+      })(),
       totals: totals,
       amountInWords: amountInWords(totals.amount, currency)
     };
@@ -910,7 +942,10 @@
 
   /** 扫描模板表头区，生成标签->字段映射(labelMap)，供填充与 UI 编辑。
    *  itemsRowNum：明细表头行号，其之上的表头区才是字段标签所在；传 -1 时默认扫前 25 行。 */
-  function buildLabelMap(wb, itemsRowNum) {
+  function buildLabelMap(wb, itemsRowNum, opts) {
+    // v1.6.18：opts.booking=true 时启用「订舱单」专用识别分支（长双语标签 / 退化别名不整行跳过 / 收发人值区在下方）
+    //   其余模板不传 opts → 行为与 v1.6.17 完全一致。
+    var IS_BOOKING = !!(opts && opts.booking);
     var ws = wb.worksheets[0];
     if (!ws) return [];
     var mergedMaps = buildMergedMaps(ws);
@@ -930,7 +965,16 @@
       row.eachCell({ includeEmpty: false }, function (cellH) {
         if (matchHeaderAlias(_cellStr(cellH))) hdrCnt++;
       });
-      if (hdrCnt >= 3) continue;
+      if (IS_BOOKING) {
+        // v1.6.18（仅订舱单）：改用「明细列头白名单关键词」判定明细表头行。
+        //   原逻辑用 matchHeaderAlias 计数，会被退化别名误命中（'H(CM)'->H 命中 SHIPPER'S、(NO 命中 NOTIFY)），
+        //   把 R11/R14 这类收发人标签行整行跳过 → labelMap 为空 → 收发货人填不出来。
+        var _kwCnt = 0;
+        row.eachCell({ includeEmpty: false }, function (cellK) {
+          if (/(件数|箱数|箱号|毛重|净重|体积|数量|长|宽|高|PCS|PIECES|CARTON|CTNS|CTN|WEIGHT|MEASUREMENT)/i.test(_cellStr(cellK))) _kwCnt++;
+        });
+        if (_kwCnt >= 3) continue;
+      } else if (hdrCnt >= 3) continue;
       // v1.4.60 区块归属：本行若出现「发件人/收件人/通知人」等 party 词，则其后（8 行内）的
       // 纯字段标签（国家/电话/邮编…）归属该 party。超过 8 行视为脱离区块，回落 consignee。
       row.eachCell({ includeEmpty: false }, function (cellP) {
@@ -950,7 +994,29 @@
         // 装饰/警告/提示文字（"因亚马逊地址时常变动..." "禁止私自修改..." 等）通常 20+ 字，
         // 后者若含"地址"等关键词会被 mapFieldLabel 误识别为字段标签，并因合并主格 mr.right 跨度大
         // 触发 fillByFieldLabels 把值写到合并区外的独立格子（V15 等模板装饰区）造成污染
-        if (s.length > 20) return;
+        if (IS_BOOKING) {
+          // v1.6.18（仅订舱单）：放行中英双语长标签（如「托运人姓名及地址\nSHIPPER'S NAME AND ADDRESS」=31 字），
+          //   但仅限收发人/名称/地址类，避免装饰提示文字被当成字段标签。
+          if (s.length > 60) return;
+          if (s.length > 20 && !/(名称|姓名|地址|托运人|收货人|通知人|SHIPPER|CONSIGNEE|NOTIFY|NAME|ADDRESS)/i.test(s)) return;
+        } else if (s.length > 20) return;
+        // v1.6.18（仅订舱单）：收发人「姓名及地址」标签 —— 值区在标签正下方的同宽空合并块（全屏表单式模板）
+        if (IS_BOOKING && !LABEL_EXCLUDE_RE.test(s) && /(姓名|名称|地址|NAME|ADDRESS)/i.test(s)) {
+          var _pb = null;
+          for (var _pi = 0; _pi < PARTY_RE.length; _pi++) if (PARTY_RE[_pi].re.test(s)) { _pb = PARTY_RE[_pi].party; break; }
+          if (_pb) {
+            var _mrg1 = (mergedMaps.masterRange || {})[r + ',' + c];
+            var _mrg2 = _mrg1 ? (mergedMaps.masterRange || {})[( _mrg1.top + 1) + ',' + _mrg1.left] : null;
+            if (_mrg2 && _mrg1 && _mrg2.left === _mrg1.left && _mrg2.right === _mrg1.right && !_cellStr(ws.getCell(_mrg1.top + 1, _mrg1.left))) {
+              var _keyB = r + ',' + c;
+              if (!seen[_keyB]) {
+                seen[_keyB] = 1;
+                map.push({ r: r, c: c, label: s, path: _pb + '.name', party: _pb, field: 'nameAddr', line: 0, kind: 'party', resolved: true, below: { r: _mrg1.top + 1, c: _mrg1.left } });
+              }
+              return;
+            }
+          }
+        }
         var info = mapFieldLabel(s, curParty);
         if (!info) return;
         var key = r + ',' + c;
@@ -964,12 +1030,20 @@
 
   /** 按标签映射填充表头区字段：对每个 resolved 标签，找到其右侧值格(跳过合并标签跨度/下一个标签)写入。
    *  与 fillHeaderByLabels 互补——它只处理收发人三类，此处处理全部(含收发人，幂等不冲突)。 */
-  function fillByFieldLabels(ws, data, labelMap, mergedMaps) {
+  function fillByFieldLabels(ws, data, labelMap, mergedMaps, isBooking) {
     if (!labelMap || !labelMap.length) return;
     var labelCols = {};
     labelMap.forEach(function (e) { (labelCols[e.r] = labelCols[e.r] || {})[e.c] = true; });
     var PH_TEST = /\{\{\s*([A-Za-z0-9_.]+)\s*\}\}/;
     labelMap.forEach(function (e) {
+      // v1.6.18（仅订舱单）：收发人「姓名及地址」标签 → 写入标签正下方的空合并块（名称换行地址）
+      if (e && e.field === 'nameAddr' && e.below) {
+        var _pp = data[e.party] || {};
+        var _txt = [_pp.name || _pp.company || '', _pp.address || ''].filter(Boolean).join('\n');
+        if (!_txt) return;
+        try { ws.getCell(e.below.r, e.below.c).value = _txt; } catch (e1) {}
+        return;
+      }
       if (!e.resolved || !e.path) return;
       var val = getPath(data, e.path);
       if (val === undefined || val === null || val === '') {
@@ -996,6 +1070,17 @@
       // v1.4.63：fallback 写 vStart 也必须跳合并从属格（合并区只有主格可写）
       if (!target && !(labelCols[e.r] && labelCols[e.r][vStart]) && !(mergedMaps && mergedMaps.subordinate && mergedMaps.subordinate[e.r + ',' + vStart])) target = ws.getRow(e.r).getCell(vStart);
       if (!target) return;
+      // v1.6.18（仅订舱单）：不覆盖已有静态文本。
+      //   原因：订舱单放行长标签后，会把「INCOTERMS (贸易术语)」这类标签右侧的静态文字
+      //   （KLN「OCEAN FREIGHT (海运费)」）当成值区而被写坏。订舱单下只在目标格为空
+      //   或含同字段占位符时才写，确保「只补空缺、不改已有」。
+      if (isBooking) {
+        var _curTxt = _cellStr(target);
+        if (_curTxt) {
+          var _phm = _curTxt.match(PH_TEST);
+          if (!(_phm && _phm[1] === e.path)) return;
+        }
+      }
       target.value = (typeof val === 'number') ? val : String(val);
     });
   }
@@ -1371,8 +1456,8 @@
     //      优先用模板自带的 labelMap（可 UI 编辑），否则现场扫描；对纯 {{}} 占位符模板为空的，no-op。
     var _labelMap = (options && options.labelMap && options.labelMap.length)
       ? options.labelMap
-      : buildLabelMap(wb, itemsRowNum);
-    fillByFieldLabels(ws, data, _labelMap, mergedMaps);
+      : buildLabelMap(wb, itemsRowNum, { booking: IS_BOOKING });
+    fillByFieldLabels(ws, data, _labelMap, mergedMaps, IS_BOOKING);
 
     // 明细区下界（供 2.5 清理残留行与 3 跳过明细区使用，必须在前面算出）
     var itemEnd = itemsRowNum === -1 ? -1 : itemsRowNum + Math.max((data.items || []).length, 1) - 1;
