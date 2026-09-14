@@ -110,7 +110,7 @@
       // 标签映射目标格集合（受控写入集之一）
       var labelMap = (opts.labelMap && opts.labelMap.length)
         ? opts.labelMap
-        : ((engine && engine.buildLabelMap) ? engine.buildLabelMap(templateWb, itemsRow) : []);
+        : ((engine && engine.buildLabelMap) ? engine.buildLabelMap(templateWb, itemsRow, { booking: String(opts.kind || '') === 'booking' }) : []);
       var labelTargets = {};
       labelMap.forEach(function (e) {
         if (e && e.row && e.col) labelTargets[e.row + ':' + e.col] = 1;
