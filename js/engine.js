@@ -451,6 +451,25 @@
       });
     }
     var totals = { qty: 0, amount: 0, nw: 0, gw: 0, boxCount: 0, volume: 0, volumeWeight: 0 };
+    // v1.6.20：按「箱型」汇总箱数（供订舱单尺寸列使用，格式 长*宽*高cm*箱数，如 58*38*37cm*136）。
+    var boxTypes = (function () {
+      var bx = (packing && packing.boxes) || [];
+      if (!bx.length) return [];
+      var m = {}, seq = [];
+      bx.forEach(function (b) {
+        var L = Number(b.length || b.lengthCm) || 0;
+        var W = Number(b.width || b.widthCm) || 0;
+        var Hh = Number(b.height || b.heightCm) || 0;
+        if (!(L || W || Hh)) return;
+        var k = L + 'x' + W + 'x' + Hh;
+        if (!m[k]) { m[k] = { l: L, w: W, h: Hh, count: 0 }; seq.push(k); }
+        m[k].count++;
+      });
+      return seq.map(function (k) {
+        var t = m[k];
+        return { l: t.l, w: t.w, h: t.h, count: t.count, text: t.l + '*' + t.w + '*' + t.h + 'cm*' + t.count };
+      });
+    })();
     items.forEach(function (it, idx) {
       it.no = idx + 1;
       it.amount = round(it.qty * it.price, 2);
@@ -649,6 +668,7 @@
         return _out;
       })(),
       totals: totals,
+      boxTypes: boxTypes, // v1.6.20：箱型汇总（订舱单尺寸列）
       amountInWords: amountInWords(totals.amount, currency)
     };
   }
@@ -711,6 +731,172 @@
       if (r1 <= itemsRow && r2 >= itemsRow + 1) cnt++;
     }
     return cnt >= 2;
+  }
+
+  /** v1.6.20（仅订舱单专用）：4 家承运商的「明细区声明式映射」——
+   *  按用户提供的已填样板（D:/模板/订舱单/ 下 CHR / DETRANS / GEODIS / KLN 原件）1:1 对齐。
+   *  为什么需要它：这 4 个模板的明细区结构各不相同（表单式/两块式/多列对应式），
+   *  且通用识别都定位不到（itemsRow=-1 或被误认），故改为「锚点行 + 显式落格」声明式写入。
+   *  - anchor：定位表头行的正则（只扫前 90 行，命中首个匹配行）
+   *  - anchorOffset：数据首行 = 表头行 + anchorOffset
+   *  - single：件数/毛重/体积（**各只有一个数**）落哪个列；fmt 可套格式（{n}=数字）
+   *  - singleAnchor/singleOffset：单值行与货物行不在同一区时单指定（DETRANS 两块式）
+   *  - fixed：固定值列（GEODIS Package Type = ctns）
+   *  - lines.perRow=true：一行一个品名（各列逐行写）；false：整块写进一个格子的多行文本
+   *  - lines.cols：货物字段 → 列字母（material=材质 / nameCn=中文品名 / nameEn=英文品名 /
+   *                hsCode=HS 编码 / goodsCombined=「中文 英文 HS」合一格）
+   *  - lines.dims：尺寸列（逐箱型一行，格式 长*宽*高cm*箱数）
+   *  - hsFmt：'full'=HS 全码(10位) / '6'=前 6 位（GEODIS 表头写明 first 6 digits）
+   *  注：唛头 / PO No. 按用户决定先留空（无可靠数据源）。 */
+  var BOOKING_DETAIL_PRESETS = [
+    {
+      name: 'CHR', anchor: /No\.\s*of\s*Pkg/i, anchorOffset: 2, hsFmt: 'full',
+      single: { boxCount: { col: 'B', fmt: '{n}CTNS' }, gw: { col: 'G' }, volume: { col: 'H' } },
+      lines: { perRow: true, cols: { material: 'C', nameCn: 'D', nameEn: 'E', hsCode: 'F' } }
+    },
+    {
+      name: 'DETRANS', anchor: /NATURE\s*OF\s*GOODS/i, anchorOffset: 1, hsFmt: 'full',
+      lines: { perRow: false, cols: { goodsCombined: 'C' }, dims: 'A' },
+      singleAnchor: /PACKAGES/i, singleOffset: 2,
+      single: { boxCount: { col: 'A', fmt: '{n}CTNS' }, gw: { col: 'C' }, volume: { col: 'I' } }
+    },
+    {
+      name: 'GEODIS', anchor: /first\s*6\s*digits/i, anchorOffset: 1, hsFmt: '6', // 锚点用 GEODIS 独有的 "first 6 digits"（H.S.code 会被 KLN 的 "MARKS & NO.S" 误命中）
+      single: { boxCount: { col: 'F' }, gw: { col: 'Q' }, volume: { col: 'S' } },
+      fixed: [{ col: 'H', value: 'ctns' }],
+      lines: { perRow: true, cols: { nameEn: 'J', nameCn: 'O', hsCode: 'P' }, dims: 'T' }
+    },
+    {
+      name: 'KLN', anchor: /NO\.?\s*AND\s*TYPES\s*OF\s*PKG/i, anchorOffset: 2, hsFmt: 'full',
+      single: { boxCount: { col: 'B', fmt: '{n}CTNS' }, gw: { col: 'G' }, volume: { col: 'H' } },
+      lines: { perRow: true, cols: { nameEn: 'D' } }
+    }
+  ];
+
+  /** v1.6.20：在前 90 行里找首个命中 anchor 的行号（-1 = 未命中）。 */
+  function _findAnchorRow(ws, re) {
+    if (!ws || !re) return -1;
+    var maxR = Math.min(ws.rowCount || 0, 90);
+    for (var r = 1; r <= maxR; r++) {
+      var hit = false;
+      try {
+        ws.getRow(r).eachCell({ includeEmpty: false }, function (c) { if (!hit && re.test(cellString(c))) hit = true; });
+      } catch (e) {}
+      if (hit) return r;
+    }
+    return -1;
+  }
+
+  /** v1.6.20（仅订舱单）：命中哪一条承运商明细区预设（未命中返回 null）。 */
+  function _matchBookingDetailPreset(ws) {
+    if (!ws) return null;
+    for (var i = 0; i < BOOKING_DETAIL_PRESETS.length; i++) {
+      if (_findAnchorRow(ws, BOOKING_DETAIL_PRESETS[i].anchor) > 0) return BOOKING_DETAIL_PRESETS[i];
+    }
+    return null;
+  }
+
+  /** v1.6.20：数字输出（去掉浮点尾巴，最多 3 位小数）。 */
+  function _bkNum(v) { return Math.round((Number(v) || 0) * 1000) / 1000; }
+
+  /** v1.6.20：写格（自动落到合并区主格，避免写到从属格不显示；含换行则开启自动换行）。 */
+  function _bkSetCell(ws, r, c, v) {
+    if (!ws || r < 1 || c < 1 || v === undefined || v === null || v === '') return;
+    var rr = r, cc = c;
+    try {
+      (ws.model.merges || []).forEach(function (m) {
+        var mm = String(m).match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+        if (!mm) return;
+        var r1 = parseInt(mm[2], 10), r2 = parseInt(mm[4], 10), c1 = _colNum(mm[1]), c2 = _colNum(mm[3]);
+        if (r1 <= r && r <= r2 && c1 <= c && c <= c2) { rr = r1; cc = c1; }
+      });
+    } catch (e) {}
+    var cell = ws.getCell(rr, cc);
+    cell.value = v;
+    if (String(v).indexOf('\n') >= 0) {
+      cell.alignment = Object.assign({}, cell.alignment || {}, { wrapText: true });
+    }
+  }
+
+  /** v1.6.20：把订舱单明细整理成「一行一个品名」的货物列表（品名/中文品名/HS/材质）。
+   *  数据来自 buildDocData 已按「英文品名 + HS CODE」归并的 items（_name/_nameCn/_hs/material）。 */
+  function _bookingGoodsList(items, hsFmt) {
+    var out = [];
+    (items || []).forEach(function (it) {
+      var nmEn = String(it._name || it.nameEn || it.nameCn || '').replace(/\s+\d{6,}\s*$/, '').trim();
+      var nmCn = String(it._nameCn || it.nameCn || '').replace(/\s+\d{6,}\s*$/, '').trim();
+      var hs = String(it._hs || it.hsCode || '').trim();
+      if (hsFmt === '6' && hs.length > 6) hs = hs.slice(0, 6);
+      if (!nmEn && !nmCn) return;
+      out.push({ nameEn: nmEn, nameCn: nmCn, hs: hs, material: String(it.material || '').trim() });
+    });
+    return out;
+  }
+
+  /** v1.6.20（仅订舱单）：按预设把「件数/毛重/体积（各一个数）+ 品名分行 + HS + 尺寸」直写进模板。 */
+  function _writeBookingDetailPreset(ws, data, ps) {
+    if (!ws || !ps) return false;
+    var hr = _findAnchorRow(ws, ps.anchor);
+    if (hr < 0) return false;
+    var start = hr + (ps.anchorOffset || 1);
+    var totals = (data && data.totals) || {};
+    var list = _bookingGoodsList((data && data.items) || [], ps.hsFmt);
+    var boxTypes = (data && data.boxTypes) || [];
+
+    // ① 单值：件数/总箱数、毛重、体积 —— 各只有一个数
+    var s1 = start;
+    if (ps.singleAnchor) {
+      var hr2 = _findAnchorRow(ws, ps.singleAnchor);
+      if (hr2 > 0) s1 = hr2 + (ps.singleOffset || 2);
+    }
+    if (ps.single) {
+      ['boxCount', 'gw', 'volume'].forEach(function (k) {
+        var spec = ps.single[k];
+        if (!spec) return;
+        var val = (k === 'boxCount') ? _bkNum(totals.boxCount) : _bkNum(totals[k]);
+        if (k === 'boxCount' && spec.fmt) val = spec.fmt.replace('{n}', String(val));
+        if (!(k === 'boxCount' && val === '0CTNS')) _bkSetCell(ws, s1, _colNum(spec.col), val);
+      });
+    }
+    // ② 固定值列（如 Package Type = ctns）
+    (ps.fixed || []).forEach(function (f) { _bkSetCell(ws, s1, _colNum(f.col), f.value); });
+
+    // ③ 货物行
+    if (ps.lines) {
+      if (ps.lines.perRow) {
+        list.forEach(function (g, i) {
+          Object.keys(ps.lines.cols).forEach(function (k) {
+            var col = ps.lines.cols[k];
+            var v = '';
+            if (k === 'hsCode') v = g.hs;
+            else if (k === 'material') v = g.material;
+            else if (k === 'nameCn') v = g.nameCn;
+            else if (k === 'nameEn') v = g.nameEn;
+            else return; // 未知键不写（dims 等由专门分支处理）
+            if (v) _bkSetCell(ws, start + i, _colNum(col), v);
+          });
+        });
+      } else if (ps.lines.cols && ps.lines.cols.goodsCombined) {
+        var txt = list.map(function (g) {
+          var parts = [];
+          if (g.nameCn) parts.push(g.nameCn);
+          if (g.nameEn && g.nameEn !== g.nameCn) parts.push(g.nameEn);
+          if (g.hs) parts.push(g.hs);
+          return parts.join(' ');
+        }).filter(Boolean).join('\n');
+        if (txt) _bkSetCell(ws, start, _colNum(ps.lines.cols.goodsCombined), txt);
+      }
+      // ④ 尺寸（逐箱型一行：长*宽*高cm*箱数）
+      if (ps.lines.dims && boxTypes.length) {
+        var dcol = _colNum(ps.lines.dims);
+        if (ps.lines.perRow) {
+          boxTypes.forEach(function (b, i) { _bkSetCell(ws, start + i, dcol, b.text); });
+        } else {
+          _bkSetCell(ws, start, dcol, boxTypes.map(function (b) { return b.text; }).join('\n'));
+        }
+      }
+    }
+    return true;
   }
 
   /** v1.6.19（仅订舱单专用）：明细口径判别 —— 返回 true = 单值口径（件数/重量/体积各只有一个数）。
@@ -1572,6 +1758,15 @@
       }
     }
 
+    // v1.6.20（仅订舱单）：若模板命中「承运商明细区预设」（CHR / DETRANS / GEODIS / KLN），
+    //   改用声明式映射直写（见 BOOKING_DETAIL_PRESETS），并关闭通用明细机制（itemsRowNum = -1），
+    //   避免通用逻辑在这类表单式模板上误写（KLN 此前 itemsRow=17 就落到了 NOTIFY PARTY 块）。
+    var _bkPreset = null;
+    if (IS_BOOKING) {
+      _bkPreset = _matchBookingDetailPreset(ws);
+      if (_bkPreset) itemsRowNum = -1;
+    }
+
     // 2) 明细区展开：先复制模板行样式与占位内容 N-1 次
     var items = data.items || [];
     // v1.6.17（仅订舱单）：即使 0 条明细也要铺满 MIN_ITEM_ROWS 个空框
@@ -1822,6 +2017,9 @@
         });
       }
     }
+    // v1.6.20（仅订舱单）：按承运商预设直写明细区（件数/毛重/体积各一个数 + 品名分行 + HS + 尺寸）
+    if (_bkPreset) _writeBookingDetailPreset(ws, data, _bkPreset);
+
     // v1.6.19（仅订舱单）：货描为按「品名 + HS」分行的多行文本，必须保留自动换行，
     //   否则 Excel 不渲染 \n（多行会被挤成一行）。仅对确实含换行的明细格生效，其余仍按 ⑤.5 关掉 wrap。
     if (IS_BOOKING && itemsRowNum !== -1) {
