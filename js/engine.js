@@ -1587,7 +1587,7 @@
 
   /** 模板表头识别填充：把发货人/收货人/地址/电话按模板自身表头标签写入对应单元格。
    *  两遍：先清理值列里的样本残留，再按标签写入（避免写入后被清理）。仅写入空单元格或同字段占位符。 */
-  function fillHeaderByLabels(ws, data, headerEnd, itemsRowNumArg, writeEnd) {
+  function fillHeaderByLabels(ws, data, headerEnd, itemsRowNumArg, writeEnd, isBooking) {
     headerEnd = headerEnd || 25;
     // v1.5.27：PASS2 写值范围独立于 headerEnd。无占位符模板的 itemsRow 常被 scanTemplate 兜底
     // 提前判到 R4-6（明细表头行），headerEnd=itemsRow 导致 R19-23 的「我司全称/地址/联系人」等
@@ -1667,11 +1667,40 @@
       }
     });
 
+    // v1.6.22：逐行预扫「模板静态文字格」——非占位符、非 label 的实义文字。
+    // 用途：PASS1 清理 label 右侧值格时，若 label 与该格之间夹着静态文字（如 OCEAN VESSEL 与
+    //      下一列 H22「出单方式」之间的表头字），则该格属于静态表头区，不得当样本残留清空。
+    // ⚠️ 此预扫只用 eachCell 读取，绝不在构建 labelCellValueRanges 时调用 ws.getRow(r).getCell(sc)
+    //    ——后者会在 ExcelJS 内部产生隐蔽副作用（实测会导致其他模板数据丢失/样本泄露）。
+    var staticTextCells = {}; // {'r,c': true}
+    for (var rS = 1; rS <= headerEnd; rS++) {
+      (function (rowNum) {
+        var rowS = ws.getRow(rowNum);
+        rowS.eachCell({ includeEmpty: false }, function (cellS, colS) {
+          var sS = _cellStr(cellS);
+          if (!sS) return;
+          if (/\{\{/.test(sS)) return;
+          if (mapFieldLabel(sS)) return;
+          staticTextCells[rowNum + ',' + colS] = true;
+        });
+      })(rS);
+    }
+
+    // v1.6.22：订舱单「静态表头词」兜底词典。
+    //   场景：模板里某些表头短语（如 GEODIS「GID CODE」、CHR「Shipping Order」、KLN「出单方式」）
+    //   既不是 {{}} 占位符，也未被 mapFieldLabel 识别为字段标签，却位于 label 右侧的「盲区」值区
+    //   （该 label 右侧本行无后继 label 夹住，值区被盲目扩到 +12 格）→ 会被 PASS1 当样本残留清空。
+    //   范围：仅订舱单（IS_BOOKING）且仅「盲区」分支生效，避免影响发票/申报模板。
+    //   证据：全量扫描 6 家订舱单模板，PASS1 误清的静态文字仅 3 种（GID CODE/出单方式/Shipping Order）。
+    var BOOKING_STATIC_HEADER_RE = /^(gid\s*code|shipping\s*order|出单方式|正本提单|电放提单|sea\s*waybill|original\s*b\/?l|telex\s*release|装卸方式|本地费用\s*支付币种)$/i;
+
     // PASS 1：清理值列里的样本残留（非占位符、非标签、非静态文本）。
     // 合并单元格成员只保留包含标签词的静态文本；具体样本数据（如旧地址、旧公司名）仍清空。
     // v1.4.50：兼容无 {{}} 占位符模板——按 mapFieldLabel label 右侧值格也清；label 右侧的值合并区（主格+从属格）也清（之前 mergedCell skip 会跳过整片合并区导致样本残留）
     for (var r1 = 1; r1 <= headerEnd; r1++) {
       var rowA = ws.getRow(r1);
+      // v1.6.22：本行 label 列表（按列排序），用于判断「label 与该格之间是否夹静态文字」
+      var rowLabelsSorted = (labelByRow[r1] || []).slice().sort(function (a, b) { return a.c - b.c; });
       rowA.eachCell({ includeEmpty: true }, function (cell, col) {
         var s = _cellStr(cell);
         // v1.4.54：保护明细表头行（列标签 SKU/MODEL/DESCRIPTION/QTY 等），避免被当样本残留清空导致表头空白、数据列整体右移
@@ -1690,6 +1719,27 @@
         if (inLabelRange) {
           if (mergedSubordinate[r1 + ',' + col]) return; // 合并从属格不参与清理
           if (KEEP.test(s)) return; // 含保留词不动
+          // v1.6.22：若「该格左侧最近的 label」与「该格」之间夹着模板静态文字，则该格处于静态表头区，
+          //   不是 label 的值格，不得清空（修盲扫 12 格导致 6 家模板 15 处静态文字被误删）。
+          var nearestLabelCol = 0;
+          for (var li2 = 0; li2 < rowLabelsSorted.length; li2++) {
+            if (rowLabelsSorted[li2].c < col) nearestLabelCol = rowLabelsSorted[li2].c; else break;
+          }
+          var sandwiched = false;
+          for (var ck = nearestLabelCol + 1; ck < col; ck++) {
+            if (staticTextCells[r1 + ',' + ck]) { sandwiched = true; break; }
+          }
+          if (sandwiched) return; // 保护静态表头，保留原值
+          // v1.6.22（仅订舱单）：盲区静态表头兜底
+          //   ①该格文本本身是订舱单表头短语（GID CODE / Shipping Order / 出单方式 …）
+          //   ②该格是「纵向跨行合并」的主格（如 KLN H22:H24「出单方式」静态表头列）
+          if (isBooking) {
+            if (BOOKING_STATIC_HEADER_RE.test(String(s).replace(/\s+/g, ' ').trim())) return;
+            for (var mI = 0; mI < merged.length; mI++) {
+              var mG = _parseMerge(merged[mI]);
+              if (mG && mG.r1 === r1 && mG.c1 === col && mG.r2 > mG.r1) return; // 纵向跨行合并主格=静态表头列
+            }
+          }
           cell.value = '';
           return;
         }
@@ -1960,7 +2010,7 @@
 
     // 1.5) 模板表头识别填充（发货人/收货人/地址/电话等）：取模板自身表头标签填
     // v1.5.27 writeEnd=25：覆盖 itemsRow 之下的「我司/开票方」信息区（无占位符模板的 R19-23）
-    fillHeaderByLabels(ws, data, itemsRowNum === -1 ? 25 : itemsRowNum, itemsRowNum, 25);
+    fillHeaderByLabels(ws, data, itemsRowNum === -1 ? 25 : itemsRowNum, itemsRowNum, 25, IS_BOOKING);
 
     // 1.6) 通用字段标签映射填充（运输方式/起运国/客户单号/总件数 等未被收发人三类覆盖的表头字段）
     //      优先用模板自带的 labelMap（可 UI 编辑），否则现场扫描；对纯 {{}} 占位符模板为空的，no-op。
