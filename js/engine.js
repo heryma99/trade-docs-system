@@ -2425,18 +2425,38 @@
     addLogo(wb, ws, options.logo);
     // ⑥.5) 合并从属格继承主格样式：ExcelJS 写回无值单元格时会丢弃其样式，导致合并块从属格
     //      （如 Aramex I21:K22 的 J21/K21/I22/J22/K22）在「写回→重读」后丢失对齐/字体等；
-    //       把主格样式显式赋给从属格使其持久化。视觉不变（合并块本就按主格显示）。
+    //       把主格样式显式赋给从属格使其持久化。
+    //  ⚠️ v1.6.25 修正（关键）：**从属格绝不能继承主格的 border**！
+    //     合并区的从属格在 Excel 里不显示内容，但**边框线是按每格各自的 border 绘制的** ——
+    //     把主格的 left/top 线抄给从属格后，Excel 会为每个从属格各画一条竖线，
+    //     视觉上把一个合并大方块切成「一格一条竖线」的网格（实测 Aramex 171 处 /
+    //     GEODIS 1102 处 / KLN 552 处多余边框）。故从属格只继承「非边框」样式
+    //     （字体/对齐/底色/数字格式/保护），边框一律保持模板原样。
     (ws.model.merges || []).forEach(function (mref) {
       var mm = parseMergeRef(mref); if (!mm) return;
       var master = ws.getCell(mm.top, mm.left);
       var ms = master.style; if (!ms) return;
+      // 剥掉主格 border 得到"可继承样式"（其余字段照抄，含 font/alignment/fill/numFmt/protection）
+      var inherit = {};
+      for (var mk in ms) {
+        if (!Object.prototype.hasOwnProperty.call(ms, mk)) continue;
+        if (mk === 'border') continue;          // ★ 不继承边框
+        inherit[mk] = ms[mk];
+      }
       for (var rr = mm.top; rr <= mm.bottom; rr++) {
         for (var cc = mm.left; cc <= mm.right; cc++) {
           if (rr === mm.top && cc === mm.left) continue;
           var sc = ws.getCell(rr, cc);
-          if (!sc.style || JSON.stringify(sc.style) !== JSON.stringify(ms)) {
-            try { sc.style = JSON.parse(JSON.stringify(ms)); } catch (e) {}
-          }
+          // 在从属格**原有样式**基础上合并继承项，末尾把 border 复位成它自己的原值
+          var own = sc.style ? JSON.parse(JSON.stringify(sc.style)) : {};
+          var next = {};
+          var nk;
+          for (nk in inherit) { if (Object.prototype.hasOwnProperty.call(inherit, nk)) next[nk] = inherit[nk]; }
+          for (nk in own) { if (Object.prototype.hasOwnProperty.call(own, nk)) next[nk] = own[nk]; }
+          if (own.border) next.border = own.border; else delete next.border;   // ★ 保留从属格自己的边框
+          try {
+            if (JSON.stringify(next) !== JSON.stringify(sc.style || {})) sc.style = JSON.parse(JSON.stringify(next));
+          } catch (e) {}
         }
       }
     });
