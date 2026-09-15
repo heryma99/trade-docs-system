@@ -6940,6 +6940,10 @@
 
       w._audit = audit; w._wb = wb; w._data = ctx.data;
 
+      // v1.6.22（仅订舱单）：保存源模板 buffer —— 导出时 zipPost 需用它注入
+      //   ExcelJS 会丢失的 OOXML 部件（ActiveX 复选框链 / fitToPage 打印总开关）。
+      try { w._tplBuf = tpl.fileBuf; } catch (eTpl) {}
+
 
 
       tplName = tpl.name;
@@ -7056,9 +7060,14 @@
 
         var fname = exporter.safeName((w.carrier ? w.carrier + '_' : '') + 'BOOKING_' + (w._data ? w._data.invoiceNo : '')) + '.xlsx';
 
-
-
-        await exporter.download(w._wb, fname);
+        // v1.6.22（仅订舱单）：走后处理导出 —— 在 zip 层注入 ExcelJS 丢失的
+        //   ActiveX 复选框控件链 + <pageSetUpPr fitToPage="1"/>（A4 一页宽总开关）。
+        //   后处理失败自动回退原始 buffer，不阻断导出；发票/申报/装箱单仍走 exporter.download 原路径。
+        if (typeof exporter.downloadProcessed === 'function') {
+          await exporter.downloadProcessed(w._wb, fname, { srcBuffer: w._tplBuf });
+        } else {
+          await exporter.download(w._wb, fname);
+        }
 
 
 
