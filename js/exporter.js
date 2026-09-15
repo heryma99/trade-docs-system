@@ -46,7 +46,47 @@
     });
   }
 
+  /** v1.6.22（仅订舱单）：写出 buffer → 可选后处理 → 触发浏览器下载。
+   *  为什么需要：ExcelJS 写 xlsx 会丢订舱单必需的 OOXML 部件（ActiveX 复选框控件链、
+   *    <pageSetUpPr fitToPage> 打印缩放总开关），这些必须在 zip 层由 TD.zipPost 注入。
+   *  与 download() 的区别：download() 是「通用导出」（发票/申报/装箱单走它，零改动），
+   *    本函数只在订舱单导出按钮里调用，并在后处理失败时自动回退原始 buffer（不阻断导出）。
+   *  @param {Workbook} wb 已填充的 workbook
+   *  @param {string} filename 下载文件名
+   *  @param {Object} [opts] { srcBuffer: 源模板 buffer, postProcess: 自定义后处理函数 }
+   */
+  function downloadProcessed(wb, filename, opts) {
+    opts = opts || {};
+    assertLogoPreserved(wb);
+    return toBuffer(wb).then(function (buf) {
+      var src = opts.srcBuffer;
+      var pp = opts.postProcess || (root && root.TD && root.TD.zipPost && root.TD.zipPost.postProcessBooking);
+      var chain;
+      if (pp && src) {
+        chain = Promise.resolve()
+          .then(function () { return pp(buf, src); })
+          .catch(function () { return buf; });      // 后处理异常 → 回退原始
+      } else {
+        chain = Promise.resolve(buf);
+      }
+      return chain;
+    }).then(function (finalBuf) {
+      var u8 = (finalBuf instanceof Uint8Array) ? finalBuf : new Uint8Array(finalBuf);
+      var blob = new Blob([u8], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+      return blob;
+    });
+  }
+
   function safeName(s) { return String(s || '').replace(/[\\/:*?"<>|]/g, '_'); }
 
-  return { toBuffer: toBuffer, download: download, safeName: safeName, assertLogoPreserved: assertLogoPreserved };
+  return {
+    toBuffer: toBuffer, download: download, safeName: safeName,
+    assertLogoPreserved: assertLogoPreserved,
+    downloadProcessed: downloadProcessed
+  };
 });
