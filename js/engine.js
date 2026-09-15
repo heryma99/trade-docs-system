@@ -751,14 +751,15 @@
   var BOOKING_DETAIL_PRESETS = [
     {
       name: 'CHR', anchor: /No\.\s*of\s*Pkg/i, anchorOffset: 2, hsFmt: 'full',
-      single: { boxCount: { col: 'B', fmt: '{n}CTNS' }, gw: { col: 'G' }, volume: { col: 'H' } },
+      // v1.6.21：件数统一「只写数字」，不带 CTNS/件 等任何单位后缀（用户口径）
+      single: { boxCount: { col: 'B' }, gw: { col: 'G' }, volume: { col: 'H' } },
       lines: { perRow: true, cols: { material: 'C', nameCn: 'D', nameEn: 'E', hsCode: 'F' } }
     },
     {
       name: 'DETRANS', anchor: /NATURE\s*OF\s*GOODS/i, anchorOffset: 1, hsFmt: 'full',
       lines: { perRow: false, cols: { goodsCombined: 'C' }, dims: 'A' },
       singleAnchor: /PACKAGES/i, singleOffset: 2,
-      single: { boxCount: { col: 'A', fmt: '{n}CTNS' }, gw: { col: 'C' }, volume: { col: 'I' } }
+      single: { boxCount: { col: 'A' }, gw: { col: 'C' }, volume: { col: 'I' } }
     },
     {
       name: 'GEODIS', anchor: /first\s*6\s*digits/i, anchorOffset: 1, hsFmt: '6', // 锚点用 GEODIS 独有的 "first 6 digits"（H.S.code 会被 KLN 的 "MARKS & NO.S" 误命中）
@@ -768,8 +769,10 @@
     },
     {
       name: 'KLN', anchor: /NO\.?\s*AND\s*TYPES\s*OF\s*PKG/i, anchorOffset: 2, hsFmt: 'full',
-      single: { boxCount: { col: 'B', fmt: '{n}CTNS' }, gw: { col: 'G' }, volume: { col: 'H' } },
-      lines: { perRow: true, cols: { nameEn: 'D' } }
+      single: { boxCount: { col: 'B' }, gw: { col: 'G' }, volume: { col: 'H' } },
+      // v1.6.21：KLN 表头 I34 有独立的「HS CODE / (海关编码)」列，此前漏映射 →
+      //   按要求「海关编码所有 BOOKING 都要体现」补上（HS 全码 10 位）。
+      lines: { perRow: true, cols: { nameEn: 'D', hsCode: 'I' } }
     }
   ];
 
@@ -794,6 +797,159 @@
       if (_findAnchorRow(ws, BOOKING_DETAIL_PRESETS[i].anchor) > 0) return BOOKING_DETAIL_PRESETS[i];
     }
     return null;
+  }
+
+  /** v1.6.21（仅订舱单）：明细列语义词典 —— 通用结构识别用。
+   *  与 HEADER_ALIASES 无关（那个是通用字段别名，此处只用于「识别订舱单明细表头行 + 反推列语义」）。
+   *  设计目标：不再为每家承运商写死列号，改为「看列头文字像什么就写什么」。 */
+  var BOOKING_HEADER_KINDS = {
+    // v1.6.21：注意模板列头常为「中文\n英文」两行（如 Aramex「件数\nNO. OF\nPIECES」），
+    //   故此处一律用「包含式」匹配（不用 ^$ 锚定），由 _findBookingDetailBlock 的
+    //   「不同语义数 >= 3」闸门兜住误判风险。
+    boxCount: /(no\.?\s*of\s*(pkg|packages|pieces|ctns|cartons)|件数|箱数|\bpkgs?\b|\bctns\b|\bcartons\b)/i,
+    nameEn:   /(description\s*of\s*goods|descrip|货描|货物描述|品名|nature\s*of\s*goods|goods\s*description|commodity|goods)/i,
+    gw:       /(gross\s*weight|g\.?\s*w\.?|毛重)/i,
+    volume:   /(measurement|meas\.?|体积|cbm)/i,
+    qty:      /(\bquantity\b|\bqty\.?\b|数量|\bpcs\b)/i,
+    marks:    /(marks?\s*(&|and)?\s*(no|nos|numbers)?|唛头|shipping\s*marks?)/i,
+    dims:     /(dimension|尺寸)/i,
+    hsCode:   /(h\.?\s*s\.?\s*code|海关编码|商品编码)/i
+  };
+
+  /** v1.6.21（仅订舱单）：单元格文本 → 命中的明细列语义数组（无命中返回 null）。 */
+  function _bookingHeaderKinds(s) {
+    var t = String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+    if (!t) return null;
+    var out = [];
+    for (var k in BOOKING_HEADER_KINDS) {
+      if (BOOKING_HEADER_KINDS[k].test(t)) out.push(k);
+    }
+    return out.length ? out : null;
+  }
+
+  /** v1.6.21（仅订舱单）：该行是否为「副标题行」（列头的第二行中文/括号注释，如 ANHAI R24
+   *  「(唛头)/（数量）/（货物描述）/（毛重 KGS）/（体积 CBM）」、KLN R35、CHR R32）。
+   *  判定：整行【无任何列语义命中】且（过半单元格是括号式 或 全部为短标签 ≤14 字）。
+   *  这类行必须【禁止写入】，否则数据会覆盖模板中文表头（v1.6.20 及以前靠手写 anchorOffset 跳过，
+   *  偏移量差一行就出错 —— ANHAI 即因此把数据写进了 R24）。 */
+  function _isBookingSubHeaderRow(ws, rowNumber) {
+    if (!ws || !rowNumber || rowNumber < 1) return false;
+    var vals = [];
+    try {
+      ws.getRow(rowNumber).eachCell({ includeEmpty: false }, function (c) {
+        var s = cellString(c);
+        if (s === undefined) {
+          var v = c && c.value;
+          s = (v && v.text !== undefined) ? String(v.text) : (typeof v === 'number' ? String(v) : '');
+        }
+        var t = String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+        if (t) vals.push(t);
+      });
+    } catch (e) { return false; }
+    if (!vals.length) return false;
+    // 任一格命中列语义 → 不是副标题行（它是真表头）
+    for (var i = 0; i < vals.length; i++) {
+      if (_bookingHeaderKinds(vals[i])) return false;
+    }
+    // v1.6.21 收紧：必须是「整行括号式注释」或「整行短标签且含中文」。
+    //   反例（不得误判）：DETRANS R28「44ctns/8plts | 645.4 | 10.56」是真实数据行，
+    //   虽短且无列语义命中，但【无中文】【含数字】→ 必须放行。
+    var hasCJK = false, hasDigit = false;
+    for (var k2 = 0; k2 < vals.length; k2++) {
+      if (/[\u4e00-\u9fa5]/.test(vals[k2])) hasCJK = true;
+      if (/[0-9]/.test(vals[k2])) hasDigit = true;
+    }
+    if (hasDigit && !hasCJK) return false;   // 纯数字/编码行 = 数据行，放行
+    var brackety = 0, short = 0;
+    for (var j = 0; j < vals.length; j++) {
+      if (/^[（(【\[][\s\S]*[)）】\]]$/.test(vals[j])) brackety++;
+      if (vals[j].length <= 16) short++;
+    }
+    // 括号式（如 ANHAI R24「(唛头)/（数量）/（货物描述）」）→ 过半即判定
+    if (brackety >= Math.ceil(vals.length / 2)) return true;
+    // 全短标签且必须含中文（如 CHR R32「唛头及箱号/总件数/品名/总毛重/总体积」）
+    return (short === vals.length) && hasCJK;
+  }
+
+  /** v1.6.21（仅订舱单）：通用明细块定位 —— 不依赖承运商专属锚点词。
+   *  返回 { headerRow, dataRow, colMap, kinds } 或 null。
+   *  算法：
+   *    ① 扫前 45 行，找「列头行」：该行 >=3 个不同列各自命中列语义，且合计命中 >=3 种不同语义
+   *       （用「不同语义数」而非「命中格数」过闸门，避免整行重复同一词被误判，如 Aramex R3 公司名）；
+   *    ② 副标题行处理：若列头行【下一行】是副标题行（_isBookingSubHeaderRow），则 dataRow = headerRow + 2，
+   *       否则 dataRow = headerRow + 1；
+   *    ③ 校验 dataRow 未被静态文本占用（若该行有非空文本且非数字样式，则再下探 1 行，最多下探 3 行）；
+   *    ④ colMap：由列头行各列语义反推「列 → 语义」（同语义多列时取最左列为主格，_bkSetCell 会自动落合并主格）。 */
+  function _findBookingDetailBlock(ws) {
+    if (!ws) return null;
+    var maxR = Math.min(ws.rowCount || 0, 45);
+    var best = null;
+    for (var r = 1; r <= maxR; r++) {
+      var colMap = {}, kindSet = {};
+      try {
+        ws.getRow(r).eachCell({ includeEmpty: false }, function (c, colNumber) {
+          var s = cellString(c);
+          if (s === undefined || s === '') {
+            var v = c && c.value;
+            s = (v && v.text !== undefined) ? String(v.text) : (typeof v === 'number' ? String(v) : '');
+          }
+          var ks = _bookingHeaderKinds(s);
+          if (ks && !colMap[colNumber]) {
+            colMap[colNumber] = ks[0];   // 一格命中多语义时取第一个（顺序即优先级）
+            ks.forEach(function (k) { kindSet[k] = 1; });
+          }
+        });
+      } catch (e) { continue; }
+      var kinds = Object.keys(kindSet);
+      var colKeys = Object.keys(colMap);
+      // 闸门：>=3 个不同列 + >=3 种不同语义（且必须含「货描」列，否则不是订舱单明细区）
+      if (colKeys.length >= 3 && kinds.length >= 3 && kindSet.nameEn) {
+        if (!best || kinds.length > best.kinds.length) {
+          best = { headerRow: r, colMap: colMap, kinds: kinds };
+        }
+      }
+    }
+    if (!best) return null;
+
+    // ② 副标题行 → 数据行下移
+    var dataRow = best.headerRow + 1;
+    if (_isBookingSubHeaderRow(ws, dataRow)) dataRow++;
+
+    // ③ 数据行必须可写（空 或 仅含数字型占位）：否则再下探，最多 3 行
+    for (var probe = 0; probe < 3; probe++) {
+      if (_isBookingRowWritable(ws, dataRow)) break;
+      dataRow++;
+    }
+    best.dataRow = dataRow;
+    return best;
+  }
+
+  /** v1.6.21（仅订舱单）：该行是否「可写」（空行，或仅含空白/数字/短横线等占位）。
+   *  用于避免通用定位把数据写到已有静态文本的行（如标题、说明、页脚）。 */
+  function _isBookingRowWritable(ws, rowNumber) {
+    if (!ws || !rowNumber || rowNumber < 1) return false;
+    var texts = [];
+    try {
+      ws.getRow(rowNumber).eachCell({ includeEmpty: false }, function (c) {
+        var s = cellString(c);
+        if (s === undefined || s === '') {
+          var v = c && c.value;
+          s = (v && v.text !== undefined) ? String(v.text) : (typeof v === 'number' ? String(v) : '');
+        }
+        var t = String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+        if (t) texts.push(t);
+      });
+    } catch (e) { return false; }
+    if (!texts.length) return true;
+    // 仅含「-」「/」「N/M」等无意义占位时也算可写；出现中文长句/说明文字则不可写
+    for (var i = 0; i < texts.length; i++) {
+      var t = texts[i];
+      if (/^[\-\/\\_—–\s]*$/.test(t)) continue;
+      if (/^[0-9.,%]+$/.test(t)) continue;
+      if (t.length >= 6 && /[\u4e00-\u9fa5]/.test(t)) return false; // 中文长句 = 说明/条款
+      if (t.length >= 20) return false;                              // 超长 = 条款/备注
+    }
+    return true;
   }
 
   /** v1.6.20：数字输出（去掉浮点尾巴，最多 3 位小数）。 */
@@ -839,6 +995,15 @@
     var hr = _findAnchorRow(ws, ps.anchor);
     if (hr < 0) return false;
     var start = hr + (ps.anchorOffset || 1);
+    // v1.6.21：副标题行禁写闸门 —— 若算出的数据行其实是列头的第二行中文注释
+    //   （如 CHR R32、KLN R35、ANHAI R24「(唛头)/（数量）/（货物描述）」），必须下移一行。
+    //   原来靠写死的 anchorOffset 跳过；偏移量差一行就会把数据覆盖到模板中文表头上（ANHAI 即此因）。
+    //   循环下探，最多 3 行，避免任何情况写入静态表头。
+    for (var _g = 0; _g < 3; _g++) {
+      if (!_isBookingRowWritable(ws, start)) { start++; continue; }
+      if (_isBookingSubHeaderRow(ws, start)) { start++; continue; }
+      break;
+    }
     var totals = (data && data.totals) || {};
     var list = _bookingGoodsList((data && data.items) || [], ps.hsFmt);
     var boxTypes = (data && data.boxTypes) || [];
@@ -848,6 +1013,10 @@
     if (ps.singleAnchor) {
       var hr2 = _findAnchorRow(ws, ps.singleAnchor);
       if (hr2 > 0) s1 = hr2 + (ps.singleOffset || 2);
+      for (var _g2 = 0; _g2 < 3; _g2++) {
+        if (!_isBookingRowWritable(ws, s1) || _isBookingSubHeaderRow(ws, s1)) { s1++; continue; }
+        break;
+      }
     }
     if (ps.single) {
       ['boxCount', 'gw', 'volume'].forEach(function (k) {
@@ -896,6 +1065,62 @@
         }
       }
     }
+    return true;
+  }
+
+  /** v1.6.21（仅订舱单）：通用结构识别的写入 —— 未命中承运商预设的模板（Aramex / ANHAI / 未来新模板）。
+   *  与 _writeBookingDetailPreset 同为「单值口径」：件数/毛重/体积各只有一个数，只有品名分行（每行带 HS）。
+   *  差异：列位置来自 blk.colMap（列头语义反推），而不是写死的列号。
+   *  列语义：boxCount=件数/箱数, gw=毛重, volume=体积, nameEn=货描(品名+HS), qty=数量, hsCode=HS 单独列。 */
+  function _writeBookingDetailBlock2(ws, data, blk) {
+    if (!ws || !blk || !blk.colMap) return false;
+    var start = blk.dataRow;
+    if (!start || start < 1) return false;
+    var totals = (data && data.totals) || {};
+    var list = _bookingGoodsList((data && data.items) || [], 'full');
+
+    // 列语义 → 列号（取该语义最左列，_bkSetCell 会自动落到合并区主格）
+    var byKind = {};
+    Object.keys(blk.colMap).forEach(function (colStr) {
+      var k = blk.colMap[colStr];
+      var cn = parseInt(colStr, 10);
+      if (!k || !cn) return;
+      if (byKind[k] === undefined || cn < byKind[k]) byKind[k] = cn;
+    });
+
+    // ① 单值：件数 / 毛重 / 体积（各只有一个数）
+    // v1.6.21：若模板「件数」列缺位、但有「数量(Quantity)」列（如 ANHAI 无 No. of Packages，
+    //   仅 Quantity 一列），则该列也写「箱数」而非总 PCS 数 —— 用户口径：所有订舱单件数列统一写箱数。
+    var boxCol = byKind.boxCount || byKind.qty;
+    if (boxCol) _bkSetCell(ws, start, boxCol, _bkNum(totals.boxCount));
+    if (byKind.gw) _bkSetCell(ws, start, byKind.gw, _bkNum(totals.gw));
+    if (byKind.volume) _bkSetCell(ws, start, byKind.volume, _bkNum(totals.volume));
+
+    // ② 数量列：仅当「件数」列与「数量」列同时存在且为不同列时，数量列才写总数量（PCS）。
+    //    （两者列位相同 / 只有数量列时，已在上方按箱数写入，不重复覆盖。）
+    if (byKind.qty && byKind.boxCount && byKind.qty !== byKind.boxCount) {
+      _bkSetCell(ws, start, byKind.qty, _bkNum(totals.qty));
+    }
+
+    // ③ 货描：一行一个「品名 + HS」。品名分行、件数/重量/体积仍只有一个数（用户铁律）。
+    if (byKind.nameEn) {
+      var lines = list.map(function (g) {
+        var nm = g.nameCn && g.nameEn && g.nameCn !== g.nameEn ? (g.nameCn + ' ' + g.nameEn) : (g.nameEn || g.nameCn || '');
+        var hs = g.hs || '';
+        return hs ? (nm + ' ' + hs) : nm;
+      }).filter(Boolean);
+      if (lines.length) _bkSetCell(ws, start, byKind.nameEn, lines.join('\n'));
+    }
+
+    // ④ HS 独立列：把所有 HS 去重后分行（模板已单列 HS 时用，避免只在货描里体现）
+    if (byKind.hsCode && byKind.hsCode !== byKind.nameEn) {
+      var hss = [];
+      list.forEach(function (g) { if (g.hs && hss.indexOf(g.hs) < 0) hss.push(g.hs); });
+      if (hss.length) _bkSetCell(ws, start, byKind.hsCode, hss.join('\n'));
+    }
+
+    // ⑤ 唛头列：按用户决定留空（无可靠数据源）—— 仅当模板原本为空时不写，保持原样
+
     return true;
   }
 
@@ -1016,6 +1241,18 @@
 
   function scanTemplate(wb) {
     var result = { fields: [], itemFields: [], itemsRow: -1, itemHeaderMap: {}, sheetName: '' };
+    // v1.6.21：记录模板自带的图片数量（LOGO 保真基线）。
+    //   订舱单模板常含货代 LOGO（GEODIS 1 张 PNG、KLN 4 张位图）；若导出后数量变少，
+    //   说明 LOGO 被写出过程丢弃，必须报错而不是静默出一张无 LOGO 的单。
+    try {
+      var _mediaN = 0;
+      (wb.worksheets || []).forEach(function (w) {
+        if (w && w.getImages) _mediaN += w.getImages().length;
+      });
+      if (!_mediaN && wb.model && wb.model.media) _mediaN = wb.model.media.length;
+      result.mediaCount = _mediaN;
+      try { wb._mediaCount = _mediaN; } catch (e) {}
+    } catch (e) { result.mediaCount = 0; }
     var ws = wb.worksheets[0];
     if (!ws) return result;
     result.sheetName = ws.name;
@@ -1623,6 +1860,16 @@
     var filled = { replaced: [], unresolved: [], uncarried: [] };
     var ws = wb.worksheets[0];
     if (!ws) throw new Error('模板无工作表');
+    // v1.6.21：记录模板自带图片数（LOGO 保真基线）——导出前由 exporter.assertLogoPreserved 比对，
+    //   不足则阻止导出（订舱单 LOGO 是承运商单据必备要素，不能静默丢失）。
+    try {
+      if (typeof wb._mediaCount !== 'number') {
+        var _mn = 0;
+        (wb.worksheets || []).forEach(function (w) { if (w && w.getImages) _mn += w.getImages().length; });
+        if (!_mn && wb.model && wb.model.media) _mn = wb.model.media.length;
+        wb._mediaCount = _mn;
+      }
+    } catch (e) {}
     // v1.5.14 重置"已嵌图"守卫：每次重新填充模板都应允许(且只应)嵌一次产品图；
     // 防止预览 step4 与导出复用同一 wb 时 embedProductImages 被重复调用导致每行图嵌两遍重叠。
     try { wb._productImagesEmbedded = false; } catch (e) {}
@@ -1761,10 +2008,21 @@
     // v1.6.20（仅订舱单）：若模板命中「承运商明细区预设」（CHR / DETRANS / GEODIS / KLN），
     //   改用声明式映射直写（见 BOOKING_DETAIL_PRESETS），并关闭通用明细机制（itemsRowNum = -1），
     //   避免通用逻辑在这类表单式模板上误写（KLN 此前 itemsRow=17 就落到了 NOTIFY PARTY 块）。
+    // v1.6.21（仅订舱单）：未命中预设的模板（Aramex / ANHAI / 未来新模板）→ 走「通用结构识别」
+    //   （_findBookingDetailBlock），按列头语义定位明细区并反推列映射，不再依赖承运商专属锚点词。
     var _bkPreset = null;
+    var _bkBlock = null;
     if (IS_BOOKING) {
       _bkPreset = _matchBookingDetailPreset(ws);
-      if (_bkPreset) itemsRowNum = -1;
+      if (_bkPreset) {
+        itemsRowNum = -1;
+      } else {
+        _bkBlock = _findBookingDetailBlock(ws);
+        // v1.6.21：命中通用明细块时，同样关闭「通用明细机制」——由 _writeBookingDetailBlock2 直写。
+        //   否则通用机制会按 itemsRowNum 逐行铺 items（ANHAI 会写 R25+R26 两行、Aramex 会写 R21+R22），
+        //   与单值口径冲突并产生 "undefined"。
+        if (_bkBlock) itemsRowNum = -1;
+      }
     }
 
     // 2) 明细区展开：先复制模板行样式与占位内容 N-1 次
@@ -2019,6 +2277,8 @@
     }
     // v1.6.20（仅订舱单）：按承运商预设直写明细区（件数/毛重/体积各一个数 + 品名分行 + HS + 尺寸）
     if (_bkPreset) _writeBookingDetailPreset(ws, data, _bkPreset);
+    // v1.6.21（仅订舱单）：未命中预设的模板（通用结构识别）→ 按 colMap 直写
+    if (_bkBlock) _writeBookingDetailBlock2(ws, data, _bkBlock);
 
     // v1.6.19（仅订舱单）：货描为按「品名 + HS」分行的多行文本，必须保留自动换行，
     //   否则 Excel 不渲染 \n（多行会被挤成一行）。仅对确实含换行的明细格生效，其余仍按 ⑤.5 关掉 wrap。
@@ -2581,6 +2841,30 @@
     ]
   };
 
+  /** v1.6.21（仅订舱单）：LOGO 保真校验 —— 对比「模板原始图片数」与「填充后内存中图片数」。
+   *  返回 { ok, before, after, message }。调用方在写出前判定：不 ok 则阻止导出，
+   *  避免静默出一张丢了货代 LOGO 的订舱单（ExcelJS 写出只认 r:embed，图片字节本身可保）。
+   *  expectedBefore：可用 scanTemplate(wb).mediaCount，或直接传 wb._mediaCount。 */
+  function verifyLogoPreserved(wb, expectedBefore) {
+    var before = (typeof expectedBefore === 'number') ? expectedBefore : ((wb && wb._mediaCount) || 0);
+    var after = 0;
+    try {
+      (wb.worksheets || []).forEach(function (w) {
+        if (w && w.getImages) after += w.getImages().length;
+      });
+      if (!after && wb.model && wb.model.media) after = wb.model.media.length;
+    } catch (e) {}
+    var ok = (after >= before);
+    return {
+      ok: ok,
+      before: before,
+      after: after,
+      message: ok
+        ? ('LOGO 保真：模板 ' + before + ' 张，输出 ' + after + ' 张')
+        : ('LOGO 丢失：模板原有 ' + before + ' 张图片，填充后仅剩 ' + after + ' 张 —— 已阻止导出')
+    };
+  }
+
   return {
     PH_RE: PH_RE,
     buildDocData: buildDocData,
@@ -2592,6 +2876,7 @@
     fillTemplate: fillTemplate,
     embedProductImages: embedProductImages,
     addLogo: addLogo,
+    verifyLogoPreserved: verifyLogoPreserved,
     makeBuiltinInvoiceTemplate: makeBuiltinInvoiceTemplate,
     makeBuiltinBookingTemplate: makeBuiltinBookingTemplate,
     REQUIRED_FIELDS: REQUIRED_FIELDS
