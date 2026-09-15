@@ -1065,6 +1065,25 @@
         }
       }
     }
+
+    // ⑤ v1.6.23：清理模板预留槽位行上残留的 {{items.*}} 占位符。
+    //   本函数按 items 条数逐行写（perRow），数据条数 < 模板预留槽位数时
+    //   （CHR 预留 R33~R35 三行、实际 2 条 → R35 整行 {"{{items.boxCount}}" 等原样留下），
+    //   导出即随单交付。清理范围：start 起向下至明细块结束，只清含 {{items.*}} 的格。
+    //   ⚠️ 只清「本行自身 value 含 {{items.」的格；不重算 mergedMaps、不回查主格——
+    //      上一轮实测 buildMergedMaps(ws) 在填充后调用有 ExcelJS 隐蔽副作用（污染表头文字）。
+    try {
+      var _psEnd = _bookingBlockClearEnd(ws, start);
+      for (var _pr = start; _pr <= _psEnd; _pr++) {
+        (function (_rowNum) {
+          ws.getRow(_rowNum).eachCell({ includeEmpty: true }, function (cell) {
+            var s = cellString(cell);
+            if (s && /\{\{\s*items\./.test(s)) cell.value = '';
+          });
+        })(_pr);
+      }
+    } catch (eClr2) {}
+
     return true;
   }
 
@@ -1121,7 +1140,55 @@
 
     // ⑤ 唛头列：按用户决定留空（无可靠数据源）—— 仅当模板原本为空时不写，保持原样
 
+    // ⑥ v1.6.23：清理模板预留槽位行上残留的 {{items.*}} 占位符。
+    //   本函数只往 blk.dataRow 单行写值（单值口径），但模板常在数据行下方预留 2~4 个
+    //   "槽位行"给货描分行用（ANHAI R26/R27、CHR R34/R35、DETRANS R27~R29），
+    //   这些行原样带着 {{items.gw}} / {{items.volume}} 等占位符 → 导出即随单交付。
+    //   清理范围：dataRow 起向下、直到明细块结束（连续带边框 / 被明细区跨行合并覆盖）。
+    //   只清「本行自身 value 含 {{items.」的格。
+    //   ⚠️ 不重算 mergedMaps、不回查主格——上一轮实测 buildMergedMaps(ws) 在填充后调用
+    //      有 ExcelJS 隐蔽副作用（污染 GEODIS「GID CODE」/ KLN「出单方式」等表头文字）。
+    //      ANHAI 的 H27/I27 属合并从属格，其占位符文本在 ExcelJS 中亦可直接读到（实测已验证）。
+    try {
+      var _clearEnd = _bookingBlockClearEnd(ws, start);
+      for (var _cr = start; _cr <= _clearEnd; _cr++) {
+        (function (_rowNum) {
+          ws.getRow(_rowNum).eachCell({ includeEmpty: true }, function (cell) {
+            var s = cellString(cell);
+            if (s && /\{\{\s*items\./.test(s)) cell.value = '';
+          });
+        })(_cr);
+      }
+    } catch (eClr) {}
+
     return true;
+  }
+
+  /** v1.6.23（仅订舱单）：求「明细块」的清残留下边界。
+   *  从 dataRow 起，只要该行仍属于明细块（有边框，或被明细区的跨行合并覆盖）就继续下探。
+   *  用于 ⑥ 步清理模板预留槽位行的残留占位符，不用于任何取值逻辑。 */
+  function _bookingBlockClearEnd(ws, dataRow) {
+    if (!ws || !dataRow || dataRow < 1) return dataRow || 1;
+    var merges = [];
+    try { merges = (ws.model.merges || []).slice(); } catch (e) { return dataRow; }
+    var parsed = [];
+    merges.forEach(function (m) {
+      var mm = String(m).match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+      if (mm) parsed.push({ top: parseInt(mm[2], 10), bottom: parseInt(mm[4], 10) });
+    });
+    var end = dataRow;
+    for (var r = dataRow + 1; r <= Math.min(ws.rowCount || 0, dataRow + 12); r++) {
+      var row = ws.getRow(r);
+      var hasBorder = false;
+      row.eachCell({ includeEmpty: true }, function (c) {
+        if (c.border && (c.border.top || c.border.bottom || c.border.left || c.border.right)) hasBorder = true;
+      });
+      // 该行被明细区的跨行合并覆盖（如 ANHAI A25:C28 覆盖 R26~R28）→ 仍属明细块
+      var coveredByData = parsed.some(function (p) { return p.top >= dataRow && p.top <= r && p.bottom >= r; });
+      if (!hasBorder && !coveredByData) break;
+      end = r;
+    }
+    return end;
   }
 
   /** v1.6.19（仅订舱单专用）：明细口径判别 —— 返回 true = 单值口径（件数/重量/体积各只有一个数）。
@@ -2276,8 +2343,20 @@
 
     // 2.5) 清理模板多余的明细占位符：itemEnd 之后若仍有 {{items.*}} 残留（模板预设行数>实际条数），
     //      只清空占位符文本、保留带边框的整行（不再 spliceRows 删除行，避免底部行上移导致边框错位丢失）。
+    // v1.6.23（仅订舱单）：两处修正（ANHAI / CHR 实测残留 {{items.gw}} 等字样随单交付）
+    //   ① 起点用「实际写入的行数」而非折叠前的 data.items.length：
+    //      单值口径下 _collapseBookingItems 把 items 折成 1 条，而 itemEnd 早在 L2023 用
+    //      折叠前的 data.items 算好（itemsRowNum+2-1），导致 R26 这一整行被漏清。
+    //   ② 起点用「实际写入的行数」而非折叠前的 data.items.length：
+    //      单值口径下 _collapseBookingItems 把 items 折成 1 条，而 itemEnd 早在 L2023 用
+    //      折叠前的 data.items 算好（itemsRowNum+2-1），导致 R26 这一整行被漏清。
+    //   注：合并从属格的占位符文本在 ExcelJS 中亦可直接读到（实测 ANHAI H27/I27 已清），
+    //      故无需回查主格，避免任何多余调用。
     if (itemsRowNum !== -1) {
-      for (var rr = itemEnd + 1; rr <= ws.rowCount; rr++) {
+      var _clearFrom = IS_BOOKING
+        ? itemsRowNum + Math.max(items.length, 1)   // 订舱单：按实际写入行数（折叠后）
+        : itemEnd + 1;                              // 其他单证：保持原口径不变
+      for (var rr = _clearFrom; rr <= ws.rowCount; rr++) {
         var rrow = ws.getRow(rr);
         rrow.eachCell({ includeEmpty: true }, function (cell) {
           var sv = cellString(cell);
