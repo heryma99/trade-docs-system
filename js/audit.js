@@ -117,7 +117,22 @@
       });
 
       // 明细数据区下界（行 > itemsRow 视为数据区，受控写入集之三）
+      // v1.6.24 修正：若 itemsRow 行本身仍是 items 占位符（模板制作者遗留的草稿槽位），
+      //   该行是"占位符行"而非"数据行"；把 detailStart 推到占位符块结束之后，
+      //   避免向下游模板静态文字（说明/地址/条款）误判 —— 只收窄扫描窗口，不改判定口径。
       var detailStart = itemsRow > 0 ? itemsRow + 1 : 99999;
+      if (itemsRow > 0 && /\{\{\s*items\./.test(cellText(tws.getCell(itemsRow, 1)) || '')) {
+        var _phEnd = itemsRow;
+        for (var _pr = itemsRow; _pr <= tws.rowCount; _pr++) {
+          var _phHit = false;
+          for (var _pc = 1; _pc <= maxC; _pc++) {
+            if (/\{\{\s*items\./.test(cellText(tws.getCell(_pr, _pc)) || '')) { _phHit = true; break; }
+          }
+          if (_phHit) _phEnd = _pr; else break;
+        }
+        detailStart = _phEnd + 1;
+        report.info.push({ dim: 'E', msg: '检测到占位符数据块 R' + itemsRow + '~R' + _phEnd + '，明细扫描起点顺延至 R' + detailStart });
+      }
 
       var maxR = Math.max(fws.rowCount || 0, tws.rowCount || 0);
       var maxC = Math.max(fws.columnCount || 0, tws.columnCount || 0);
@@ -237,6 +252,11 @@
         for (var hc = 1; hc <= maxC; hc++) {
           var hdr = cellText(tws.getCell(itemsRow, hc));
           if (!hdr) continue;
+          // v1.6.24 修正：若"表头"取到的是 {{items.xxx}} 占位符本身（itemsRow 落在占位符行，
+          //   如 DETRANS 订舱单 R26），说明该行是模板遗留的草稿槽位、并非真表头；
+          //   此时不得用占位符文本匹配 NUMERIC_HINT（避免 "{{items.gw}}" 被 /G\.?W\.?/ 命中），
+          //   也不得把其下游的模板静态文字当作"数据值"报警。占位符 → 视为非数值列，跳过。
+          if (/\{\{/.test(hdr)) continue;
           var numField = null;
           for (var i = 0; i < NUMERIC_HINT.length; i++) {
             if (NUMERIC_HINT[i].re.test(hdr)) { numField = NUMERIC_HINT[i].f; break; }
