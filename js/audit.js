@@ -277,13 +277,22 @@
           var seq = [];
           for (var sr = detailStart; sr <= fws.rowCount; sr++) {
             var bv = cellText(fws.getCell(sr, boxNoCol));
-            if (bv) seq.push(bv);
+            if (bv == null || bv === '') continue;
+            // v1.6.26 修正：只把「纯整数」当作箱号参与连续性校验。
+            // 根因（CHR 真实误报）：CHR 的 A 列表头为「唛头及箱号」，被审计误判为 boxNo 列；
+            //   而该列下游（数据区之后）是模板静态说明文字（是否有实木包装 / Is it wooden package? /
+            //   Container Stuffing Location / Consolidator…），整列非空值被当箱号收进序列 → 文本非 1,2,3 → 误报「不连续」。
+            //   改为只保留"可精确解析为整数且无多余字符"的值，模板文字一律跳过，误报即消失；
+            //   真正箱号错位（如 1,3,4 跳号）仍会被抓住（纯整数序列校验不变）。
+            var bvs = String(bv).trim();
+            var bi = parseInt(bvs, 10);
+            if (isNaN(bi) || String(bi) !== bvs) continue;
+            seq.push(bi);
           }
           if (seq.length) {
             var expect = 1, bad = false;
             for (var si = 0; si < seq.length; si++) {
-              var n = parseInt(seq[si], 10);
-              if (isNaN(n) || n !== expect) { bad = true; break; }
+              if (seq[si] !== expect) { bad = true; break; }
               expect++;
             }
             if (bad) report.warns.push({ dim: 'E', cell: cellRef(itemsRow, boxNoCol), msg: '箱号不连续（期望 1,2,3… 实际首段 ' + seq.slice(0, 5).join(',') + '），可能存在错位' });
