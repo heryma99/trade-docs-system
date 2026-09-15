@@ -1078,7 +1078,7 @@
         (function (_rowNum) {
           ws.getRow(_rowNum).eachCell({ includeEmpty: true }, function (cell) {
             var s = cellString(cell);
-            if (s && /\{\{\s*items\./.test(s)) cell.value = '';
+            if (s && /\{\{\s*items\./.test(s)) cell.value = null; // v1.6.28: null 替代 ''——空串会被序列化进 xlsx 挡住邻格文字溢出（ANHAI H19 挡 G19 卸货港实证）
           });
         })(_pr);
       }
@@ -1155,7 +1155,7 @@
         (function (_rowNum) {
           ws.getRow(_rowNum).eachCell({ includeEmpty: true }, function (cell) {
             var s = cellString(cell);
-            if (s && /\{\{\s*items\./.test(s)) cell.value = '';
+            if (s && /\{\{\s*items\./.test(s)) cell.value = null; // v1.6.28: null 替代 ''——空串会被序列化进 xlsx 挡住邻格文字溢出（ANHAI H19 挡 G19 卸货港实证）
           });
         })(_cr);
       }
@@ -1807,13 +1807,13 @@
               if (mG && mG.r1 === r1 && mG.c1 === col && mG.r2 > mG.r1) return; // 纵向跨行合并主格=静态表头列
             }
           }
-          cell.value = '';
+          cell.value = null; // v1.6.28: null 替代 ''（空串序列化后挡邻格溢出，ANHAI H19→G19 实证）
           return;
         }
         if (mergedCell[r1 + ',' + col]) return; // 非值格的合并锚点（版式标题/承运商抬头/贸易术语等）保留
         // v1.4.63：valueCols 清空也要跳合并从属格（同样的联动问题）
         if (mergedSubordinate[r1 + ',' + col]) return;
-        if (valueCols[col] && !KEEP.test(s)) cell.value = '';
+        if (valueCols[col] && !KEEP.test(s)) cell.value = null; // v1.6.28: null 替代 ''（防挡邻格溢出）
       });
     }
 
@@ -2232,7 +2232,7 @@
             rowObj.eachCell({ includeEmpty: true }, function (cell) {
               if (mergedMaps.subordinate[rn + ',' + cell.col]) return;
               var s = cellString(cell);
-              if (s && s.indexOf('{{items.') >= 0) cell.value = '';
+              if (s && s.indexOf('{{items.') >= 0) cell.value = null; // v1.6.28: null 替代 ''
             });
           })();
           continue;
@@ -2301,7 +2301,7 @@
               var _bv = bc.value;
               if (_bv === undefined || _bv === null || _bv === '') return;
               if (typeof _bv === 'object' && _bv.formula) return; // 保留公式，不破坏合计逻辑
-              bc.value = '';                                      // 空框：清文字/数字，保留边框与样式
+              bc.value = null;                                    // 空框：清文字/数字，保留边框与样式（v1.6.28: null 替代 ''）
             });
           })(_bf);
         }
@@ -2360,7 +2360,7 @@
         var rrow = ws.getRow(rr);
         rrow.eachCell({ includeEmpty: true }, function (cell) {
           var sv = cellString(cell);
-          if (sv && /\{\{\s*items\./.test(sv)) cell.value = '';
+          if (sv && /\{\{\s*items\./.test(sv)) cell.value = null; // v1.6.28: null 替代 ''
         });
       }
     }
