@@ -1,8 +1,8 @@
 /* L7 导出：workbook → xlsx 下载（浏览器）/ buffer（Node测试） */
 (function (root, factory) {
-  if (typeof module !== 'undefined' && module.exports) module.exports = factory();
-  else { root.TD = root.TD || {}; root.TD.exporter = factory(); }
-})(typeof self !== 'undefined' ? self : this, function () {
+  if (typeof module !== 'undefined' && module.exports) module.exports = factory(root);
+  else { root.TD = root.TD || {}; root.TD.exporter = factory(root); }
+})(typeof self !== 'undefined' ? self : this, function (root) {
   'use strict';
 
   function toBuffer(wb) { return wb.xlsx.writeBuffer(); }
