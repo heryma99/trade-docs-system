@@ -1968,6 +1968,90 @@
     return out;
   }
 
+  // —— v1.6.33（仅订舱单）：复选框组文本符号 ☑/☐ ——
+  // 背景：KLN 型模板的原生 ActiveX 复选框已在 v1.6.33 模板手术中移除（ExcelJS 无法控制其勾选态），
+  //   改由引擎在标签格写 ☑（选中）/ ☐（未选）。以模板存在 'SEA WAYBILL' 标签为启用指纹，
+  //   防止误伤其他模板（GEODIS 的 'LCL/FCL - LCL' 等文本不会被触碰）。
+  // 数据映射：freightTerms='FREIGHT PREPAID'/'FREIGHT COLLECT' → 海运费组自动勾选；
+  //   装卸方式(FCL/LCL/BULK)、出单方式、支付币种、发票类型四组表单暂无对应字段 → 默认全 ☐（不猜）。
+  var CB_GROUP_DEFS = [
+    { labels: ['COLLECT 到付', 'PREPAID 预付'], pick: function (d) {
+        var v = String((d && d.freightTerms) || '').toUpperCase();
+        if (v.indexOf('PREPAID') >= 0) return 'PREPAID 预付';
+        if (v.indexOf('COLLECT') >= 0) return 'COLLECT 到付';
+        return null;
+      } },
+    { labels: ['FCL', 'LCL', 'BULK'], pick: function () { return null; } },
+    { labels: ['正本提单', '电放提单', 'SEA WAYBILL'], pick: function () { return null; } },
+    { labels: ['RMB', 'HKD', 'USD'], pick: function () { return null; } },
+    { labels: ['增值税普通发票', '增值税专用发票'], pick: function () { return null; } }
+  ];
+  // 只在复选框区（KLN 版式 row16-29 附近）生效的行窗口，避免同名短词（RMB/FCL 等）在别处被误改
+  var CB_ROW_MIN = 15, CB_ROW_MAX = 31;
+  function cbCellFullText(v) {
+    if (v && v.richText) return v.richText.map(function (p) { return p.text; }).join('');
+    return typeof v === 'string' ? v : null;
+  }
+  function cbApplySymbol(cell, fullText, sym) {
+    if (cell.value && cell.value.richText) {
+      var parts2 = cell.value.richText.map(function (p) { return { font: p.font, text: p.text }; });
+      var first = parts2[0] ? parts2[0].text : '';
+      var leadM = /^(\s*)/.exec(first);
+      var lead = leadM ? leadM[1] : '';
+      parts2[0].text = lead + sym + ' ' + first.replace(/^\s+/, '');
+      cell.value = { richText: parts2 };   // 保字体结构（Arial+宋体混排）
+    } else {
+      var leadM2 = /^(\s*)/.exec(fullText);
+      var lead2 = leadM2 ? leadM2[1] : '';
+      cell.value = lead2 + sym + ' ' + fullText;
+    }
+  }
+  function applyCheckboxGroups(ws, data) {
+    var hasFp = false;
+    ws.eachRow({ includeEmpty: false }, function (row) {
+      if (hasFp) return;
+      row.eachCell({ includeEmpty: false }, function (cell) {
+        if (!hasFp) {
+          var s = cbCellFullText(cell.value);
+          if (s && s.trim().toUpperCase() === 'SEA WAYBILL') hasFp = true;
+        }
+      });
+    });
+    if (!hasFp) return 0;
+    var labelSet = {}, picked = {};
+    CB_GROUP_DEFS.forEach(function (g) {
+      var p = null;
+      try { p = g.pick(data); } catch (e) { p = null; }
+      g.labels.forEach(function (L) { labelSet[L] = true; if (p === L) picked[L] = true; });
+    });
+    // 合并从属格跳过（只在主格/普通格写符号）
+    var slave = {};
+    (ws.model.merges || []).forEach(function (ref) {
+      var m = parseMergeRef(ref);
+      if (!m) return;
+      for (var r = m.top; r <= m.bottom; r++) {
+        for (var c = m.left; c <= m.right; c++) {
+          if (r === m.top && c === m.left) continue;
+          slave[r + ',' + c] = true;
+        }
+      }
+    });
+    var n = 0;
+    ws.eachRow({ includeEmpty: false }, function (row, rn) {
+      if (rn < CB_ROW_MIN || rn > CB_ROW_MAX) return;
+      row.eachCell({ includeEmpty: false }, function (cell, cn) {
+        if (slave[rn + ',' + cn]) return;
+        var ft = cbCellFullText(cell.value);
+        if (ft === null) return;
+        var t = ft.trim();
+        if (!labelSet[t]) return;
+        cbApplySymbol(cell, t, picked[t] ? '☑' : '☐');
+        n++;
+      });
+    });
+    return n;
+  }
+
   function fillTemplate(wb, data, options) {
     options = options || {};
     // v1.6.17：本版新增逻辑一律只作用于【订舱单】（data.kind === 'booking'）。
@@ -2460,6 +2544,10 @@
         }
       }
     });
+    // v1.6.33（仅订舱单）：复选框组文本符号 ☑/☐（KLN 型指纹模板；放最后，自守卫=格值仍等于标签原文才写）
+    if (IS_BOOKING) {
+      try { applyCheckboxGroups(ws, data); } catch (e) {}
+    }
     // v1.4.60：统计「用户录入了但本模板装不下」的字段，交 UI 显式提示（不静默丢弃）
     try {
       filled.uncarried = computeUncarried(data, _labelMap, filled.replaced.concat(filled.unresolved));
