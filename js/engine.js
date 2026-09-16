@@ -1759,7 +1759,7 @@
     //   （该 label 右侧本行无后继 label 夹住，值区被盲目扩到 +12 格）→ 会被 PASS1 当样本残留清空。
     //   范围：仅订舱单（IS_BOOKING）且仅「盲区」分支生效，避免影响发票/申报模板。
     //   证据：全量扫描 6 家订舱单模板，PASS1 误清的静态文字仅 3 种（GID CODE/出单方式/Shipping Order）。
-    var BOOKING_STATIC_HEADER_RE = /^(gid\s*code|shipping\s*order|出单方式|正本提单|电放提单|sea\s*waybill|original\s*b\/?l|telex\s*release|装卸方式|本地费用\s*支付币种)$/i;
+    var BOOKING_STATIC_HEADER_RE = /^(gid\s*code|shipping\s*order|出单方式|正本提单|电放提单|sea\s*waybill|original\s*b\/?l|telex\s*release|装卸方式|本地费用\s*支付币种|cy\s*\/\s*cy|cy\s*\/\s*dr|cfs\s*\/\s*cfs|cfs\s*\/\s*cy|service\s*mode|bl\s*type|提单类型|prepaid|collect|exw|foa|fob|cif|others|cny|hkd|usd|freight\s*term|trade\s*term|currency|付款币种|_{3,}\s*x\s*\d{2}'?\s*(gp|hq)?)$/i;
 
     // PASS 1：清理值列里的样本残留（非占位符、非标签、非静态文本）。
     // 合并单元格成员只保留包含标签词的静态文本；具体样本数据（如旧地址、旧公司名）仍清空。
@@ -1813,7 +1813,8 @@
         if (mergedCell[r1 + ',' + col]) return; // 非值格的合并锚点（版式标题/承运商抬头/贸易术语等）保留
         // v1.4.63：valueCols 清空也要跳合并从属格（同样的联动问题）
         if (mergedSubordinate[r1 + ',' + col]) return;
-        if (valueCols[col] && !KEEP.test(s)) cell.value = null; // v1.6.28: null 替代 ''（防挡邻格溢出）
+        // v1.6.34（仅订舱单）：valueCols 清空同样要过静态表头保护词典——CHR 的 CY/CY、BL Type 等复选框标签在值列上，此前被此路径清空
+        if (valueCols[col] && !KEEP.test(s) && !(isBooking && BOOKING_STATIC_HEADER_RE.test(String(s).replace(/\s+/g, ' ').trim()))) cell.value = null; // v1.6.28: null 替代 ''（防挡邻格溢出）
       });
     }
 
@@ -1968,12 +1969,15 @@
     return out;
   }
 
-  // —— v1.6.33（仅订舱单）：复选框组文本符号 ☑/☐ ——
-  // 背景：KLN 型模板的原生 ActiveX 复选框已在 v1.6.33 模板手术中移除（ExcelJS 无法控制其勾选态），
-  //   改由引擎在标签格写 ☑（选中）/ ☐（未选）。以模板存在 'SEA WAYBILL' 标签为启用指纹，
-  //   防止误伤其他模板（GEODIS 的 'LCL/FCL - LCL' 等文本不会被触碰）。
-  // 数据映射：freightTerms='FREIGHT PREPAID'/'FREIGHT COLLECT' → 海运费组自动勾选；
-  //   装卸方式(FCL/LCL/BULK)、出单方式、支付币种、发票类型四组表单暂无对应字段 → 默认全 ☐（不猜）。
+  // —— v1.6.33/34（仅订舱单）：复选框文本符号 ☑/☐ ——
+  // 背景：KLN/CHR 型模板的原生复选框控件在 xls→xlsx 转换中丢失（ExcelJS 无法控制其勾选态），
+  //   改由引擎写 ☑（选中）/ ☐（未选）。两条机制：
+  //   ① 逐格标签组（CB_GROUP_DEFS）：模板里某组 ≥2 个标签同时出现（行窗口内）即「组成立」，
+  //      对组内标签格写符号——替代 v1.6.33 的 SEA WAYBILL 单指纹，KLN/CHR 通用且防误伤；
+  //   ② 行内复选框串占位符 {{cb_xxx}}（CB_RENDERERS）：整行「☑ Prepaid ☐ Collect」由引擎按表单数据生成，
+  //      用于合并区整行形态（CHR Payment/Trade Term、BL Type、Currency）。
+  // 数据映射：freightTerms→Prepaid/Collect（KLN: PREPAID 预付/COLLECT 到付）；incoterms→EXW/FOA/FOB/CIF；
+  //   Service Mode、BL Type、Currency、装卸方式、发票类型暂无表单字段 → 全 ☐（不猜）。
   var CB_GROUP_DEFS = [
     { labels: ['COLLECT 到付', 'PREPAID 预付'], pick: function (d) {
         var v = String((d && d.freightTerms) || '').toUpperCase();
@@ -1984,10 +1988,25 @@
     { labels: ['FCL', 'LCL', 'BULK'], pick: function () { return null; } },
     { labels: ['正本提单', '电放提单', 'SEA WAYBILL'], pick: function () { return null; } },
     { labels: ['RMB', 'HKD', 'USD'], pick: function () { return null; } },
-    { labels: ['增值税普通发票', '增值税专用发票'], pick: function () { return null; } }
+    { labels: ['增值税普通发票', '增值税专用发票'], pick: function () { return null; } },
+    { labels: ['CY/CY', 'CY/DR', 'CFS/CFS', 'CFS/CY'], pick: function () { return null; } }
   ];
-  // 只在复选框区（KLN 版式 row16-29 附近）生效的行窗口，避免同名短词（RMB/FCL 等）在别处被误改
-  var CB_ROW_MIN = 15, CB_ROW_MAX = 31;
+  // 行内复选框串渲染器（占位符 {{cb_xxx}} → 整串）
+  var CB_RENDERERS = {
+    payTerm: function (d) {
+      var v = String((d && d.freightTerms) || '').toUpperCase();
+      return (v.indexOf('PREPAID') >= 0 ? '☑' : '☐') + ' Prepaid       ' + (v.indexOf('COLLECT') >= 0 ? '☑' : '☐') + ' Collect';
+    },
+    tradeTerm: function (d) {
+      var v = String((d && d.incoterms) || (d && d.incoterm) || '').toUpperCase();
+      function m(k) { return v.indexOf(k) >= 0 ? '☑' : '☐'; }
+      return m('EXW') + ' EXW    ' + m('FOA') + ' FOA    ' + m('FOB') + ' FOB    ' + m('CIF') + ' CIF    ☐ Others';
+    },
+    blType: function () { return '☐ Original BL       ☐ Seaway BL       ☐ Telex release BL'; },
+    currency: function () { return '☐ CNY       ☐ HKD       ☐ USD'; }
+  };
+  // 只在复选框区生效的行窗口（KLN 17-28 / CHR 5-18 均覆盖），避免同名短词（RMB/FCL 等）在别处被误改
+  var CB_ROW_MIN = 4, CB_ROW_MAX = 31;
   function cbCellFullText(v) {
     if (v && v.richText) return v.richText.map(function (p) { return p.text; }).join('');
     return typeof v === 'string' ? v : null;
@@ -2007,23 +2026,6 @@
     }
   }
   function applyCheckboxGroups(ws, data) {
-    var hasFp = false;
-    ws.eachRow({ includeEmpty: false }, function (row) {
-      if (hasFp) return;
-      row.eachCell({ includeEmpty: false }, function (cell) {
-        if (!hasFp) {
-          var s = cbCellFullText(cell.value);
-          if (s && s.trim().toUpperCase() === 'SEA WAYBILL') hasFp = true;
-        }
-      });
-    });
-    if (!hasFp) return 0;
-    var labelSet = {}, picked = {};
-    CB_GROUP_DEFS.forEach(function (g) {
-      var p = null;
-      try { p = g.pick(data); } catch (e) { p = null; }
-      g.labels.forEach(function (L) { labelSet[L] = true; if (p === L) picked[L] = true; });
-    });
     // 合并从属格跳过（只在主格/普通格写符号）
     var slave = {};
     (ws.model.merges || []).forEach(function (ref) {
@@ -2036,6 +2038,33 @@
         }
       }
     });
+    // 第一遍：收集行窗口内每格 trim 文本 → 判定「组成立」（同组 ≥2 个标签同时在场才动该组，防误伤）
+    var seen = {};   // label -> true
+    ws.eachRow({ includeEmpty: false }, function (row, rn) {
+      if (rn < CB_ROW_MIN || rn > CB_ROW_MAX) return;
+      row.eachCell({ includeEmpty: false }, function (cell, cn) {
+        if (slave[rn + ',' + cn]) return;
+        var ft = cbCellFullText(cell.value);
+        if (ft === null) return;
+        var t = ft.trim();
+        if (t) seen[t] = true;
+      });
+    });
+    var labelSet = {}, picked = {}, anyGroup = false;
+    CB_GROUP_DEFS.forEach(function (g) {
+      var found = 0, p = null;
+      try { p = g.pick(data); } catch (e) { p = null; }
+      g.labels.forEach(function (L) { if (seen[L]) found++; });
+      if (found < 2) return;                 // 组不成立 → 整组不动
+      anyGroup = true;
+      g.labels.forEach(function (L) {
+        if (!seen[L]) return;
+        labelSet[L] = true;
+        if (p === L) picked[L] = true;
+      });
+    });
+    if (!anyGroup) return 0;
+    // 第二遍：对成立组的标签格写符号（自守卫：格值仍等于标签原文才写）
     var n = 0;
     ws.eachRow({ includeEmpty: false }, function (row, rn) {
       if (rn < CB_ROW_MIN || rn > CB_ROW_MAX) return;
@@ -2103,6 +2132,13 @@
 
     function replaceInString(s, ctx) {
       return s.replace(PH_RE, function (all, path) {
+        // v1.6.34：行内复选框串 {{cb_xxx}} —— 按顶层表单数据生成「☑/☐ 选项」整串
+        if (path.indexOf('cb_') === 0) {
+          var renderer = CB_RENDERERS[path.slice(3)];
+          if (typeof renderer !== 'function') { filled.unresolved.push(path); return ''; }
+          filled.replaced.push(path);
+          return String(renderer(data) || '');
+        }
         var v = getPath(ctx, path);
         if (v === undefined || v === null) { filled.unresolved.push(path); return ''; }
         filled.replaced.push(path);
