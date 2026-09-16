@@ -2025,6 +2025,69 @@
       cell.value = lead2 + sym + ' ' + fullText;
     }
   }
+  // v1.6.36（仅订舱单）：第二明细区（Manufacturer/PO# 订单维度 SKU 明细）填充
+  function fillManufacturerDetail(ws, data) {
+    // 1) 定位表头行：同一行内出现 Manufacturer 且至少 2 个可映射列表头
+    var headRow = -1, colMap = {};
+    ws.eachRow({ includeEmpty: false }, function (row, rn) {
+      if (headRow !== -1 || rn > 60) return;
+      var texts = {};
+      row.eachCell({ includeEmpty: false }, function (cell, cn) {
+        var s = cellString(cell);
+        if (s && s.trim()) texts[cn] = s.trim();
+      });
+      var hasManu = Object.keys(texts).some(function (cn) { return /^manufacturer$/i.test(texts[cn]); });
+      if (!hasManu) return;
+      var m = {};
+      Object.keys(texts).forEach(function (cn) {
+        var s = texts[cn];
+        if (/^po\s*#?$/i.test(s)) m[cn] = 'poNo';
+        else if (/^item\s*#?$/i.test(s)) m[cn] = 'sku';
+        else if (/^description/i.test(s)) m[cn] = 'nameEn';
+        else if (/^item\s*q'?ty/i.test(s)) m[cn] = 'qty';
+        else if (/^hts/i.test(s)) m[cn] = 'hsCode';
+        else if (/^country\s*of\s*origin/i.test(s)) m[cn] = 'origin';
+      });
+      if (Object.keys(m).length >= 3) { headRow = rn; colMap = m; }
+    });
+    if (headRow === -1) return 0;
+    // 2) 数据行范围：headRow+1 起，直到 A 列出现下一个结构标签（Pick-up/报关安排等）或 45 行上限
+    var dataRows = [];
+    for (var rn = headRow + 1; rn <= headRow + 45; rn++) {
+      var rowA = ws.getCell(rn, 1);
+      var aTxt = String(cellString(rowA) || '').trim();
+      if (aTxt) break;   // 下一段结构标签（Pick-up Arrangements 等）
+      dataRows.push(rn);
+    }
+    if (!dataRows.length) return 0;
+    var items = (data && data.items) || [];
+    var cols = Object.keys(colMap).map(function (k) { return parseInt(k, 10); });
+    var n = 0;
+    // 3) 按 items 逐行填（订单维度）：colMap 列写值；**其余列清值**（清掉旧样例残留，防止截断邻格溢出显示）
+    for (var i = 0; i < dataRows.length; i++) {
+      var r = dataRows[i];
+      var it = (i < items.length) ? items[i] : null;
+      ws.getRow(r).eachCell({ includeEmpty: false }, function (cell, cn) {
+        try {
+          if (colMap[cn] && it) {
+            var f = colMap[cn], v = '';
+            if (f === 'poNo') v = it.poNo || '';
+            else if (f === 'sku') v = it.sku || '';
+            else if (f === 'nameEn') v = it.nameEn || it.nameCn || '';
+            else if (f === 'qty') v = (it.qty !== undefined && it.qty !== '') ? Number(it.qty) : '';
+            else if (f === 'hsCode') v = it.hsCode || '';
+            else if (f === 'origin') v = it.origin || '';
+            cell.value = v === '' ? null : v;
+            n++;
+          } else if (cell.value != null && cell.value !== '') {
+            cell.value = null;
+          }
+        } catch (e) {}
+      });
+    }
+    return n;
+  }
+
   function applyCheckboxGroups(ws, data) {
     // 合并从属格跳过（只在主格/普通格写符号）
     var slave = {};
@@ -2580,6 +2643,14 @@
         }
       }
     });
+    // v1.6.36（仅订舱单）：第二明细区（Manufacturer/PO# 订单维度 SKU 明细）——
+    //   CHR 型模板 row53 表头（Manufacturer+PO#+Item#+Description+Item Q'TY+HTS#），
+    //   数据行=表头下一行起到「下一个结构标签行」（A 列出现 Pick-up 等）前。
+    //   列映射按表头文字：PO#→poNo、Item#→sku、Description→nameEn、Item Q'TY→qty、HTS#→hsCode。
+    //   填充行数=data.items 条数（订单维度 SKU 聚合行）；模板多余样例行清值保边框（不再带旧订单数据）。
+    if (IS_BOOKING) {
+      try { fillManufacturerDetail(ws, data, mergedMaps); } catch (e) {}
+    }
     // v1.6.33（仅订舱单）：复选框组文本符号 ☑/☐（KLN 型指纹模板；放最后，自守卫=格值仍等于标签原文才写）
     if (IS_BOOKING) {
       try { applyCheckboxGroups(ws, data); } catch (e) {}
