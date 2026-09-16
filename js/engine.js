@@ -1389,7 +1389,7 @@
   /** v1.4.60 排除词：这些是「商品/银行/注册/销售」类标签，绝不能被当成收发人或地址字段。
    *  典型误伤：中运通达 G20「Products Name中文品名」曾命中 /NAME/ → consignee.name；
    *           A18「VAT注册地址」、T20「销售地址」曾命中 /地址/ → consignee.address。 */
-  var LABEL_EXCLUDE_RE = /(品名|货名|品目|商品名|产品名|货物名称|PRODUCTS?\s*NAME|NAME\s*OF\s*(GOODS|COMMODITY|PRODUCT)|销售|注册|开户|银行|BANK|规格|材质|型号|用途|品牌|海关编码|HS\s*CODE|申报要素)/i;
+  var LABEL_EXCLUDE_RE = /(品名|货名|品目|商品名|产品名|货物名称|PRODUCTS?\s*NAME|NAME\s*OF\s*(GOODS|COMMODITY|PRODUCT)|销售|注册|开户|银行|BANK|规格|材质|型号|用途|品牌|海关编码|HS\s*CODE|申报要素|制造商|MANUFACTURER)/i;
 
   function mapHeaderLabel(text) {
     if (!text || /\{\{/.test(text)) return null;
