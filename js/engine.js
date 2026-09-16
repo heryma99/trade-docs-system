@@ -1759,7 +1759,7 @@
     //   （该 label 右侧本行无后继 label 夹住，值区被盲目扩到 +12 格）→ 会被 PASS1 当样本残留清空。
     //   范围：仅订舱单（IS_BOOKING）且仅「盲区」分支生效，避免影响发票/申报模板。
     //   证据：全量扫描 6 家订舱单模板，PASS1 误清的静态文字仅 3 种（GID CODE/出单方式/Shipping Order）。
-    var BOOKING_STATIC_HEADER_RE = /^(gid\s*code|shipping\s*order|出单方式|正本提单|电放提单|sea\s*waybill|original\s*b\/?l|telex\s*release|装卸方式|本地费用\s*支付币种|cy\s*\/\s*cy|cy\s*\/\s*dr|cfs\s*\/\s*cfs|cfs\s*\/\s*cy|service\s*mode|bl\s*type|提单类型|prepaid|collect|exw|foa|fob|cif|others|cny|hkd|usd|freight\s*term|trade\s*term|currency|付款币种|_{3,}\s*x\s*\d{2}'?\s*(gp|hq)?)$/i;
+    var BOOKING_STATIC_HEADER_RE = /^(gid\s*code|shipping\s*order|出单方式|正本提单|电放提单|sea\s*waybill|original\s*b\/?l|telex\s*release|装卸方式|本地费用\s*支付币种|cy\s*\/\s*cy|cy\s*\/\s*dr|cfs\s*\/\s*cfs|cfs\s*\/\s*cy|service\s*mode|bl\s*type|提单类型|prepaid|collect|exw|foa|fob|cif|others|cny|hkd|usd|freight\s*term|trade\s*term|currency|付款币种|_{3,}\s*x\s*\d{2}'?\s*(gp|hq)?|.*manufacturer.*|.*制造商.*)$/i;
 
     // PASS 1：清理值列里的样本残留（非占位符、非标签、非静态文本）。
     // 合并单元格成员只保留包含标签词的静态文本；具体样本数据（如旧地址、旧公司名）仍清空。
