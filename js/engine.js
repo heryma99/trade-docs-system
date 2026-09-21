@@ -1823,6 +1823,20 @@
     // v1.5.28：增加「区块归属」——R19「我司全称」之后 8 行内的「地址/联系人/电话/Email」等纯字段标签
     //   归属 shipper（无 party 词的标签行也能填），与 buildLabelMap 的 curParty 逻辑一致
     var curParty2 = '', curPartyRow2 = 0;
+    // v1.6.37：同行同字段去重——ExcelJS load 后合并从属格复制主格标签值（幽灵复制），
+    //   每个从属格都会再触发一次区块归属写值，把 party 值逐格铺满右侧空格
+    //   （GEODIS O2~U2 七格重影实锤）。同一行同一字段只允许写第一个命中格，后续触发全部跳过。
+    var pass2Written = {};
+    var pass2MasterOf = {};
+    (ws.model.merges || []).forEach(function (mg) {
+      var mm2 = (typeof mg === 'string') ? mg.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/) : null;
+      if (!mm2) return;
+      var mr2 = +mm2[2], mc2 = _colNum(mm2[1]), mr3 = +mm2[4], mc3 = _colNum(mm2[3]);
+      for (var rr2 = mr2; rr2 <= mr3; rr2++) for (var cc2 = mc2; cc2 <= mc3; cc2++) {
+        if (rr2 === mr2 && cc2 === mc2) continue;
+        pass2MasterOf[rr2 + ',' + cc2] = mr2 + ',' + mc2;
+      }
+    });
     for (var r2 = 1; r2 <= writeEnd; r2++) {
       var rowB = ws.getRow(r2);
       rowB.eachCell({ includeEmpty: false }, function (cellP, colP) {
@@ -1839,12 +1853,28 @@
         var info = mapHeaderLabel(s2);
         if (!info && curParty2) info = mapFieldLabel(s2, curParty2); // v1.5.28 区块归属兜底
         if (!info) return;
+        var _wkey = r2 + ',' + info.party + '.' + info.field + (info.line || 0);
+        if (isBooking && pass2Written[_wkey]) return;   // v1.6.37 仅订舱单：同行同字段只写一次（防从属格幽灵触发铺格重影）；invoice 保持旧行为零影响
         var party = (data && data[info.party]) || {};
         var raw = party[info.field];
         var val = (info.field === 'address' && info.line > 0 && typeof raw === 'string')
           ? (raw.split(/\r?\n/)[info.line - 1] || '')
           : (raw === undefined || raw === null ? '' : raw);
         if (val === '') return;
+        // v1.6.37（仅订舱单）：触发源=合并从属格（幽灵复制主格标签值）→ 值属于其合并区主格：
+        //   主格空则写主格（这是该格唯一写入通道），主格有值则跳过——绝不写到合并区外的右侧空格（重影根源）。
+        if (isBooking) {
+          var _mk = pass2MasterOf[r2 + ',' + col];
+          if (_mk) {
+            var _mp = _mk.split(',');
+            var _mcell = rowB.getCell(+_mp[1]);   // v1.6.37 fix: Row.getCell 只收列号——此前误传(行,列)两参,第二参被忽略,行号23被当列号→W23
+            if (!_cellStr(_mcell)) {
+              _mcell.value = (typeof val === 'number') ? val : String(val);
+              pass2Written[_wkey] = true;
+            }
+            return;
+          }
+        }
         var target = null, isPh = false;
         for (var c = col + 1; c <= col + 12 && c <= ws.columnCount; c++) {
           if (mergedSubordinate[r2 + ',' + c]) continue; // 跳过合并从属格（主格保留，可写）——避免 _cellStr 返回主格值让 for 误以为非空继续 c++ 越界
@@ -1859,6 +1889,7 @@
         if (!target) return;
         if (!isPh && _cellStr(target)) return; // 已有内容则不改写
         target.value = (typeof val === 'number') ? val : String(val);
+        if (isBooking) pass2Written[_wkey] = true;
       });
     }
   }
