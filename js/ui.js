@@ -1322,7 +1322,7 @@
 
 
 
-    return '<h2>收发货人主数据</h2><div class="flexrow"><div class="card" style="flex:2">' +
+    return '<h2>收发货人主数据 <button class="btn sm ghost" id="pt-import" style="margin-left:12px">批量导入</button></h2><div class="flexrow"><div class="card" style="flex:2">' +
 
 
 
@@ -1548,7 +1548,76 @@
 
   BINDERS.parties = function () {
 
+    // v1.6.39：批量导入收发货人（解析 = parser.parsePartyImport；入库 = db.put 走正常团队库同步链路）
+    var _importBtn = document.getElementById('pt-import');
+    if (_importBtn) _importBtn.onclick = openPartyImport;
 
+    function openPartyImport() {
+      showModal('<div style="width:760px;max-width:94vw"><h3 style="margin-top:0">批量导入收发货人</h3>' +
+        '<div style="display:flex;gap:10px;align-items:center"><label>导入为</label>' +
+        '<select id="pi-type"><option value="consignee">收货人 CONSIGNEE</option><option value="shipper">发货人 SHIPPER</option><option value="notify">通知人 NOTIFY</option></select>' +
+        '<span class="hint">Excel 中全选复制后直接粘贴即可（单元格间自动识别）</span></div>' +
+        '<label style="margin-top:8px">粘贴文本（多行文本块：名称↵街道↵城市 州 邮编↵国家↵电话；或带表头的 Tab/CSV 表格）</label>' +
+        '<textarea id="pi-text" rows="8" placeholder="SHIP TO: 0021&#10;DILLARDS DC #0021&#10;1315 PEACH ORCHARD RD&#10;SALISBURY NC 28146&#10;US&#10;(704) 630-4700&#10;..."></textarea>' +
+        '<div style="margin-top:8px;display:flex;gap:8px;align-items:center"><button class="btn sm ghost" id="pi-parse">解析</button>' +
+        '<label class="btn sm ghost" style="cursor:pointer">上传 CSV/TXT<input type="file" id="pi-file" accept=".csv,.txt,text/csv,text/plain" style="display:none"></label>' +
+        '<span id="pi-hint" class="hint"></span></div>' +
+        '<div id="pi-preview" style="margin-top:10px;max-height:44vh;overflow:auto"></div>' +
+        '<div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end"><button class="btn sm ghost" id="pi-cancel">取消</button>' +
+        '<button class="btn sm" id="pi-save" style="display:none">导入</button></div></div>');
+      document.getElementById('pi-cancel').onclick = closeModal;
+      document.getElementById('pi-parse').onclick = doParse;
+      document.getElementById('pi-file').onchange = function (e) {
+        var f = e.target.files && e.target.files[0];
+        if (!f) return;
+        var rd = new FileReader();
+        rd.onload = function () { document.getElementById('pi-text').value = String(rd.result || ''); doParse(); };
+        rd.readAsText(f, 'utf-8');
+      };
+      function doParse() {
+        var r = parser.parsePartyImport(document.getElementById('pi-text').value);
+        var hint = document.getElementById('pi-hint');
+        if (r.mode === 'empty' || (!r.rows.length && !r.errors.length)) { hint.textContent = '未解析出数据，请检查格式'; return; }
+        hint.textContent = '解析 ' + r.rows.length + ' 条（' + (r.mode === 'header' ? '表头模式' : '文本块模式') + '）' + (r.errors.length ? ' · ' + r.errors.length + ' 条无法识别' : '');
+        renderPreview(r);
+      }
+      function renderPreview(r) {
+        db.all('parties').then(function (ps) {
+          var exist = {};
+          ps.forEach(function (p) { exist[String(p.name || '').replace(/\s+/g, '').toUpperCase()] = p; });
+          var ptype = document.getElementById('pi-type').value;
+          var html = '<table class="grid"><tr><th>导入</th><th>名称</th><th>地址</th><th>城市</th><th>州</th><th>邮编</th><th>国家</th><th>电话</th><th>仓库码</th><th>查重</th></tr>';
+          r.rows.forEach(function (o, i) {
+            var dup = exist[String(o.name || '').replace(/\s+/g, '').toUpperCase()];
+            html += '<tr><td><input type="checkbox" class="pi-ck" data-i="' + i + '"' + (dup ? '' : ' checked') + '></td>' +
+              ['name', 'address', 'city', 'state', 'zip', 'country', 'tel', 'warehouseCode'].map(function (f) {
+                return '<td><input class="pi-f" data-i="' + i + '" data-f="' + f + '" value="' + esc(o[f] || '') + '" style="min-width:' + (f === 'name' || f === 'address' ? '90px' : '48px') + '"></td>';
+              }).join('') +
+              '<td>' + (dup ? '<span class="badge gray" title="与现有「' + esc(dup.name) + '」同名">重名</span>' : '') + '</td></tr>';
+          });
+          html += '</table>' + (r.errors.length ? '<p class="hint" style="color:#a32d2d">' + esc(r.errors.join('；')) + '</p>' : '');
+          document.getElementById('pi-preview').innerHTML = html;
+          var save = document.getElementById('pi-save');
+          save.style.display = '';
+          save.textContent = '导入 ' + r.rows.length + ' 条';
+          save.onclick = async function () {
+            var n = 0, skip = 0;
+            var boxes = document.querySelectorAll('.pi-ck');
+            for (var bi = 0; bi < boxes.length; bi++) {
+              var ck = boxes[bi];
+              if (!ck.checked) { skip++; continue; }
+              var idx = ck.dataset.i, o = { type: ptype };
+              document.querySelectorAll('.pi-f[data-i="' + idx + '"]').forEach(function (inp) { o[inp.dataset.f] = inp.value.trim(); });
+              if (!o.name) { skip++; continue; }
+              await db.put('parties', o);
+              n++;
+            }
+            toast('已导入 ' + n + ' 条' + (skip ? '，跳过 ' + skip + ' 条' : ''), 'ok');
+            closeModal(); render();
+          };
+        });
+      }
+    }
 
     function resetForm() { ['pt-id', 'pt-name', 'pt-whcode', 'pt-company', 'pt-address', 'pt-city', 'pt-state', 'pt-zip', 'pt-tel', 'pt-contact', 'pt-email', 'pt-country', 'pt-taxno', 'pt-vatno', 'pt-eori'].forEach(function (i) { var el = document.getElementById(i); if (el) el.value = ''; }); document.getElementById('pt-form-title').textContent = '新增'; }
 
