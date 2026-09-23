@@ -260,6 +260,124 @@
     return 'h' + (h >>> 0).toString(36) + '_' + s.length;
   }
 
+  // ---------- v1.6.39 收发货人批量导入解析 ----------
+  // 两种模式自动识别：①表头模式（首行含别名词，tab 分隔）②多行文本块模式（名称↵街道↵城市 州 邮编↵国家↵电话）
+  // 源忠实：不造数据——识别不了的行进 errors，由预览界面人工修正。
+  var PARTY_FIELD_ALIASES = {
+    name: ['名称', '客户名称', '收货人', '收货人名称', '收件人', '客户', 'name', 'Name', 'NAME'],
+    company: ['公司', '公司名称', 'company', 'Company'],
+    warehouseCode: ['仓库代码', '仓库编码', '仓库编号', 'DC编号', 'DC', 'Warehouse', 'WarehouseCode', 'warehouse code'],
+    address: ['地址', '街道地址', '详细地址', '收货地址', 'address', 'Address', 'ADDRESS', 'Street', 'Street Address'],
+    city: ['城市', 'city', 'City'],
+    state: ['州', '省', '州/省', 'state', 'State', 'Province'],
+    zip: ['邮编', '邮政编码', 'zip', 'Zip', 'ZIP', 'Postal Code', 'ZipCode'],
+    country: ['国家', '国家地区', 'country', 'Country'],
+    tel: ['电话', '联系电话', 'tel', 'Tel', 'TEL', 'Phone', 'phone', 'Telephone'],
+    contact: ['联系人', 'contact', 'Contact'],
+    email: ['邮箱', 'email', 'Email', 'E-mail']
+  };
+  var PARTY_STREET_RE = /^[0-9]+\s|(\b(RD|ST|STREET|DR|DRIVE|BLVD|BOULEVARD|COURT|CT|LANE|LN|WAY|AVENUE|AVE|HWY|PIKE|SUITE|STE|PARKWAY|CIR|TRL|TER)\b)/;
+  var PARTY_CSZ_RE = /^([A-Za-z .'\-#&]+?)[ ,]+([A-Z]{2})[ ,]+(\d{5})(-\d{4})?\s*$/;
+  var PARTY_COUNTRY_RE = /^(US|USA|U\.S\.?|UNITED STATES|美国)\s*$/i;
+  var PARTY_TEL_RE = /^\+?[0-9(][0-9()\-. ]{5,}[0-9)]$/;
+  var PARTY_SHIPTO_RE = /^ship\s*to\s*[:：]?\s*#?([0-9]+)\s*$/i;
+  var PARTY_DC_RE = /\b(DC|FC|WH|仓库)\s*#?\s*([0-9]{2,6})\b/i;
+
+  function _partyClassifyLine(line) {
+    var t = line.trim();
+    if (!t) return { k: 'blank' };
+    if (PARTY_SHIPTO_RE.test(t)) return { k: 'shipto', code: t.match(PARTY_SHIPTO_RE)[1] };
+    if (PARTY_COUNTRY_RE.test(t)) return { k: 'country', v: 'US' };
+    if (PARTY_TEL_RE.test(t) && !/[A-Za-z]{3,}/.test(t)) return { k: 'tel', v: t };
+    var csz = t.match(PARTY_CSZ_RE);
+    if (csz) return { k: 'csz', city: csz[1].trim(), state: csz[2], zip: csz[3] };
+    if (PARTY_STREET_RE.test(t) && t.length <= 80) return { k: 'street', v: t };
+    return { k: 'name', v: t };
+  }
+
+  function parsePartyImport(text) {
+    var raw = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+    if (!raw) return { mode: 'empty', rows: [], errors: ['内容为空'] };
+    var lines = raw.split('\n');
+    var first = lines[0] || '';
+    function splitLine(line, d) {
+      if (d === '\t') return line.split('\t');
+      var out = [], cur2 = '', q = false;
+      for (var i2 = 0; i2 < line.length; i2++) {
+        var ch = line[i2];
+        if (q) { if (ch === '"') { if (line[i2 + 1] === '"') { cur2 += '"'; i2++; } else q = false; } else cur2 += ch; }
+        else if (ch === '"') q = true;
+        else if (ch === ',') { out.push(cur2); cur2 = ''; }
+        else cur2 += ch;
+      }
+      out.push(cur2);
+      return out;
+    }
+    function pickDelim(line) {
+      var cands = line.indexOf('\t') >= 0 ? ['\t'] : [];
+      if (line.indexOf(',') >= 0) cands.push(',');
+      for (var d = 0; d < cands.length; d++) {
+        var heads = splitLine(line, cands[d]).map(function (s) { return s.trim(); });
+        var hit = heads.filter(function (h) {
+          return Object.keys(PARTY_FIELD_ALIASES).some(function (f) { return PARTY_FIELD_ALIASES[f].indexOf(h) >= 0; });
+        }).length;
+        if (hit >= 2) return cands[d];
+      }
+      return null;
+    }
+    var delim = pickDelim(first);
+    if (delim) {
+      var cols = splitLine(first, delim).map(function (s) { return s.trim(); });
+      var colMap = {};
+      cols.forEach(function (h, ci) {
+        Object.keys(PARTY_FIELD_ALIASES).some(function (f) {
+          if (PARTY_FIELD_ALIASES[f].indexOf(h) >= 0) { colMap[f] = ci; return true; }
+          return false;
+        });
+      });
+      var rows = [], errors = [];
+      for (var li = 1; li < lines.length; li++) {
+        if (!lines[li].trim()) continue;
+        var cells = splitLine(lines[li], delim);
+        var o = {};
+        Object.keys(colMap).forEach(function (f) { o[f] = (cells[colMap[f]] || '').trim(); });
+        if (!o.name) { errors.push('第 ' + (li + 1) + ' 行缺名称'); continue; }
+        rows.push(o);
+      }
+      return { mode: 'header', rows: rows, errors: errors };
+    }
+    var blocks = [], cur = null;
+    function flush() { if (cur && cur.name) blocks.push(cur); cur = null; }
+    for (var i = 0; i < lines.length; i++) {
+      var c = _partyClassifyLine(lines[i]);
+      if (c.k === 'blank') continue;
+      if (c.k === 'shipto') { flush(); cur = cur || { name: '', warehouseCode: c.code }; if (!cur.warehouseCode) cur.warehouseCode = c.code; continue; }
+      if (c.k === 'name') {
+        var dc = c.v.match(PARTY_DC_RE);
+        if (!dc) dc = c.v.match(/^(?:[A-Za-z .&'-]+?)\s+(\d{2,6})\s+(?:DISTRIBUTION|DC|FC)\b/i);   // BELK 744 DISTRIBUTION CENTER 形态
+        if (cur && cur.name) flush();
+        if (!cur) cur = { name: '', warehouseCode: '' };
+        if (!cur.name) cur.name = c.v;
+        else if (c.v.length > cur.name.length) cur.name = c.v;
+        if (dc && !cur.warehouseCode) cur.warehouseCode = dc[2] || dc[1];
+        continue;
+      }
+      if (!cur) cur = { name: '', warehouseCode: '' };
+      if (c.k === 'street' && !cur.address) cur.address = c.v;
+      else if (c.k === 'csz') { if (!cur.city) { cur.city = c.city; cur.state = c.state; cur.zip = c.zip; } }
+      else if (c.k === 'country') { cur.country = 'US'; }
+      else if (c.k === 'tel') { if (!cur.tel) cur.tel = c.v; }
+      else if (!cur.address) cur.address = c.v;
+    }
+    flush();
+    var out = [], errs = [];
+    blocks.forEach(function (b, bi) {
+      if (!b.name) { errs.push('第 ' + (bi + 1) + ' 块缺名称（地址: ' + (b.address || '?') + '）'); return; }
+      out.push(b);
+    });
+    return { mode: 'block', rows: out, errors: errs };
+  }
+
   return {
     JST_ALIASES: JST_ALIASES,
     PACKING_ALIASES: PACKING_ALIASES,
@@ -269,6 +387,7 @@
     scanHeader: scanHeader,
     parseJstOrders: parseJstOrders,
     parsePacking: parsePacking,
+    parsePartyImport: parsePartyImport,
     hashRows: hashRows
   };
 });
