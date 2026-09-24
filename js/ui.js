@@ -1684,6 +1684,7 @@
 
 
         var p = await db.get('parties', b.dataset.id);
+        if (!p) { toast('未找到该条档案（id=' + b.dataset.id + '），请刷新页面同步后重试', 'err'); return; } // v1.6.40 空值防御
 
 
 
@@ -1771,6 +1772,8 @@
 
 
 
+        var _pd = await db.get('parties', b.dataset.id);
+        if (!_pd) { toast('未找到该条档案（id=' + b.dataset.id + '），请刷新页面同步后重试', 'err'); return; } // v1.6.40 空值防御
         if (!(await confirmBox('确认删除该收发货人？', true))) return;
 
 
