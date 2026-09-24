@@ -10509,6 +10509,34 @@
 
 
 
+  // v1.6.42：启动时主动规范化 parties 的数字 id（服务端历史写入遗留）——
+  //   数字 id 与 dataset.id(恒字符串) 在 IndexedDB 严格类型下不匹配（编辑/删除失效根因）。
+  //   同名字符串记录已存在时只删数字残留（防 pull 合并后的双形态并存）。
+  async function normalizePartyIds() {
+    try {
+      var ps = await db.all('parties');
+      var existStrId = {}, existName = {};
+      ps.forEach(function (p) {
+        if (typeof p.id === 'string') { existStrId[p.id] = 1; if (p.name) existName[p.name] = 1; }
+      });
+      var n = 0;
+      for (var i = 0; i < ps.length; i++) {
+        var p0 = ps[i];
+        if (typeof p0.id !== 'number') continue;
+        if (p0.name && existName[p0.name]) { try { await db.del('parties', p0.id); } catch (e1) {} n++; continue; }
+        var oldId = p0.id, nid = String(oldId), k = 1;
+        while (existStrId[nid]) { nid = String(oldId) + "_" + (k++); }
+        p0.id = nid; p0.updatedAt = Date.now();
+        await db.put('parties', p0);
+        try { await db.del('parties', oldId); } catch (e2) {}
+        existStrId[nid] = 1; if (p0.name) existName[p0.name] = 1;
+        n++;
+      }
+      if (n) { try { toast('已自动修复 ' + n + ' 条档案数据', 'ok'); autoSyncToTeam(); } catch (e3) {} }
+      return n;
+    } catch (e) { return 0; }
+  }
+
   (async function init() {
 
 
@@ -10642,6 +10670,7 @@
 
 
       clearTimeout(watchdog);
+      try { await normalizePartyIds(); } catch (eN) {} // v1.6.42 启动主动规范化
 
 
 
