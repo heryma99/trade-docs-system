@@ -210,6 +210,30 @@
         orderSkuQty[sku] += Number(it.qty) || 0;
       });
     });
+    // v1.6.44 SKU 大小写不敏感匹配 + 导出统一大写：
+    //   匹配=精确键优先、miss 走大写镜像兜底（declareMap/price/currency/orderItem）；
+    //   显示=主数据 SKU 原文、未命中则上传原文 toUpperCase——导出 SKU 列恒为大写。
+    //   内部聚合键（boxAgg/pkAgg/agg/_firstSkuSet/_skuSeq）保持原文不动，统计与排序口径零变化。
+    function _mirror(map) {
+      var m = {};
+      Object.keys(map).forEach(function (k) {
+        var u = String(k).trim().toUpperCase();
+        if (u && m[u] === undefined) m[u] = map[k];
+      });
+      return m;
+    }
+    function _ci(map, up, sku) {
+      var k = String(sku == null ? '' : sku).trim();
+      if (map[k] !== undefined) return map[k];
+      return up[String(k).toUpperCase()];
+    }
+    var _decUp = _mirror(declareMap);
+    var priceBySkuUp = _mirror(priceBySku), currencyBySkuUp = _mirror(currencyBySku);
+    function _dec(sku) { return _ci(declareMap, _decUp, sku) || {}; }
+    function _displaySku(sku, d) {
+      var canon = (d && d.sku != null && d.sku !== '') ? String(d.sku) : String(sku == null ? '' : sku);
+      return canon.trim().toUpperCase();
+    }
     var refId = meta.refId || (orderList.length ? orderList[0] : '');
     var destCountry = _podCountry(meta.pod) || (consignee && consignee.country) || '';
     // v1.5.31 贸易国（地区）=收货人所在国家（中文名）：与目的国（目的港国家）语义分离
@@ -252,13 +276,14 @@
 
     function makeItemCore(sku, d, itR) {
       itR = itR || {};
-      var price = (priceBySku[sku] !== undefined) ? priceBySku[sku] : (d.declarePrice || 0);
-      var currency = currencyBySku[sku] || d.currency || meta.currency || 'USD';
+      var price = (_ci(priceBySku, priceBySkuUp, sku) !== undefined) ? _ci(priceBySku, priceBySkuUp, sku) : (d.declarePrice || 0);
+      var currency = _ci(currencyBySku, currencyBySkuUp, sku) || d.currency || meta.currency || 'USD';
       // v1.4.43: 回退到订单 item 的字段（declareMap 缺字段时不再丢品名/材质等）
       //          同时新增 lengthCm/widthCm/heightCm/singleGw/imageUrl/remark 出口供明细 per-item 列填充
       function _pick(k) { return (d[k] !== undefined && d[k] !== '') ? d[k] : (itR[k] !== undefined && itR[k] !== '' ? itR[k] : ''); }
       return {
-        sku: sku,
+        sku: _displaySku(sku, d),
+        _skuRaw: sku,
         model: _pick('model') || sku,
         nameEn: _pick('nameEn'), nameCn: _pick('nameCn'),
         hsCode: _pick('hsCode'), material: _pick('material'), usage: _pick('usage'), brand: _pick('brand'),
@@ -347,7 +372,7 @@
       // v1.4.65：boxMode 品名回退——装箱单只有 SKU，品名权威源=declareMap(申报表)；
       // 但 declareMap 缺该 SKU 时回退订单 items 的 name/nameEn/nameCn（聚水潭导入订单带 name），
       // 避免模板有品名列却留空（用户「模板里有的都得填」原则；与 v1.4.61 goodsSummary 回退一致）。
-      var orderItemBySku = {};
+      var orderItemBySku = {}, orderItemBySkuUp = {};
       orders.forEach(function (o) {
         (o.items || []).forEach(function (it) {
           var sk = String(it.sku == null ? '' : it.sku).trim();
@@ -357,18 +382,20 @@
           if (!r.nameEn && it.name) r.nameEn = it.name;
           if (!r.nameCn && it.name) r.nameCn = it.name;
           orderItemBySku[sk] = r;
+          var _skU = sk.toUpperCase();
+          if (orderItemBySkuUp[_skU] === undefined) orderItemBySkuUp[_skU] = r;
         });
       });
       items = (packing.boxes || []).map(function (b, _ri) {
         var sku = String(b.sku == null ? '' : b.sku).trim();
-        var d = declareMap[sku] || {};
+        var d = _dec(sku); // v1.6.44 大小写不敏感
         var bk = String(b.orderNo == null ? '' : b.orderNo) + '/' + String(b.boxNo == null ? '' : b.boxNo).trim();
         var spec = boxSpecMap[bk] || {};
         var L = Number(spec.length) || Number(b.length) || 0, W = Number(spec.width) || Number(b.width) || 0, H = Number(spec.height) || Number(b.height) || 0;
         var dims = (L && W && H) ? (L + '×' + W + '×' + H) : (b.boxSpec || '');
         var volW = (L && W && H) ? round(L * W * H / 6000, 3) : (b.volumeWeight || 0);
         var vol = (L && W && H) ? round(L * W * H / 1000000, 6) : 0;
-        var it = makeItemCore(sku, d, orderItemBySku[sku]);
+        var it = makeItemCore(sku, d, _ci(orderItemBySku, orderItemBySkuUp, sku));
         it.boxNo = b.boxNo || ''; it.boxSpec = dims; it.dims = dims;
         it.length = L || ''; it.width = W || ''; it.height = H || '';
         // v1.4.47：boxMode 直接把箱规同步给 per-item 长/宽/高/单箱重字段（模板列映射的是 lengthCm/... 而非 length）
@@ -424,7 +451,7 @@
       orders.forEach(function (o) {
         (o.items || []).forEach(function (it) {
           var sku = String(it.sku).trim();
-          var d = declareMap[sku] || {};
+          var d = _dec(sku); // v1.6.44 大小写不敏感
           var price = (it.price !== undefined && it.price !== null && Number(it.price) > 0) ? Number(it.price) : (d.declarePrice || 0);
           var key = sku + '@' + price;
           if (!agg[key]) {
@@ -494,11 +521,11 @@
     items.forEach(function (it, idx) {
       it.no = idx + 1;
       it.amount = round(it.qty * it.price, 2);
-      var sku = String(it.sku).trim();
+      var sku = String((it._skuRaw != null && it._skuRaw !== '') ? it._skuRaw : it.sku).trim(); // v1.6.44 内部键用原文 SKU（it.sku 已是显示大写）
       var ba = boxAgg[sku];
       if (!boxMode) {
         var pk = pkAgg[sku];
-        var d = declareMap[sku] || {};
+        var d = _dec(sku); // v1.6.44 大小写不敏感
         if (pk && pk.qty > 0) {
           // 装箱清单有该 SKU：优先用清单毛净重量；若清单无「毛重/净重」列（值为 0/空），回退到主数据（申报信息）重量，避免 G.W./N.W. 变 0
           it.nw = pk.nw ? round(pk.nw * (it.qty / pk.qty), 3) : round((d.nw || 0) * it.qty, 3);
@@ -2877,9 +2904,10 @@
         var markCells = []; // v1.6.8 缺图标注：记录需写红/黄底「图片缺失」的单元格 {row,col,sku,type}
         for (var i = 0; i < items.length; i++) {
           var it = items[i];
-          var sku = it && it.sku;
+          var sku = it && (it.sku || it._skuRaw);
           if (!sku) continue;
           var rel = lookupImg(sku);
+          if (!rel && it._skuRaw && String(it._skuRaw) !== String(sku)) rel = lookupImg(it._skuRaw); // v1.6.44 大写显示未命中时回退原文 SKU 查图
           if (!rel) { if (diag.missed.indexOf(String(sku)) < 0) diag.missed.push(String(sku)); markCells.push({ row: itemsRowNum + i, col: imgCol, sku: String(sku), type: 'missing' }); continue; }
           tasks.push({ row: itemsRowNum + i, col: imgCol, sku: String(sku), rel: rel });
         }
