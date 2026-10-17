@@ -397,6 +397,27 @@
         it._firstOfBox = !_seenBox[bk];
         _seenBox[bk] = true;
       });
+      // v1.6.43 多订单合并箱号前缀（仅显示层）：本票装箱清单去重后 ≥2 个订单号时，
+      // 箱号显示为「订单号-原箱号」（如 1834331-1），用于区分跨订单重复箱号；
+      // 单订单（≤1 个订单号）保持原箱号不变。原值保留 _boxNoRaw 供审计复核。
+      // 注：排序/箱级规格归并/_firstOfBox 标记均已完成不受影响；audit 箱号连续性
+      // 校验只认纯整数（v1.6.26），带前缀值自动跳过不误报。
+      (function () {
+        var _ordSet = {};
+        (packing.boxes || []).forEach(function (b3) {
+          var _k3 = String(b3.orderNo == null ? '' : b3.orderNo).trim();
+          if (_k3) _ordSet[_k3] = 1;
+        });
+        var _multiOrder = Object.keys(_ordSet).length > 1;
+        items.forEach(function (it) {
+          var raw = String(it.boxNo == null ? '' : it.boxNo).trim();
+          it._boxNoRaw = raw;
+          if (!_multiOrder || !raw) return;
+          var on = String(it.orderNo == null ? '' : it.orderNo).trim();
+          if (!on) return; // 该行无订单号：留空原值，不造数
+          it.boxNo = on + '-' + raw;
+        });
+      })();
     } else {
       // 明细合并（跨订单同SKU同价合并）
       var agg = {};
