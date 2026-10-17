@@ -298,6 +298,18 @@
             if (bad) report.warns.push({ dim: 'E', cell: cellRef(itemsRow, boxNoCol), msg: '箱号不连续（期望 1,2,3… 实际首段 ' + seq.slice(0, 5).join(',') + '），可能存在错位' });
           }
         }
+        // v1.6.43 多订单箱号前缀超限拦截：拼「订单号-箱号」后超 FBA 25 位上限 → 阻断导出
+        if (boxNoCol > 0 && data && Array.isArray(data.items)) {
+          data.items.forEach(function (_pIt, _pi) {
+            var _raw = String(_pIt._boxNoRaw == null ? '' : _pIt._boxNoRaw).trim();
+            var _on = String(_pIt.orderNo == null ? '' : _pIt.orderNo).trim();
+            if (!_raw || !_on) return;
+            var _joined = _on + '-' + _raw;
+            if (_joined.length > 25) {
+              report.blocks.push({ dim: 'E', cell: cellRef(itemsRow, boxNoCol), msg: '第' + (_pi + 1) + '行箱号拼订单号前缀后长 ' + _joined.length + ' 位，超过 FBA 箱号 25 位上限（' + _joined + '）——已拦截导出' });
+            }
+          });
+        }
       }
 
       // ---- 维度 F（结构保真）----
