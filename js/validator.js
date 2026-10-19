@@ -19,26 +19,32 @@
     };
   }
 
-  /** 2. SKU+数量勾稽：订单聚合 vs 装箱清单聚合，逐SKU比对 */
+  /** 2. SKU+数量勾稽：订单聚合 vs 装箱清单聚合，逐SKU比对
+   *  v1.6.45：聚合键大小写归一（与 v1.6.44 引擎匹配规则对齐），
+   *  同款因大小写两种写法（hp-001/HP-001）不再被误报数量不一致；diff 展示保留首次出现原文 */
   function checkSkuQty(orders, packing) {
-    var oAgg = {}, pAgg = {};
+    var oAgg = {}, pAgg = {}, _disp = {};
     (orders || []).forEach(function (o) {
       (o.items || []).forEach(function (it) {
-        var k = String(it.sku).trim();
+        var raw = String(it.sku).trim();
+        var k = raw.toUpperCase();
+        if (_disp[k] === undefined) _disp[k] = raw;
         oAgg[k] = (oAgg[k] || 0) + (Number(it.qty) || 0);
       });
     });
     ((packing && packing.boxes) || []).forEach(function (b) {
-      var k = String(b.sku).trim();
+      var raw = String(b.sku).trim();
+      var k = raw.toUpperCase();
+      if (_disp[k] === undefined) _disp[k] = raw;
       pAgg[k] = (pAgg[k] || 0) + (Number(b.qty) || 0);
     });
     var diffs = [];
     var all = {};
     Object.keys(oAgg).forEach(function (k) { all[k] = 1; });
     Object.keys(pAgg).forEach(function (k) { all[k] = 1; });
-    Object.keys(all).sort().forEach(function (sku) {
-      var oq = oAgg[sku] || 0, pq = pAgg[sku] || 0;
-      if (oq !== pq) diffs.push({ sku: sku, orderQty: oq, packingQty: pq, diff: pq - oq });
+    Object.keys(all).sort().forEach(function (k) {
+      var oq = oAgg[k] || 0, pq = pAgg[k] || 0;
+      if (oq !== pq) diffs.push({ sku: _disp[k] || k, orderQty: oq, packingQty: pq, diff: pq - oq });
     });
     return { ok: diffs.length === 0, diffs: diffs };
   }
@@ -89,8 +95,16 @@
     } else {
       needFields = ['hsCode', 'declarePrice', 'material'];
     }
+    // v1.6.45 大写镜像索引：精确键优先、miss 走大写兜底（与 v1.6.44 引擎 buildDocData 同一规则），
+    // 上传小写 SKU（jh306c05-10）不再因主数据存大写（JH306C05-10）被误报「申报要素缺失」。
+    var decUp = {};
+    Object.keys(declareMap || {}).forEach(function (k) {
+      var uk = String(k).trim().toUpperCase();
+      if (uk && decUp[uk] === undefined) decUp[uk] = declareMap[k];
+    });
     (items || []).forEach(function (it) {
-      var d = declareMap[String(it.sku).trim()] || null;
+      var _rawSku = String(it.sku).trim();
+      var d = declareMap[_rawSku] || decUp[_rawSku.toUpperCase()] || null;
       var e = Object.assign({}, it);
       if (d) {
         e.nameEn = e.nameEn || d.nameEn || '';
