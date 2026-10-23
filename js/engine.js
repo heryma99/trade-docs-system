@@ -652,6 +652,7 @@
       incoterms: meta.incoterms || '',
       paymentTerms: meta.paymentTerms || '',
       transport: meta.transport || 'BY SEA',
+      serviceChannel: meta.serviceChannel || '', // v1.6.46 服务渠道（亚丰「服务*」栏）
       pol: meta.pol || '', pod: meta.pod || '',
       tradeCountry: tradeCountry, // v1.5.31 贸易国（地区）=收货人所在国家（中文名，报关术语）
       etd: meta.etd || '', vessel: meta.vessel || '',
@@ -1490,6 +1491,8 @@
     { re: /进口商\s*(税号|VAT|EORI)/i, path: 'consignee.vatNo' },
     { re: /进口商\s*(名称|公司)?/, path: 'consignee.company' },
     { re: /运输方式/, path: 'transport' },
+    // v1.6.46：服务渠道（亚丰发票 A2「服务*」标签，值区写入所选物流渠道名；v1.6.46 前官方模板此处残留示例值）
+    { re: /(服务渠道|^\s*服务\s*\*?\s*$)/, path: 'serviceChannel' },
     { re: /起运(国|港|地)/, path: 'pol' },
     { re: /目的(国|港|地区|地)/, path: 'pod' },
     { re: /贸易国/, path: 'tradeCountry' }, // v1.5.31 贸易国（地区）=收货人国家（固定 consignee.country 中文名，不随区块重定向）
@@ -1578,6 +1581,10 @@
       // 标签右侧第一个空格 → 覆盖相邻明细表头（亚丰 K27/M27/O27 被 13/13/2869.6 破坏）。
       var hdrCnt = 0;
       row.eachCell({ includeEmpty: false }, function (cellH) {
+        // v1.6.46：合并从属格不参与明细列头计数——官方表单模板（亚丰10.23）值区 F:H 合并
+        // 填示例值「否」，从属格传播同值被 matchHeaderAlias 误判为 electrified ×3，
+        // 整行被当成明细表头跳过，表头区标签（服务*/客户订单号…）全部漏配。
+        if (mergedMaps.subordinate[r + ',' + cellH.col]) return;
         if (matchHeaderAlias(_cellStr(cellH))) hdrCnt++;
       });
       if (IS_BOOKING) {
