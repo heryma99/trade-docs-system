@@ -4914,6 +4914,11 @@
 
 
 
+        // v1.6.46 服务渠道（亚丰发票「服务*」栏：填亚丰渠道名，如「美森正班海派-M」）
+        '<div><label>服务渠道</label><input id="wz-service" value="' + esc(m.serviceChannel || '') + '"></div>' +
+
+
+
         '<div><label>运输方式</label><select id="wz-trans"><option' + (m.transport === 'BY SEA' ? ' selected' : '') + '>BY SEA</option><option' + (m.transport === 'BY AIR' ? ' selected' : '') + '>BY AIR</option><option' + (m.transport === 'BY EXPRESS' ? ' selected' : '') + '>BY EXPRESS</option><option' + (m.transport === 'BY RAIL' ? ' selected' : '') + '>BY RAIL</option></select></div>' +
 
 
@@ -5126,7 +5131,7 @@
 
 
 
-          incoterms: val('wz-inco'), paymentTerms: val('wz-pay'), transport: val('wz-trans'),
+          incoterms: val('wz-inco'), paymentTerms: val('wz-pay'), transport: val('wz-trans'), serviceChannel: val('wz-service'),
 
 
 
