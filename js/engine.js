@@ -1499,7 +1499,8 @@
     { re: /(报关|清关)方式/, path: 'customsType' },
     { re: /成交方式/, path: 'incoterms' },
     { re: /(客户订单号|客户单号|订单号|PO\s*NUMBER|PO号|P\.O\.)/i, path: 'orderNos' },
-    { re: /参考号/, path: 'refId' },
+    { re: /参考号/, path: '' }, // v1.6.47：参考号栏不再填订单号（用户要求；全库扫描仅亚丰系3张模板含此标签）
+    { re: /(申报币种|申报货币)/i, path: 'currency' }, // v1.6.47 申报币种=向导币种（默认USD；云途申报模板同受益；不碰投保币种）
     { re: /(预计总件数|总包装件数|预计件数|箱数)/, path: 'totals.boxCount' },
     { re: /(预计重量|总毛重|总重)/, path: 'totals.gw' },
     // v1.5.40 货箱重量=毛重：表头字段「货箱重量」也填 totals.gw（用户要求全模板通用；明细列头由 HEADER_ALIASES gw 处理）
@@ -1667,14 +1668,16 @@
         return;
       }
       if (!e.resolved || !e.path) return;
-      var val = getPath(data, e.path);
-      if (val === undefined || val === null || val === '') {
-        if (e.party && e.field === 'address' && e.line > 0 && data[e.party] && data[e.party].address) {
-          var lines = String(data[e.party].address).split(/\r?\n/);
-          val = lines[e.line - 1] || '';
-        }
-        if (val === undefined || val === null || val === '') return;
+      var val;
+      if (e.party && e.field === 'address' && e.line > 0 && data[e.party] && data[e.party].address) {
+        // v1.6.47：地址一/二/三按源地址换行拆行——没有第 N 行就留空，
+        // 不再把整串地址重复写进每一行（用户实测：地址一二三同值重复）
+        var lines = String(data[e.party].address).split(/\r?\n/);
+        val = lines[e.line - 1] || '';
+      } else {
+        val = getPath(data, e.path);
       }
+      if (val === undefined || val === null || val === '') return;
       var spanEnd = e.c;
       var mr = mergedMaps.masterRange[e.r + ',' + e.c];
       if (mr) spanEnd = Math.max(spanEnd, mr.right);
