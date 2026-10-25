@@ -2948,7 +2948,11 @@
 
 
 
-          usage: ['用途'], brand: ['品牌'], model: ['型号'], nw: ['净重', '单件净重'], gw: ['毛重', '单件毛重'], origin: ['原产地', '产地']
+          usage: ['用途'], brand: ['品牌'], model: ['型号'], nw: ['净重', '单件净重'], gw: ['毛重', '单件毛重'], origin: ['原产地', '产地'],
+          unit: ['单位', '计量单位'], currency: ['币种', '货币', '币制'],
+          styleCode: ['款式编码', '款号'], goodsName: ['商品名称', '商品全名'], shortName: ['商品简称'],
+          soleMaterial: ['鞋底材质'], category: ['分类', '类别'],
+          purchasePriceCny: ['采购单价CNY', '采购单价'], purchasePriceCnyTax: ['采购单价含税CNY', '采购单价含税']
 
 
 
