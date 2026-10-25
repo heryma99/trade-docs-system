@@ -2092,7 +2092,31 @@
 
 
 
+  // v1.6.50：页面打开申报信息时，本地数据版本落后于云端镜像则自动全量同步
+  // 规则：云端 15,398 条整记录覆盖本地旧值；本地独有 SKU（手填新增）原样保留；同步后记版本号
+  var _autoSyncBusy = false;
+  async function autoSyncDeclaresIfStale() {
+    if (_autoSyncBusy) return { busy: true };
+    var mirrorVer = (window.TD && window.TD.declareMirrorVer) || '';
+    if (!mirrorVer || !(window.TD && window.TD.declareData && window.TD.declareData.length)) return { skipped: 'no-mirror' };
+    var localVer = '';
+    try { localVer = localStorage.getItem('tds.declareDataVer') || ''; } catch (e) { }
+    if (localVer === mirrorVer) return { skipped: 'up-to-date' };
+    _autoSyncBusy = true;
+    try {
+      var mirror = window.TD.declareData;
+      var bySku = {};
+      mirror.forEach(function (r) { if (r && r.sku) bySku[r.sku] = r; });
+      var local = await db.all('declare_reqs');
+      var localOnly = local.filter(function (r) { return r && r.sku && !bySku[r.sku]; });
+      await db.bulkPut('declare_reqs', mirror.concat(localOnly));
+      try { localStorage.setItem('tds.declareDataVer', mirrorVer); } catch (e) { }
+      return { updated: mirror.length, keptLocal: localOnly.length, from: localVer || '(首次)' };
+    } finally { _autoSyncBusy = false; }
+  }
+
   PAGES.declares = async function () {
+    var _syncNote = await autoSyncDeclaresIfStale();
 
 
 
@@ -2108,7 +2132,8 @@
 
 
 
-      '<p class="hint">数据来源：本地《商品申报信息》表（D:/模板/商品申报信息.xlsx，约 13019 行），由 build_declare_from_xlsx.py 重建为 js/declare_data.js。点「🔄 并入申报主数据」以该表整表刷新本地——仅填空字段，<b>不覆盖</b>手填项。</p>' +
+      '<p class="hint">数据来源：云端申报要素主数据（js/declare_data*.js，镜像版本 ' + esc(window.TD.declareMirrorVer || '-') + '，共 ' + declareAll.length + ' 条）。打开本页时若本地数据落后于云端，将<b>自动全量同步</b>；你本地独有的 SKU（手填新增）会保留。点「🔄 并入申报主数据」可手动再次合并——仅填空字段，<b>不覆盖</b>已有值。</p>' +
+      (_syncNote && _syncNote.updated ? '<p class="hint" style="color:#0a7">✅ 已自动同步云端最新申报数据：更新 ' + _syncNote.updated + ' 条' + (_syncNote.keptLocal ? '，保留本地独有 ' + _syncNote.keptLocal + ' 条' : '') + '。</p>' : '') +
 
 
 
