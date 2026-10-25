@@ -1912,6 +1912,14 @@
 
 
 
+      '<td>' + esc(d.electrified || '否') + '</td>' +
+
+
+
+      '<td>' + esc(d.magnetic || '否') + '</td>' +
+
+
+
       '<td><button class="btn sm ghost dc-edit" data-sku="' + esc(d.sku) + '">编辑</button> <button class="btn sm danger dc-del" data-sku="' + esc(d.sku) + '">删除</button></td></tr>';
 
 
@@ -2136,7 +2144,7 @@
 
 
 
-      '<table class="grid"><thead><tr><th>SKU</th><th>款式编码</th><th>商品名称</th><th>商品简称</th><th>中文品名</th><th>英文品名</th><th>HS编码</th><th>申报价(USD)</th><th>币种</th><th>采购单价CNY</th><th>采购单价含税CNY</th><th>材质</th><th>鞋底材质</th><th>品牌</th><th>分类</th><th>单件净重</th><th>操作</th></tr></thead><tbody id="dc-tbody"></tbody></table>' +
+      '<table class="grid"><thead><tr><th>SKU</th><th>款式编码</th><th>商品名称</th><th>商品简称</th><th>中文品名</th><th>英文品名</th><th>HS编码</th><th>申报价(USD)</th><th>币种</th><th>采购单价CNY</th><th>采购单价含税CNY</th><th>材质</th><th>鞋底材质</th><th>品牌</th><th>分类</th><th>单件净重</th><th>带电</th><th>带磁</th><th>操作</th></tr></thead><tbody id="dc-tbody"></tbody></table>' +
 
 
 
@@ -2240,7 +2248,9 @@
 
 
 
-      '<div><label>原产地</label><input id="dc-origin" value="' + esc(d.origin || 'CN') + '"></div></div>' +
+      '<div><label>原产地</label><input id="dc-origin" value="' + esc(d.origin || 'CN') + '"></div>' +
+      '<div><label>是否带电</label><input id="dc-electrified" value="' + esc(d.electrified || '否') + '"></div>' +
+      '<div><label>是否带磁</label><input id="dc-magnetic" value="' + esc(d.magnetic || '否') + '"></div></div>' +
 
 
 
@@ -2304,7 +2314,9 @@
 
 
 
-        unit: val('dc-unit') || 'PCS', origin: val('dc-origin') || 'CN', ver: (d.ver || 0) + 1
+        unit: val('dc-unit') || 'PCS', origin: val('dc-origin') || 'CN',
+        electrified: val('dc-electrified') || '否', magnetic: val('dc-magnetic') || '否',
+        ver: (d.ver || 0) + 1
 
 
 
@@ -2544,7 +2556,7 @@
 
 
 
-        tbody.innerHTML = '<tr><td colspan="17" class="empty">无匹配记录</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="19" class="empty">无匹配记录</td></tr>';
 
 
 
@@ -2952,7 +2964,8 @@
           unit: ['单位', '计量单位'], currency: ['币种', '货币', '币制'],
           styleCode: ['款式编码', '款号'], goodsName: ['商品名称', '商品全名'], shortName: ['商品简称'],
           soleMaterial: ['鞋底材质'], category: ['分类', '类别'],
-          purchasePriceCny: ['采购单价CNY', '采购单价'], purchasePriceCnyTax: ['采购单价含税CNY', '采购单价含税']
+          purchasePriceCny: ['采购单价CNY', '采购单价'], purchasePriceCnyTax: ['采购单价含税CNY', '采购单价含税'],
+          electrified: ['是否带电', '带电'], magnetic: ['是否带磁', '带磁']
 
 
 
@@ -3148,7 +3161,7 @@
 
 
 
-    var FIELDS = ['nameCn', 'nameEn', 'hsCode', 'declarePrice', 'declarePriceRaw', 'material', 'brand', 'usage', 'unit', 'nw', 'gw', 'currency', 'model', 'origin'];
+    var FIELDS = ['nameCn', 'nameEn', 'hsCode', 'declarePrice', 'declarePriceRaw', 'material', 'brand', 'usage', 'unit', 'nw', 'gw', 'currency', 'model', 'origin', 'electrified', 'magnetic'];
 
 
 
