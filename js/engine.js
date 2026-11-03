@@ -221,13 +221,15 @@
       var code = (opts.deferSrc === 'US') ? 'US' : (_CN2CC[String(destCountry || '').trim()] || (/^[A-Za-z]{2}$/.test(String(destCountry || '').trim()) ? String(destCountry).trim().toUpperCase() : null) || 'US');
       var entry = rec.prices[code];
       if (!entry && opts.deferSrc !== 'US') entry = rec.prices['US'];
-      return entry ? { price: parseFloat(entry[0]) || 0, currency: entry[1] || 'USD' } : null;
+      if (!entry) return null;
+      // v1.6.56 链接带 country 参数：点开即对应站点定价视图（与页面价自洽，税代核验所见即所得）
+      var lk = rec.link || '';
+      if (lk && code && code !== 'US') lk = lk + (lk.indexOf('?') >= 0 ? '&' : '?') + 'country=' + code;
+      return { price: parseFloat(entry[0]) || 0, currency: entry[1] || 'USD', url: lk, code: code };
     }
     function _deferLink(sku) {
-      var key = String(sku).trim();
-      var SP = window.SKU_PRICES || {};
-      var rec = SP[key] || SP[key.toUpperCase()];
-      return (rec && rec.link) || '';
+      var pg = _deferPage(sku);
+      return pg ? (pg.url || '') : '';
     }
 
     // 订单号列表
