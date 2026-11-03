@@ -1918,6 +1918,12 @@
 
       '<td>' + esc(d.magnetic || '否') + '</td>' +
 
+      (function () { var _pr = (window.SKU_PRICES || {})[String(d.sku).trim()] || (window.SKU_PRICES || {})[String(d.sku).trim().toUpperCase()];
+        if (!_pr || !_pr.prices) return '<td style="color:#b91c1c">无</td><td style="color:#b91c1c">无链接</td>';
+        var _c = Object.keys(_pr.prices)[0]; var _e = _c ? _pr.prices[_c] : null;
+        var _show = _e ? (_e[0] + ' ' + _e[1]) : '—';
+        return '<td class="mono">' + _show + '</td><td>' + (_pr.link ? '<a href="' + _pr.link + '" target="_blank" style="font-size:11px">打开</a>' : '—') + '</td>'; })() +
+
 
 
       '<td><button class="btn sm ghost dc-edit" data-sku="' + esc(d.sku) + '">编辑</button> <button class="btn sm danger dc-del" data-sku="' + esc(d.sku) + '">删除</button></td></tr>';
@@ -2169,7 +2175,7 @@
 
 
 
-      '<table class="grid"><thead><tr><th>SKU</th><th>款式编码</th><th>商品名称</th><th>商品简称</th><th>中文品名</th><th>英文品名</th><th>HS编码</th><th>申报价(USD)</th><th>币种</th><th>采购单价CNY</th><th>采购单价含税CNY</th><th>材质</th><th>鞋底材质</th><th>品牌</th><th>分类</th><th>单件净重</th><th>带电</th><th>带磁</th><th>操作</th></tr></thead><tbody id="dc-tbody"></tbody></table>' +
+      '<table class="grid"><thead><tr><th>SKU</th><th>款式编码</th><th>商品名称</th><th>商品简称</th><th>中文品名</th><th>英文品名</th><th>HS编码</th><th>申报价(USD)</th><th>币种</th><th>采购单价CNY</th><th>采购单价含税CNY</th><th>材质</th><th>鞋底材质</th><th>品牌</th><th>分类</th><th>单件净重</th><th>带电</th><th>带磁</th><th>销售价(美国站)</th><th>销售链接</th><th>操作</th></tr></thead><tbody id="dc-tbody"></tbody></table>' +
 
 
 
@@ -2581,7 +2587,7 @@
 
 
 
-        tbody.innerHTML = '<tr><td colspan="19" class="empty">无匹配记录</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="21" class="empty">无匹配记录</td></tr>';
 
 
 
@@ -4488,6 +4494,15 @@
 
 
         '<div><label>渠道</label><input id="wz-channel" value="' + esc(w.channel) + '" placeholder="如 海运整柜/海快/美森"></div>' +
+        '<div style="grid-column:1/-1;margin-top:6px;padding:10px 12px;background:#f0f7ff;border:1px solid #bfdcf5;border-radius:6px">' +
+        '<div style="font-weight:600;font-size:13px;margin-bottom:6px">🧮 递延 / 非包税渠道申报价选项（包税渠道忽略本区，保持默认即可）</div>' +
+        '<label style="display:inline-flex;align-items:center;gap:6px;margin-right:18px"><input type="checkbox" id="wz-defer"' + (w.meta && w.meta.deferMode ? ' checked' : '') + '> 按销售价逆算申报价</label>' +
+        '<label style="display:inline-flex;align-items:center;gap:6px;margin-right:18px">取价模式 <select id="wz-defer-src" style="padding:2px 4px">' +
+        '<option value="dest"' + (w.meta && w.meta.deferSrc === 'dest' ? ' selected' : '') + '>目的国站点优先（推荐）</option>' +
+        '<option value="US"' + (w.meta && w.meta.deferSrc === 'US' ? ' selected' : '') + '>统一美国站</option></select></label>' +
+        '<label style="display:inline-flex;align-items:center;gap:6px;margin-right:18px">逆算比例 <input type="number" id="wz-defer-rate" min="1" max="100" step="0.5" value="' + ((w.meta && w.meta.deferRate) || 25) + '" style="width:60px;padding:2px 4px"> %</label>' +
+        '<label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="wz-linksheet"' + (w.meta && w.meta.linkSheet ? ' checked' : '') + '> 附带销售链接清单（价格佐证 xlsx）</label>' +
+        '<div style="font-size:11px;color:#6b7280;margin-top:5px">逆算=销售链接页面价 ÷ 汇率折USD × 比例，仅应用于本次导出；你维护的申报价主数据不受任何影响。无站点售价的 SKU 将被拦截并列表提示。</div></div>' +
 
 
 
@@ -5181,7 +5196,11 @@
 
 
 
-          shippingMarks: val('wz-marks'), remark: val('wz-remark')
+          shippingMarks: val('wz-marks'), remark: val('wz-remark'),
+          deferMode: document.getElementById('wz-defer') && document.getElementById('wz-defer').checked,
+          deferSrc: (document.getElementById('wz-defer-src') || {}).value || 'dest',
+          deferRate: Number((document.getElementById('wz-defer-rate') || {}).value) || 25,
+          linkSheet: document.getElementById('wz-linksheet') && document.getElementById('wz-linksheet').checked
 
 
 
@@ -5421,7 +5440,19 @@
 
 
 
-      document.getElementById('wz-next3').onclick = function () { if (w.report.ok) { w.step = 4; render(); } };
+      document.getElementById('wz-next3').onclick = function () {
+        if (!w.report.ok) return;
+        var dm = (w._deferMissing || []);
+        var hard = dm.filter(function (s) { return s.indexOf('FB:') !== 0; });
+        var soft = dm.filter(function (s) { return s.indexOf('FB:') === 0; });
+        if (hard.length) {
+          showModal('<h3>❌ 逆算拦截：' + hard.length + ' 个 SKU 无站点售价</h3><p>以下 SKU 在价格表中不存在（无销售链接或未抓到价），无法逆算申报价：</p><p class=\"mono\" style=\"max-height:200px;overflow:auto\">' + hard.slice(0, 50).map(function (s) { return s; }).join('、') + (hard.length > 50 ? ' …等 ' + hard.length + ' 个' : '') + '</p><p style=\"color:#6b7280;font-size:12px\">处理：①在申报信息页手工补销售链接与售价；②或取消勾选「按销售价逆算」后重新校验。</p><div style=\"text-align:right;margin-top:10px\"><button class=\"btn\" onclick=\"TDUI.closeModal()\">知道了</button></div>');
+          return;
+        }
+        if (soft.length) {
+          if (!confirm('⚠️ ' + soft.length + ' 个 SKU 目的国站点无价，已回退美国主站价（不含税口径，逆算价偏低）。\n\n回退 SKU：' + soft.slice(0, 10).map(function (s) { return s.slice(3); }).join('、') + (soft.length > 10 ? ' …等' : '') + '\n\n继续导出请点确定。')) return;
+        }
+        w.step = 4; render(); };
 
 
 
@@ -5925,6 +5956,30 @@
 
 
 
+        // v1.6.51 附带销售链接清单（价格佐证）
+        if (w.meta && w.meta.linkSheet && w._data && Array.isArray(w._data.items)) {
+          try {
+            var _rows = [['SKU', '数量', '英文品名', '申报单价(USD)', '销售链接', '页面售价(原币)', '币种', '页面售价折USD', '价格抓取日期', '备注']];
+            var _fx = w._deferFx || window.PRICES_FX || {};
+            (w._data.items || []).forEach(function (it) {
+              var rec = (window.SKU_PRICES || {})[String(it.sku).trim()] || (window.SKU_PRICES || {})[String(it.sku).trim().toUpperCase()] || {};
+              var _cks = rec.prices ? Object.keys(rec.prices) : [];
+              var ent = _cks.length ? rec.prices[_cks[0]] : null;
+              var orig = ent ? parseFloat(ent[0]) : null;
+              var cur = ent ? (ent[1] || 'USD') : '';
+              var usd = (orig && cur !== 'USD' && _fx[cur + '_USD']) ? Math.round(orig * _fx[cur + '_USD'] * 100) / 100 : orig;
+              _rows.push([it.sku, it.qty, it.nameEn || '', it.price, rec.link || '（无销售链接）', orig || '', cur, usd || '', rec.fetched || '', ent ? '' : '无站点售价']);
+            });
+            var _ws = XLSX.utils.aoa_to_sheet(_rows);
+            _ws['!cols'] = [{ wch: 16 }, { wch: 6 }, { wch: 40 }, { wch: 12 }, { wch: 60 }, { wch: 12 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 14 }];
+            var _wb2 = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(_wb2, _ws, '销售链接清单');
+            var _fxb = _fx && _fx.date ? ('；汇率(' + _fx.date + (_fx.live ? ' 实时' : ' 兜底') + ')：GBP→USD ' + _fx.GBP_USD + '、EUR→USD ' + _fx.EUR_USD) : '';
+            XLSX.utils.book_append_sheet(_wb2, XLSX.utils.aoa_to_sheet([['说明'], ['本清单为递延/非包税渠道价格佐证，页面售价来自 ' + (window.PRICES_VER || '') + ' 价格表快照' + _fxb], ['生成时间', new Date().toLocaleString()]]), '说明');
+            await exporter.download(_wb2, fname.replace(/\.xlsx$/, '') + '_销售链接清单.xlsx');
+            toast('已同时下载销售链接清单', 'ok');
+          } catch (e) { console.error('link sheet failed', e); toast('销售链接清单生成失败：' + e.message, 'err'); }
+        }
         w.doc.status = 'exported'; w.doc.exportedFile = fname;
 
 
@@ -6239,6 +6294,23 @@
 
 
 
+    // v1.6.51 逆算汇率预取：实时当日汇率优先，失败回退价格表烙印值
+    var deferFx = null;
+    if (w.meta && w.meta.deferMode) {
+      try {
+        var _fxResp = await Promise.race([
+          fetch('https://open.er-api.com/v6/latest/USD').then(function (r) { return r.json(); }),
+          new Promise(function (_, rej) { setTimeout(function () { rej(new Error('fx timeout')); }, 6000); })
+        ]);
+        var _rates = (_fxResp && _fxResp.rates) || {};
+        if (_rates.GBP && _rates.EUR) {
+          deferFx = { GBP_USD: Math.round(1 / _rates.GBP * 10000) / 10000, EUR_USD: Math.round(1 / _rates.EUR * 10000) / 10000, date: new Date().toISOString().slice(0, 10), live: true };
+        }
+      } catch (e) { /* 回退 */ }
+      if (!deferFx && window.PRICES_FX) {
+        deferFx = { GBP_USD: window.PRICES_FX.GBP_USD, EUR_USD: window.PRICES_FX.EUR_USD, date: window.PRICES_FX.date, live: false };
+      }
+    }
     var data = engine.buildDocData({
 
 
@@ -6247,11 +6319,15 @@
 
 
 
-      shipper: shipper || {}, consignee: consignee || {}, notify: notify, declareMap: declareMap
+      shipper: shipper || {}, consignee: consignee || {}, notify: notify, declareMap: declareMap,
+      deferMode: !!(w.meta && w.meta.deferMode), deferSrc: (w.meta && w.meta.deferSrc) || 'dest',
+      deferRate: (w.meta && w.meta.deferRate) || 25, linkSheet: !!(w.meta && w.meta.linkSheet), fx: deferFx
 
 
 
     });
+    if (w.meta && w.meta.deferMode) w._deferMissing = (data && data.deferMissing) || [];
+    if (w.meta && w.meta.linkSheet) w._deferFx = deferFx;
 
 
 
