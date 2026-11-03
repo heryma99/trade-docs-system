@@ -336,7 +336,7 @@
         productNature: _pick('productNature') || _pick('batteryType') || _pick('nature'),
         productPrice: (function () { var _pg = opts.deferPage ? _deferPage(sku) : null; return _pg ? _pg.price : (d.productPrice || d.retailPrice || d.salePrice || itR.productPrice || ''); })(),
         productPriceCurrency: (function () { var _pg = opts.deferPage ? _deferPage(sku) : null; return _pg ? _pg.currency : ''; })(),
-        productLink: d.productLink || d.link || d.url || itR.productLink || (opts.deferMode || opts.linkSheet ? _deferLink(sku) : ''),
+        productLink: d.productLink || d.link || d.url || itR.productLink || (opts.deferPage ? _deferLink(sku) : ''),
         singleNw: d.singleNw || d.netWeightPerPc || d.nwPerPc || itR.singleNw || '',
         price: price, unit: d.unit || itR.unit || 'PCS', origin: _originLabel(d.origin || itR.origin || 'CN'),
         electrified: (d.electrified != null && d.electrified !== '') ? d.electrified : (itR.electrified != null ? itR.electrified : '否'),
