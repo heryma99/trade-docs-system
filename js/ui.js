@@ -5970,14 +5970,16 @@
           try {
             var _rows = [['SKU', '数量', '英文品名', '申报单价(USD)', '销售链接', '页面售价(原币)', '币种', '页面售价折USD', '价格抓取日期', '备注']];
             var _fx = w._deferFx || window.PRICES_FX || {};
+            var _CN2CC_UI = { '美国': 'US', '英国': 'GB', '德国': 'DE', '法国': 'FR', '意大利': 'IT', '西班牙': 'ES', '荷兰': 'NL', '比利时': 'BE', '波兰': 'PL', '瑞典': 'SE', '捷克': 'CZ', '奥地利': 'AT', '爱尔兰': 'IE', '葡萄牙': 'PT', '加拿大': 'CA', '澳大利亚': 'AU', '日本': 'JP', '阿联酋': 'AE', '沙特阿拉伯': 'SA' };
+            var _podCc = _CN2CC_UI[String((w._data && w._data.pod) || '').trim()] || (/^[A-Za-z]{2}$/.test(String((w._data && w._data.pod) || '').trim()) ? String(w._data.pod).trim().toUpperCase() : 'US');
             (w._data.items || []).forEach(function (it) {
               var rec = (window.SKU_PRICES || {})[String(it.sku).trim()] || (window.SKU_PRICES || {})[String(it.sku).trim().toUpperCase()] || {};
-              var _cks = rec.prices ? Object.keys(rec.prices) : [];
-              var ent = _cks.length ? rec.prices[_cks[0]] : null;
+              var ent = rec.prices ? (rec.prices[_podCc] || rec.prices['US'] || null) : null;
               var orig = ent ? parseFloat(ent[0]) : null;
               var cur = ent ? (ent[1] || 'USD') : '';
               var usd = (orig && cur !== 'USD' && _fx[cur + '_USD']) ? Math.round(orig * _fx[cur + '_USD'] * 100) / 100 : orig;
-              _rows.push([it.sku, it.qty, it.nameEn || '', it.price, rec.link || '（无销售链接）', orig || '', cur, usd || '', rec.fetched || '', ent ? '' : '无站点售价']);
+              var _lk = rec.link ? (rec.link + (rec.link.indexOf('?') >= 0 ? '&' : '?') + 'country=' + _podCc) : '（无销售链接）';
+              _rows.push([it.sku, it.qty, it.nameEn || '', it.price, _lk, orig || '', cur, usd || '', rec.fetched || '', ent ? '' : '无站点售价']);
             });
             var _ws = XLSX.utils.aoa_to_sheet(_rows);
             _ws['!cols'] = [{ wch: 16 }, { wch: 6 }, { wch: 40 }, { wch: 12 }, { wch: 60 }, { wch: 12 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 14 }];
