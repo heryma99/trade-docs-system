@@ -6329,7 +6329,7 @@
 
 
       shipper: shipper || {}, consignee: consignee || {}, notify: notify, declareMap: declareMap,
-      deferMode: !!(w.meta && w.meta.deferMode), deferSrc: (w.meta && w.meta.deferSrc) || 'dest',
+      deferMode: !!(w.meta && w.meta.deferMode), deferSrc: (w.meta && w.meta.deferSrc) || 'dest', deferPage: true,
       deferRate: (w.meta && w.meta.deferRate) || 25, linkSheet: !!(w.meta && w.meta.linkSheet), fx: deferFx
 
 
