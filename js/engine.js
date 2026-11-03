@@ -336,7 +336,7 @@
         imageUrl: _pick('imageUrl') || _pick('image') || _pick('photo'),
         remark:   _pick('remark')   || _pick('note'),
         productNature: _pick('productNature') || _pick('batteryType') || _pick('nature'),
-        productPrice: (function () { var _pg = opts.deferPage ? _deferPage(sku) : null; return _pg ? _pg.price : (d.productPrice || d.retailPrice || d.salePrice || itR.productPrice || ''); })(),
+        productPrice: (function () { var _pg = opts.deferPage ? _deferPage(sku) : null; return _pg ? (_pg.price + ' ' + _pg.currency) : (d.productPrice || d.retailPrice || d.salePrice || itR.productPrice || ''); })(),
         productPriceCurrency: (function () { var _pg = opts.deferPage ? _deferPage(sku) : null; return _pg ? _pg.currency : ''; })(),
         productLink: d.productLink || d.link || d.url || itR.productLink || (opts.deferPage ? _deferLink(sku) : ''),
         singleNw: d.singleNw || d.netWeightPerPc || d.nwPerPc || itR.singleNw || '',
