@@ -5187,6 +5187,8 @@
 
 
 
+        var _prevMeta = w.meta || {}; // v1.6.53 保留 step1 写入的递延勾选（deferMode/deferSrc/deferRate/linkSheet），防止 meta 重建覆盖
+
         w.meta = {
 
 
@@ -5207,7 +5209,11 @@
 
 
 
+
         };
+
+        // v1.6.53 回填 step1 写入的递延勾选（meta 重建不覆盖 defer 字段）
+        ['deferMode', 'deferSrc', 'deferRate', 'linkSheet'].forEach(function (k) { if (k in _prevMeta) w.meta[k] = _prevMeta[k]; });
 
 
 
