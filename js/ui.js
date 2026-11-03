@@ -6307,7 +6307,7 @@
 
     // v1.6.51 逆算汇率预取：实时当日汇率优先，失败回退价格表烙印值
     var deferFx = null;
-    if (w.meta && w.meta.deferMode) {
+    if (w.meta && (w.meta.deferMode || w.meta.linkSheet)) {
       try {
         var _fxResp = await Promise.race([
           fetch('https://open.er-api.com/v6/latest/USD').then(function (r) { return r.json(); }),
