@@ -336,9 +336,15 @@
         imageUrl: _pick('imageUrl') || _pick('image') || _pick('photo'),
         remark:   _pick('remark')   || _pick('note'),
         productNature: _pick('productNature') || _pick('batteryType') || _pick('nature'),
-        productPrice: (function () { var _pg = opts.deferPage ? _deferPage(sku) : null; return _pg ? (_pg.price + ' ' + _pg.currency) : (d.productPrice || d.retailPrice || d.salePrice || itR.productPrice || ''); })(),
+        productPrice: (function () {
+          var _pg = opts.linkSheet ? _deferPage(sku) : null;
+          if (!_pg) return d.productPrice || d.retailPrice || d.salePrice || itR.productPrice || '';
+          // v1.6.60 销售价折算为申报币种（模板币种 USD）：与申报单价同币种，税代直接对照 25% 比例
+          if (_pg.currency !== 'USD' && opts.fx && opts.fx[_pg.currency + '_USD']) return Math.round(_pg.price * opts.fx[_pg.currency + '_USD'] * 100) / 100;
+          return _pg.price;
+        })(),
         productPriceCurrency: (function () { var _pg = opts.deferPage ? _deferPage(sku) : null; return _pg ? _pg.currency : ''; })(),
-        productLink: d.productLink || d.link || d.url || itR.productLink || (opts.deferPage ? _deferLink(sku) : ''),
+        productLink: d.productLink || d.link || d.url || itR.productLink || (opts.linkSheet ? _deferLink(sku) : ''),
         singleNw: d.singleNw || d.netWeightPerPc || d.nwPerPc || itR.singleNw || '',
         price: price, unit: d.unit || itR.unit || 'PCS', origin: _originLabel(d.origin || itR.origin || 'CN'),
         electrified: (d.electrified != null && d.electrified !== '') ? d.electrified : (itR.electrified != null ? itR.electrified : '否'),
