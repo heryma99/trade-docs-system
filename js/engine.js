@@ -191,6 +191,33 @@
     var meta = opts.meta || {}, shipper = opts.shipper || {}, consignee = opts.consignee || {}, notify = opts.notify || null;
     var declareMap = opts.declareMap || {};
 
+    // v1.6.51 递延申报价逆算（用户需求：仅导出时应用，主数据申报价永不改写）
+    //   数据源=独立价格表 window.SKU_PRICES（js/price_data.js，Shopify 分国别抓价）
+    //   取价=目的国站点优先(opts.deferSrc==='dest')，无则回退美国主站(标记 FB:)，再无则 price=0（UI 层拦截）
+    //   币种：站点价非 USD 时按 opts.fx 当日汇率折算，再乘 opts.deferRate 比例
+    var _deferMissing = [];
+    var _CN2CC = { '美国': 'US', '英国': 'GB', '德国': 'DE', '法国': 'FR', '意大利': 'IT', '西班牙': 'ES', '荷兰': 'NL', '比利时': 'BE', '波兰': 'PL', '瑞典': 'SE', '捷克': 'CZ', '奥地利': 'AT', '爱尔兰': 'IE', '葡萄牙': 'PT', '加拿大': 'CA', '澳大利亚': 'AU', '日本': 'JP', '阿联酋': 'AE', '沙特阿拉伯': 'SA' };
+    function _deferPriceOf(sku) {
+      var key = String(sku).trim();
+      var SP = window.SKU_PRICES || {};
+      var rec = SP[key] || SP[key.toUpperCase()];
+      if (!rec || !rec.prices) { if (_deferMissing.indexOf(key) < 0) _deferMissing.push(key); return 0; }
+      var code = (opts.deferSrc === 'US') ? 'US' : (_CN2CC[String(destCountry || '').trim()] || 'US');
+      var entry = rec.prices[code];
+      if (!entry && opts.deferSrc !== 'US') { entry = rec.prices['US']; if (_deferMissing.indexOf('FB:' + key) < 0) _deferMissing.push('FB:' + key); }
+      if (!entry) { if (_deferMissing.indexOf(key) < 0) _deferMissing.push(key); return 0; }
+      var p = parseFloat(entry[0]) || 0;
+      var cur = entry[1] || 'USD';
+      if (cur !== 'USD' && opts.fx && opts.fx[cur + '_USD']) p = p * opts.fx[cur + '_USD'];
+      return Math.round(p * ((Number(opts.deferRate) || 0) / 100) * 100) / 100;
+    }
+    function _deferLink(sku) {
+      var key = String(sku).trim();
+      var SP = window.SKU_PRICES || {};
+      var rec = SP[key] || SP[key.toUpperCase()];
+      return (rec && rec.link) || '';
+    }
+
     // 订单号列表
     var orderList = [];
     orders.forEach(function (o) { orderList.push(o.orderNo); });
@@ -276,7 +303,8 @@
 
     function makeItemCore(sku, d, itR) {
       itR = itR || {};
-      var price = (_ci(priceBySku, priceBySkuUp, sku) !== undefined) ? _ci(priceBySku, priceBySkuUp, sku) : (d.declarePrice || 0);
+      var price = opts.deferMode ? _deferPriceOf(sku)
+        : ((_ci(priceBySku, priceBySkuUp, sku) !== undefined) ? _ci(priceBySku, priceBySkuUp, sku) : (d.declarePrice || 0));
       var currency = _ci(currencyBySku, currencyBySkuUp, sku) || d.currency || meta.currency || 'USD';
       // v1.4.43: 回退到订单 item 的字段（declareMap 缺字段时不再丢品名/材质等）
       //          同时新增 lengthCm/widthCm/heightCm/singleGw/imageUrl/remark 出口供明细 per-item 列填充
@@ -295,7 +323,7 @@
         remark:   _pick('remark')   || _pick('note'),
         productNature: _pick('productNature') || _pick('batteryType') || _pick('nature'),
         productPrice: d.productPrice || d.retailPrice || d.salePrice || itR.productPrice || '',
-        productLink: d.productLink || d.link || d.url || itR.productLink || '',
+        productLink: d.productLink || d.link || d.url || itR.productLink || (opts.deferMode || opts.linkSheet ? _deferLink(sku) : ''),
         singleNw: d.singleNw || d.netWeightPerPc || d.nwPerPc || itR.singleNw || '',
         price: price, unit: d.unit || itR.unit || 'PCS', origin: _originLabel(d.origin || itR.origin || 'CN'),
         electrified: (d.electrified != null && d.electrified !== '') ? d.electrified : (itR.electrified != null ? itR.electrified : '否'),
@@ -452,7 +480,8 @@
         (o.items || []).forEach(function (it) {
           var sku = String(it.sku).trim();
           var d = _dec(sku); // v1.6.44 大小写不敏感
-          var price = (it.price !== undefined && it.price !== null && Number(it.price) > 0) ? Number(it.price) : (d.declarePrice || 0);
+          var price = opts.deferMode ? _deferPriceOf(sku)
+            : ((it.price !== undefined && it.price !== null && Number(it.price) > 0) ? Number(it.price) : (d.declarePrice || 0));
           var key = sku + '@' + price;
           if (!agg[key]) {
             agg[key] = makeItemCore(sku, d, it);
@@ -642,6 +671,7 @@
     consignee = fillPartyDefaults(consignee);
     notify = notify ? fillPartyDefaults(notify) : { name: 'SAME AS CONSIGNEE', address: '' };
     return {
+      deferMissing: opts.deferMode ? _deferMissing : [],
       kind: opts.kind || 'invoice',
       invoiceNo: meta.invoiceNo || '',
       invoiceDate: meta.invoiceDate || new Date().toISOString().slice(0, 10),
