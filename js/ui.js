@@ -4631,6 +4631,13 @@
         // v1.6.11：跨页兜底 —— 手选项不在当前页时，用 w.packingId 还原（不丢用户手选）
         if (!pk && w.packingId) pk = { value: w.packingId };
 
+        // v1.6.52 递延选项读取（必须在 step1 表单 DOM 存活时读取；step1→2 后 DOM 重建会丢失勾选）
+        w.meta = w.meta || {};
+        w.meta.deferMode = !!(document.getElementById('wz-defer') && document.getElementById('wz-defer').checked);
+        w.meta.deferSrc = (document.getElementById('wz-defer-src') || {}).value || 'dest';
+        w.meta.deferRate = Number((document.getElementById('wz-defer-rate') || {}).value) || 25;
+        w.meta.linkSheet = !!(document.getElementById('wz-linksheet') && document.getElementById('wz-linksheet').checked);
+
 
 
         // v1.6.9: 允许不手选 radio——若勾选订单已关联装箱清单则自动合并；仅当既没手选也无线索时才拦截
@@ -5196,11 +5203,7 @@
 
 
 
-          shippingMarks: val('wz-marks'), remark: val('wz-remark'),
-          deferMode: document.getElementById('wz-defer') && document.getElementById('wz-defer').checked,
-          deferSrc: (document.getElementById('wz-defer-src') || {}).value || 'dest',
-          deferRate: Number((document.getElementById('wz-defer-rate') || {}).value) || 25,
-          linkSheet: document.getElementById('wz-linksheet') && document.getElementById('wz-linksheet').checked
+          shippingMarks: val('wz-marks'), remark: val('wz-remark')
 
 
 
