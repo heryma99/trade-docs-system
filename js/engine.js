@@ -202,7 +202,9 @@
       var SP = window.SKU_PRICES || {};
       var rec = SP[key] || SP[key.toUpperCase()];
       if (!rec || !rec.prices) { if (_deferMissing.indexOf(key) < 0) _deferMissing.push(key); return 0; }
-      var code = (opts.deferSrc === 'US') ? 'US' : (_CN2CC[String(destCountry || '').trim()] || 'US');
+      var _dc = String(destCountry || '').trim();
+      var code = (opts.deferSrc === 'US') ? 'US'
+        : (_CN2CC[_dc] || (/^[A-Za-z]{2}$/.test(_dc) ? _dc.toUpperCase() : null) || 'US');
       var entry = rec.prices[code];
       if (!entry && opts.deferSrc !== 'US') { entry = rec.prices['US']; if (_deferMissing.indexOf('FB:' + key) < 0) _deferMissing.push('FB:' + key); }
       if (!entry) { if (_deferMissing.indexOf(key) < 0) _deferMissing.push(key); return 0; }
