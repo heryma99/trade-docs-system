@@ -55,8 +55,8 @@
     batteryType:['BATTERY TYPE', 'POWERED', '电池类型', '产品电池类型', '电池'],
     electrified:['ELECTRIFIED', '是否带电', '带电(Y/N)', '带电'],
     magnetic:['MAGNETIC', '是否带磁', '带磁(Y/N)', '带磁'],
-    productPrice:['产品价格', '产品销售价格', '销售价格', '零售价', 'RETAIL PRICE', 'SALE PRICE', 'UNIT PRICE'],
-    productLink:['产品链接', '图片链接', '商品链接', 'LINK', 'URL', 'PRODUCT LINK'],
+    productPrice:['产品价格', '产品销售价格', '产品销售价', '销售价格', '销售价', '零售价', 'RETAIL PRICE', 'SALE PRICE', 'UNIT PRICE'],
+    productLink:['产品链接', '产品销售链接', '图片链接', '商品链接', '销售链接', 'LINK', 'URL', 'PRODUCT LINK'],
     singleNw:['单个产品净重', '单品净重', 'NET WT/PC', 'NET WEIGHT/PC'],
     currency:['CURRENCY', '币种', '货币'],
     remark:  ['REMARK', 'NOTES', 'NOTE', '备注', '说明']
@@ -213,6 +213,16 @@
       if (cur !== 'USD' && opts.fx && opts.fx[cur + '_USD']) p = p * opts.fx[cur + '_USD'];
       return Math.round(p * ((Number(opts.deferRate) || 0) / 100) * 100) / 100;
     }
+    function _deferPage(sku) {
+      var key = String(sku).trim();
+      var SP = window.SKU_PRICES || {};
+      var rec = SP[key] || SP[key.toUpperCase()];
+      if (!rec || !rec.prices) return null;
+      var code = (opts.deferSrc === 'US') ? 'US' : (_CN2CC[String(destCountry || '').trim()] || (/^[A-Za-z]{2}$/.test(String(destCountry || '').trim()) ? String(destCountry).trim().toUpperCase() : null) || 'US');
+      var entry = rec.prices[code];
+      if (!entry && opts.deferSrc !== 'US') entry = rec.prices['US'];
+      return entry ? { price: parseFloat(entry[0]) || 0, currency: entry[1] || 'USD' } : null;
+    }
     function _deferLink(sku) {
       var key = String(sku).trim();
       var SP = window.SKU_PRICES || {};
@@ -324,7 +334,8 @@
         imageUrl: _pick('imageUrl') || _pick('image') || _pick('photo'),
         remark:   _pick('remark')   || _pick('note'),
         productNature: _pick('productNature') || _pick('batteryType') || _pick('nature'),
-        productPrice: d.productPrice || d.retailPrice || d.salePrice || itR.productPrice || '',
+        productPrice: (function () { var _pg = opts.deferPage ? _deferPage(sku) : null; return _pg ? _pg.price : (d.productPrice || d.retailPrice || d.salePrice || itR.productPrice || ''); })(),
+        productPriceCurrency: (function () { var _pg = opts.deferPage ? _deferPage(sku) : null; return _pg ? _pg.currency : ''; })(),
         productLink: d.productLink || d.link || d.url || itR.productLink || (opts.deferMode || opts.linkSheet ? _deferLink(sku) : ''),
         singleNw: d.singleNw || d.netWeightPerPc || d.nwPerPc || itR.singleNw || '',
         price: price, unit: d.unit || itR.unit || 'PCS', origin: _originLabel(d.origin || itR.origin || 'CN'),
