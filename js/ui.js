@@ -2121,6 +2121,7 @@
     } finally { _autoSyncBusy = false; }
   }
 
+  function deferFxGbpUsdNote(fx) { return fx ? ('：GBP→USD ' + fx.GBP_USD + (fx.EUR_USD ? '、EUR→USD ' + fx.EUR_USD : '')) : ''; }
   PAGES.declares = async function () {
     var _syncNote = await autoSyncDeclaresIfStale();
 
@@ -4501,6 +4502,7 @@
         '<option value="dest"' + (w.meta && w.meta.deferSrc === 'dest' ? ' selected' : '') + '>目的国站点优先（推荐）</option>' +
         '<option value="US"' + (w.meta && w.meta.deferSrc === 'US' ? ' selected' : '') + '>统一美国站</option></select></label>' +
         '<label style="display:inline-flex;align-items:center;gap:6px;margin-right:18px">逆算比例 <input type="number" id="wz-defer-rate" min="1" max="100" step="0.5" value="' + ((w.meta && w.meta.deferRate) || 25) + '" style="width:60px;padding:2px 4px"> %</label>' +
+        '<label style="display:inline-flex;align-items:center;gap:6px;margin-right:18px">汇　率 <input type="number" id="wz-defer-fx" min="0" step="0.0001" value="' + ((w.meta && w.meta.deferFx !== undefined) ? w.meta.deferFx : 0) + '" style="width:78px;padding:2px 4px"> <span style="font-size:11px;color:#6b7280">0=自动当天 / 1=1比1 / 其他=固定值</span></label>' +
         '<label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="wz-linksheet"' + (w.meta && w.meta.linkSheet ? ' checked' : '') + '> 附带销售链接清单（价格佐证 xlsx）</label>' +
         '<div style="font-size:11px;color:#6b7280;margin-top:5px">逆算=销售链接页面价 ÷ 汇率折USD × 比例，仅应用于本次导出；你维护的申报价主数据不受任何影响。无站点售价的 SKU 将被拦截并列表提示。</div></div>' +
 
@@ -4637,6 +4639,8 @@
         w.meta.deferSrc = (document.getElementById('wz-defer-src') || {}).value || 'dest';
         w.meta.deferRate = Number((document.getElementById('wz-defer-rate') || {}).value) || 25;
         w.meta.linkSheet = !!(document.getElementById('wz-linksheet') && document.getElementById('wz-linksheet').checked);
+        var _fxv = Number((document.getElementById('wz-defer-fx') || {}).value);
+        w.meta.deferFx = (isFinite(_fxv) && _fxv > 0) ? _fxv : 0; // 0=自动当天；>0=用户固定值（含 1=1比1）；负数/非法归 0
 
 
 
@@ -5985,7 +5989,7 @@
             _ws['!cols'] = [{ wch: 16 }, { wch: 6 }, { wch: 40 }, { wch: 12 }, { wch: 60 }, { wch: 12 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 14 }];
             var _wb2 = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(_wb2, _ws, '销售链接清单');
-            var _fxb = _fx && _fx.date ? ('；汇率(' + _fx.date + (_fx.live ? ' 实时' : ' 兜底') + ')：GBP→USD ' + _fx.GBP_USD + '、EUR→USD ' + _fx.EUR_USD) : '';
+            var _fxb = _fx && _fx.date ? ('；汇率模式=' + (_fx.label || _fx.date) + (deferFxGbpUsdNote(_fx))) : '';
             XLSX.utils.book_append_sheet(_wb2, XLSX.utils.aoa_to_sheet([['说明'], ['本清单为递延/非包税渠道价格佐证，页面售价来自 ' + (window.PRICES_VER || '') + ' 价格表快照' + _fxb], ['生成时间', new Date().toLocaleString()]]), '说明');
             await exporter.download(_wb2, fname.replace(/\.xlsx$/, '') + '_销售链接清单.xlsx');
             toast('已同时下载销售链接清单', 'ok');
@@ -6308,19 +6312,31 @@
     // v1.6.51 逆算汇率预取：实时当日汇率优先，失败回退价格表烙印值
     var deferFx = null;
     if (w.meta && (w.meta.deferMode || w.meta.linkSheet)) {
-      try {
-        var _fxResp = await Promise.race([
-          fetch('https://open.er-api.com/v6/latest/USD').then(function (r) { return r.json(); }),
-          new Promise(function (_, rej) { setTimeout(function () { rej(new Error('fx timeout')); }, 6000); })
-        ]);
-        var _rates = (_fxResp && _fxResp.rates) || {};
-        if (_rates.GBP && _rates.EUR) {
-          deferFx = { GBP_USD: Math.round(1 / _rates.GBP * 10000) / 10000, EUR_USD: Math.round(1 / _rates.EUR * 10000) / 10000, date: new Date().toISOString().slice(0, 10), live: true };
+      var _fxv = Number(w.meta.deferFx);
+      if (!isFinite(_fxv) || _fxv < 0) _fxv = 0;
+      if (_fxv > 0) {
+        // v1.6.61 用户维护汇率：1=1比1；其他正数=固定值（一单一国，单字段对应该国货币对 USD 的折算率）
+        deferFx = { GBP_USD: _fxv, EUR_USD: _fxv, date: 'manual', live: false,
+                    label: _fxv === 1 ? '1比1（页面价直接当 USD）' : '手动固定 ' + _fxv };
+      } else {
+        // 0=自动取当天真实汇率（实时优先，失败回退价格表烙印值）
+        try {
+          var _fxResp = await Promise.race([
+            fetch('https://open.er-api.com/v6/latest/USD').then(function (r) { return r.json(); }),
+            new Promise(function (_, rej) { setTimeout(function () { rej(new Error('fx timeout')); }, 6000); })
+          ]);
+          var _rates = (_fxResp && _fxResp.rates) || {};
+          if (_rates.GBP && _rates.EUR) {
+            deferFx = { GBP_USD: Math.round(1 / _rates.GBP * 10000) / 10000, EUR_USD: Math.round(1 / _rates.EUR * 10000) / 10000, date: new Date().toISOString().slice(0, 10), live: true,
+                        label: '当日实时 ' + deferFx };
+          }
+        } catch (e) { /* 回退 */ }
+        if (!deferFx && window.PRICES_FX) {
+          deferFx = { GBP_USD: window.PRICES_FX.GBP_USD, EUR_USD: window.PRICES_FX.EUR_USD, date: window.PRICES_FX.date, live: false,
+                      label: '兜底 ' + window.PRICES_FX.date + ' ' + window.PRICES_FX.GBP_USD };
         }
-      } catch (e) { /* 回退 */ }
-      if (!deferFx && window.PRICES_FX) {
-        deferFx = { GBP_USD: window.PRICES_FX.GBP_USD, EUR_USD: window.PRICES_FX.EUR_USD, date: window.PRICES_FX.date, live: false };
       }
+      if (deferFx && !deferFx.label) deferFx.label = String(deferFx.GBP_USD);
     }
     var data = engine.buildDocData({
 
