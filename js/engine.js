@@ -16,6 +16,7 @@
   /** 模板明细表头别名词典：把模板里真实列名映射到数据字段 */
   var HEADER_ALIASES = {
     no:      ['NO.', 'NO', '序号', '#', '项次'],
+    orderNo: ['订单号', 'ORDER NO.', 'ORDER NO', 'ORDERNO', 'PO NO', 'PO NUMBER', '客户订单号'], // v1.6.62 通用申报要素模板：仓库用订单号列
     boxNo:   ['CTNR NO', 'CTNR NO.', 'CTNRNO', 'CTNR', 'CARTON NO', 'CARTON#', '箱号', 'CARTON', 'CTN#', '货箱编号', 'FBA箱号'],
     boxCount:['CTNS', 'CARTONS', '箱数', '件数', 'TYPES OF PKG', 'TYPESOFPKG', 'NO. AND TYPES OF PKG'],
     sku:     ['SKU', '款号', '商品编码', '商家编码', '货号', '规格编码', 'MODEL NO', 'MODELNO'],
@@ -26,12 +27,12 @@
     qty:     ['QTY', '数量', '件数', 'PCS', 'QUANTITY', 'TOTAL QUANTITY'],
     unit:    ['UNIT', '单位', 'UOM'],
     price:   ['UNIT PRICE', '单价', 'PRICE', 'DECLARED VALUE', '采购价格', '采购价'],
-    amount:  ['AMOUNT', '金额', 'TOTAL', 'TOTAL AMOUNT', 'TOTAL PRICE', '总申报价值', '申报价值'],
+    amount:  ['AMOUNT', '金额', 'TOTAL', 'TOTAL AMOUNT', 'TOTAL PRICE', '总申报价值', '申报价值', '申报总价/USD', '申报总价'],
     nw:      ['N.W', 'N.W.', 'NW', 'NET WEIGHT', '净重'],
     gw:      ['G.W', 'G.W.', 'GW', 'GROSS WEIGHT', '毛重', '货箱重量'], // v1.5.40 货箱重量=毛重（用户要求全模板通用）
     singleGw:['SINGLE GW', 'PER CTN G.W', 'WEIGHT/CTN', '单箱重量', '单箱毛重', 'WEIGHT PER CTN', '单箱重', '单箱重(KG)'],
     volume:  ['CBM', 'M3', 'VOL', 'MEAS', '体积', '尺码', 'MEAS\'T'],
-    material:['MATERIAL', '材质', '质地'],
+    material:['MATERIAL', '材质', '质地', '成份', '成分'],
     usage:   ['用途', 'USE', 'USAGE', '用途说明', 'PURPOSE'],
     brand:   ['BRAND', '品牌'],
     origin:  ['ORIGIN', '原产地', '原产国', '产地', 'COUNTRY OF ORIGIN'],
@@ -41,7 +42,7 @@
     brandType: ['品牌类型', 'BRAND TYPE', '品牌类型（海关申报）'], // v1.5.32 明细列头「品牌类型」→ items.brandType（有品牌=4 境外品牌-其他）
     exportPrefer: ['出口享惠情况', '享惠情况', 'EXPORT PREFERENCE'], // v1.5.32 明细列头「出口享惠情况」→ items.exportPrefer（按目的国协定自动）
     dims: ['箱规', '装箱尺寸', '外箱尺寸', 'BOX SIZE', 'CARTON SIZE'], // 装箱尺寸（来自装箱单长宽高）
-    productDims: ['产品尺寸', '尺寸', 'SIZE', 'DIMENSION', 'DIMS', '规格尺寸', '长×宽×高'], // v1.5.33 产品本身尺寸（SKU_DIMS，来源 JW PEI G Unit Q列「长高宽cm」）
+    productDims: ['产品尺寸', '尺寸', 'SIZE', 'DIMENSION', 'DIMS', '规格尺寸', '长×宽×高', '规格'], // v1.5.33 产品本身尺寸（SKU_DIMS，来源 JW PEI G Unit Q列「长高宽cm」）
     // v1.4.43 海运类模板「长/宽/高/产品图片/产品性质/备注」等 per-item 字段
     // 注意：alias 不再放单字母 'L'/'W'/'H'（normalizeHeader 去空格后会被任意含该字母的词误命中）
     lengthCm:['LENGTH', 'L(CM)', '长', '长CM'],
@@ -59,7 +60,9 @@
     productLink:['产品链接', '产品销售链接', '图片链接', '商品链接', '销售链接', 'LINK', 'URL', 'PRODUCT LINK'],
     singleNw:['单个产品净重', '单品净重', 'NET WT/PC', 'NET WEIGHT/PC'],
     currency:['CURRENCY', '币种', '货币'],
-    remark:  ['REMARK', 'NOTES', 'NOTE', '备注', '说明']
+    remark:  ['REMARK', 'NOTES', 'NOTE', '备注', '说明'],
+    // v1.6.62 通用申报要素模板：鞋底材质独立列（此前被 material 的'材质'子串吞掉填成主数据材质）
+    soleMaterial: ['鞋底材质', 'SOLE MATERIAL']
   };
 
   function normalizeHeader(s) {
@@ -345,6 +348,7 @@
         })(),
         productPriceCurrency: (function () { var _pg = opts.deferPage ? _deferPage(sku) : null; return _pg ? _pg.currency : ''; })(),
         productLink: d.productLink || d.link || d.url || itR.productLink || (opts.linkSheet ? _deferLink(sku) : ''),
+        soleMaterial: _pick('soleMaterial'),
         singleNw: d.singleNw || d.netWeightPerPc || d.nwPerPc || itR.singleNw || '',
         price: price, unit: d.unit || itR.unit || 'PCS', origin: _originLabel(d.origin || itR.origin || 'CN'),
         electrified: (d.electrified != null && d.electrified !== '') ? d.electrified : (itR.electrified != null ? itR.electrified : '否'),
@@ -508,6 +512,7 @@
             agg[key] = makeItemCore(sku, d, it);
             agg[key].qty = 0; agg[key].amount = 0; agg[key].nw = 0; agg[key].gw = 0;
             agg[key]._priceSource = (it.price && Number(it.price) > 0) ? 'order' : (d.declarePrice ? 'master' : 'none');
+            agg[key].orderNo = String(o.orderNo == null ? '' : o.orderNo).trim(); // v1.6.62 聚合模式补订单号（多单合并取首单）
           }
           agg[key].qty += Number(it.qty) || 0;
         });
