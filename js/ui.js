@@ -4830,7 +4830,13 @@
 
 
 
-      if (!m.invoiceNo) m.invoiceNo = 'INV' + today().replace(/-/g, '') + '-' + String(docs.filter(function (d) { return d.kind === 'invoice'; }).length + 1).padStart(3, '0');
+      // v1.6.63 发票号默认取订单号：单订单=订单号；多订单=全部订单号按选择顺序 / 连接；用户手工编辑后（w._invNoAuto=false）永不覆盖
+      var _ordSig = orders.map(function (o) { return String(o.orderNo == null ? '' : o.orderNo).trim(); }).filter(Boolean).join('/');
+      if (w._invNoAuto !== false && (!m.invoiceNo || w._invNoAuto)) {
+        if (_ordSig) m.invoiceNo = _ordSig;
+        else if (!m.invoiceNo) m.invoiceNo = 'INV' + today().replace(/-/g, '') + '-' + String(docs.filter(function (d) { return d.kind === 'invoice'; }).length + 1).padStart(3, '0');
+        w._invNoAuto = true;
+      }
 
 
 
@@ -5183,6 +5189,8 @@
 
 
 
+      var _invEl = document.getElementById('wz-invno');
+      if (_invEl) _invEl.addEventListener('input', function () { w._invNoAuto = false; });
       document.getElementById('wz-next2').onclick = function () {
 
 
@@ -6734,7 +6742,15 @@
 
 
 
-      if (!m.invoiceNo) m.invoiceNo = 'BK' + today().replace(/-/g, '') + '-' + String(docs.filter(function (d) { return d.kind === 'booking'; }).length + 1).padStart(3, '0');
+      // v1.6.63 委托号默认取订单号：单订单=订单号；多订单=全部 / 连接；手工编辑后永不覆盖
+      var _bOrders = [];
+      for (var _bi = 0; _bi < (w.orderIds || []).length; _bi++) _bOrders.push(await db.get('orders', w.orderIds[_bi]));
+      var _bOrdSig = _bOrders.map(function (o) { return String(o.orderNo == null ? '' : o.orderNo).trim(); }).filter(Boolean).join('/');
+      if (w._invNoAuto !== false && (!m.invoiceNo || w._invNoAuto)) {
+        if (_bOrdSig) m.invoiceNo = _bOrdSig;
+        else if (!m.invoiceNo) m.invoiceNo = 'BK' + today().replace(/-/g, '') + '-' + String(docs.filter(function (d) { return d.kind === 'booking'; }).length + 1).padStart(3, '0');
+        w._invNoAuto = true;
+      }
 
 
 
@@ -6842,6 +6858,8 @@
 
 
 
+      var _bNoEl = document.getElementById('bw-no');
+      if (_bNoEl) _bNoEl.addEventListener('input', function () { w._invNoAuto = false; });
       document.getElementById('bw-next2').onclick = function () {
 
 
