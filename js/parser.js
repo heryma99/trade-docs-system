@@ -170,6 +170,45 @@
     var cm = h.colMap;
     if (cm.sku === undefined) throw new Error('缺少SKU列');
     if (cm.qty === undefined) throw new Error('缺少数量列');
+    // v2026-11-09 聚水潭简洁格式适配：表头仅命中 订单号/SKU/数量（箱号/重量/纸箱规格/体积重列无表头），
+    // 按数据特征自动补列——三重特征校验（尺寸模式列强特征 + 小整数箱号列 + 数值重量列）防误伤，
+    // 未命中全部特征时不做任何补全（纯 SKU 清单行为不变）
+    var _gcFormat = false;
+    if (cm.sku !== undefined && cm.qty !== undefined && cm.orderNo !== undefined &&
+        cm.boxNo === undefined && cm.gw === undefined && cm.boxSpec === undefined && cm.volume === undefined) {
+      var _maxC = 0;
+      rows.slice(h.headerRow + 1, h.headerRow + 31).forEach(function (r) { _maxC = Math.max(_maxC, (r || []).length); });
+      var _cand = {};
+      for (var _c = 0; _c < _maxC; _c++) {
+        if (_c === cm.sku || _c === cm.qty || _c === cm.orderNo) continue;
+        _cand[_c] = { int: 0, num: 0, dim: 0, total: 0 };
+      }
+      rows.slice(h.headerRow + 1, h.headerRow + 31).forEach(function (r) {
+        for (var _c in _cand) {
+          var _v = cellText((r || [])[_c]).trim();
+          if (!_v) continue;
+          _cand[_c].total++;
+          if (/^\d{1,3}$/.test(_v)) _cand[_c].int++;
+          if (/^\d+(\.\d+)?$/.test(_v)) _cand[_c].num++;
+          if (/^[\d.]+\s*[*×xX]\s*[\d.]+\s*[*×xX]\s*[\d.]+$/.test(_v)) _cand[_c].dim++;
+        }
+      });
+      var _dimCol = -1;
+      for (var _c in _cand) if (_cand[_c].dim >= 2 && (_dimCol === -1 || +_c < _dimCol)) _dimCol = +_c;
+      if (_dimCol >= 0) {
+        for (var _c = _dimCol - 1; _c >= 0; _c--) { // 箱号：尺寸列左侧最近的小整数列
+          if (_cand[_c] && _cand[_c].total >= 2 && _cand[_c].int >= _cand[_c].total * 0.6) { cm.boxNo = +_c; break; }
+        }
+        for (var _c = _dimCol - 1; _c >= 0; _c--) { // 重量：尺寸列左侧最近的数值列（排除箱号列）
+          if (_cand[_c] && _cand[_c].total >= 2 && _cand[_c].num >= _cand[_c].total * 0.6 && _c !== cm.boxNo) { cm.gw = +_c; break; }
+        }
+        for (var _c = _dimCol + 1; _c < _maxC; _c++) { // 体积重：尺寸列右侧最近的数值列
+          if (_cand[_c] && _cand[_c].total >= 2 && _cand[_c].num >= _cand[_c].total * 0.6) { cm.volume = +_c; break; }
+        }
+        if (cm.gw !== undefined) cm.boxSpec = _dimCol;
+        _gcFormat = true;
+      }
+    }
     var boxes = [], lastBox = '', lastNo = '';
     var seenBoxKey = {}; // 净重 fallback 用的「箱首行」标记（同箱 boxWeight 只减一次）
     for (var r = h.headerRow + 1; r < rows.length; r++) {
@@ -222,6 +261,12 @@
       boxes.push(b);
     }
     if (!boxes.length) throw new Error('装箱清单中没有有效数据行');
+    // v2026-11-09 简洁格式首箱箱号省略：开头连续空箱号行归属其后第一个非空箱号（仅简洁格式启用，不改变其他格式行为）
+    if (_gcFormat && boxes[0] && !boxes[0].boxNo) {
+      var _fb = '';
+      for (var _i = 0; _i < boxes.length; _i++) { if (boxes[_i].boxNo) { _fb = boxes[_i].boxNo; break; } }
+      if (_fb) { for (var _i = 0; _i < boxes.length; _i++) { if (boxes[_i].boxNo) break; boxes[_i].boxNo = _fb; } }
+    }
     // v1.4.52：混装去重——毛重/体积/体积重是「箱」级属性，按唯一箱号只计一次，避免同箱多SKU重复累加
     var orderNos = {}, boxNos = {}, totalQty = 0, totalNw = 0, totalGw = 0, totalVol = 0, totalVolW = 0;
     var seenBox = {};
