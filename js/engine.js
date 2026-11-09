@@ -460,9 +460,14 @@
         it.qty = Number(b.qty) || 0; it.amount = round(it.qty * it.price, 2);
         // v1.4.58：总箱单个产品数量 = 单箱数量 × 箱数（boxMode 每行 = 1箱×SKU，boxCount=1）
         it.totalBoxQty = round(it.qty * (it.boxCount || 1), 0);
-        // 保持 per-SKU 装箱值（首行有、其余0），供 totals 正确累加总毛重；不为单箱重量列污染
-        it.nw = Number(b.nw) || 0; it.gw = Number(b.gw) || 0; it.boxNw = it.nw;
-        it._weightSource = 'packing';
+        // v1.6.64 箱模式净毛重三层：①行级原值存档 _rowGw/_rowNw（totals 仍按行级累加，防整箱称重被多行重复放大）
+        // ②展示值=箱级归并(spec.gw/nw，每箱首行称重值铺满该箱全部行，与通用申报要素类按行模板口径一致)
+        // ③箱级与行级都无值时回退主数据单件×该行数量（对齐非箱模式既有回退），杜绝净毛重 0
+        it._rowGw = Number(b.gw) || 0; it._rowNw = Number(b.nw) || 0;
+        it.gw = (spec.gw || it._rowGw) || round((d.gw || 0) * it.qty, 3);
+        it.nw = (spec.nw || it._rowNw) || round((d.nw || 0) * it.qty, 3);
+        it.boxNw = it.nw;
+        it._weightSource = (spec.gw || spec.nw || it._rowGw || it._rowNw) ? 'packing' : 'master';
         // v1.4.60：保留排序键（订单号 + 装箱清单原始行序）
         it.orderNo = String(b.orderNo == null ? '' : b.orderNo).trim();
         it._ri = _ri;
@@ -610,7 +615,7 @@
       } else {
         it._weightSource = 'packing';
       }
-      totals.qty += it.qty; totals.amount += it.amount; totals.nw += it.nw; totals.gw += it.gw; totals.volumeWeight += (Number(it.volumeWeight) || 0);
+      totals.qty += it.qty; totals.amount += it.amount; totals.nw += (it._rowNw !== undefined ? it._rowNw : it.nw); totals.gw += (it._rowGw !== undefined ? it._rowGw : it.gw); totals.volumeWeight += (Number(it.volumeWeight) || 0);
     });
     totals.amount = round(totals.amount, 2); totals.nw = round(totals.nw, 3); totals.gw = round(totals.gw, 3); totals.volumeWeight = round(totals.volumeWeight, 3);
     if (packing) {
