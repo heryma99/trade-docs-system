@@ -5665,7 +5665,7 @@
 
 
 
-      var fillRes = engine.fillTemplate(wb, ctx.data, { logo: tpl.logo || null, labelMap: ((tpl.mapping && tpl.mapping.labelMap) || []) });
+      var fillRes = engine.fillTemplate(wb, ctx.data, { logo: tpl.logo || null, labelMap: ((tpl.mapping && tpl.mapping.labelMap) || []), carrier: tpl.carrier || null });
 
 
 
@@ -7172,7 +7172,7 @@
 
 
 
-      var fillRes = engine.fillTemplate(wb, ctx.data, { logo: tpl.logo || null, labelMap: ((tpl.mapping && tpl.mapping.labelMap) || []) });
+      var fillRes = engine.fillTemplate(wb, ctx.data, { logo: tpl.logo || null, labelMap: ((tpl.mapping && tpl.mapping.labelMap) || []), carrier: tpl.carrier || null });
 
 
 
@@ -7473,7 +7473,7 @@
 
 
 
-      engine.fillTemplate(wb, d.data, { logo: tpl.logo || null, labelMap: ((tpl.mapping && tpl.mapping.labelMap) || []) });
+      engine.fillTemplate(wb, d.data, { logo: tpl.logo || null, labelMap: ((tpl.mapping && tpl.mapping.labelMap) || []), carrier: tpl.carrier || null });
 
 
 
