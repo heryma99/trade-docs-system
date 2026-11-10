@@ -886,7 +886,124 @@
     }
   ];
 
-  /** v1.6.20：在前 90 行里找首个命中 anchor 的行号（-1 = 未命中）。 */
+    /** v1.6.68（仅订舱单）：「汇总表单式」模板直写预设（Manor / RXO 类）。
+   *  与 BOOKING_DETAIL_PRESETS（逐 SKU 行展开）互补：此类模板没有可展开的明细行——
+   *  件数/毛重/体积各汇总一格、品名一行（格）一个，坐标固定。
+   *  触发 = 模板 carrier 与 preset.name 一致（复用 v1.6.67 承运商绑定校验，无 carrier 不触发）。
+   *  值语义（cells 值）：
+   *    shipper / consignee        名+址单格多行（合并格场景，\n 分行）
+   *    consignee@lines            收货人从该格起向下逐行（名一行、地址按行分行；只写空白格）
+   *    boxCount                   箱数 + 'ctns' 后缀（0 不写）
+   *    gw / volume                毛重 'kg'（≤2 位小数）/ 体积 'cbm'（≤4 位小数），去尾零
+   *    hsCode / hsCode6           HS 全码 / 前 6 位（空运口径），取品名去重序首个非空
+   *    nameEn@N / nameCn@N        品名去重序列第 N 个（Manor 横排双格）
+   *    nameEn@line / nameCn@line  品名从该格起向下逐行（RXO 纵排）
+   *    crd                        货好日（商单易暂无该字段，留白——见阶段3方案第五节） */
+  var BOOKING_FORM_PRESETS = [
+    { name: 'MANOR', cells: {
+      B7: 'shipper', B18: 'crd', C25: 'boxCount',
+      E23: 'nameCn@1', F23: 'nameCn@2', E24: 'nameEn@1', F24: 'nameEn@2',
+      G24: 'gw', H23: 'volume', E25: 'hsCode', F25: 'hsCode'
+    } },
+    { name: 'RXO', cells: {
+      A10: 'consignee@lines', C33: 'boxCount', D33: 'nameEn@line', D41: 'nameCn@line',
+      F32: 'gw', G32: 'volume', B42: 'hsCode6', C41: 'crd'
+    } }
+  ];
+
+  function _matchBookingFormPreset(ws, carrier) {
+    if (!ws) return null;
+    var _c = String(carrier == null ? '' : carrier).trim().toUpperCase();
+    if (!_c) return null; // 表单直写必须显式绑定承运商，避免任何模板被误命中
+    for (var i = 0; i < BOOKING_FORM_PRESETS.length; i++) {
+      if (String(BOOKING_FORM_PRESETS[i].name || '').trim().toUpperCase() === _c) return BOOKING_FORM_PRESETS[i];
+    }
+    return null;
+  }
+
+  function _formSeq(items, key, fb) {
+    // 取纯净品名：booking 聚合后 nameEn/nameCn 会带 ' '+HS 后缀（v1.6.19 特性），
+    //   原始纯净品名保存在 _name / _nameCn —— 表单直写优先取纯净值。
+    var out = [];
+    (items || []).forEach(function (it) {
+      var v = String((it[key] != null && it[key] !== '') ? it[key] : (it[fb] == null ? '' : it[fb])).trim();
+      if (v && out.indexOf(v) < 0) out.push(v);
+    });
+    return out;
+  }
+  function _formNum(n, maxDec) {
+    n = Number(n) || 0;
+    var s = n.toFixed(maxDec).replace(/\.?0+$/, '');
+    return s === '' ? '0' : s;
+  }
+
+  function _writeBookingFormPreset(ws, preset, data) {
+    if (!ws || !preset || !preset.cells) return;
+    var items = (data && data.items) || [];
+    var totals = (data && data.totals) || {};
+    var nameEnSeq = _formSeq(items, '_name', 'nameEn');
+    var nameCnSeq = _formSeq(items, '_nameCn', 'nameCn');
+    var hsSeq = _formSeq(items, 'hsCode');
+    function valOf(spec) {
+      if (spec === 'shipper') {
+        var sp = data.shipper || {};
+        return [sp.name, sp.address].filter(Boolean).join('\n');
+      }
+      if (spec === 'boxCount') {
+        var bc = Math.round(Number(totals.boxCount) || 0);
+        return bc > 0 ? bc + 'ctns' : '';
+      }
+      if (spec === 'gw') { var g = Number(totals.gw) || 0; return g > 0 ? _formNum(g, 2) + 'kg' : ''; }
+      if (spec === 'volume') { var vv = Number(totals.volume) || 0; return vv > 0 ? _formNum(vv, 4) + 'cbm' : ''; }
+      if (spec === 'hsCode') return hsSeq[0] || '';
+      if (spec === 'hsCode6') { var h = String(hsSeq[0] || ''); return h ? h.slice(0, 6) : ''; }
+      if (spec === 'crd') return String(data.crd || ''); // 商单易暂无 CRD 字段 → ''（留白手填）
+      var mN = spec.match(/^(nameEn|nameCn)@(\d+)$/);
+      if (mN) { var sq = mN[1] === 'nameEn' ? nameEnSeq : nameCnSeq; return sq[Number(mN[2]) - 1] || ''; }
+      var mL = spec.match(/^(nameEn|nameCn)@line$/);
+      if (mL) return { __lines: (mL[1] === 'nameEn' ? nameEnSeq : nameCnSeq) };
+      if (spec === 'consignee@lines') {
+        var cn = data.consignee || {};
+        var rows = [];
+        if (cn.name) rows.push(cn.name);
+        String(cn.address || '').split(/\r?\n/).forEach(function (ln) {
+          ln = ln.trim(); if (ln) rows.push(ln);
+        });
+        return { __lines: rows };
+      }
+      return '';
+    }
+    Object.keys(preset.cells).forEach(function (addr) {
+      var spec = preset.cells[addr];
+      var v = valOf(spec);
+      if (v === '' || v == null) return;
+      var mm = String(addr).match(/^([A-Z]{1,2})(\d+)$/);
+      if (!mm) return;
+      var colL = mm[1], row0 = Number(mm[2]);
+      if (v && v.__lines !== undefined) {
+        // 逐行写入：目标格已有内容（标签/固定文本）则跳过，绝不覆盖
+        var seq2 = v.__lines;
+        for (var ri = 0; ri < seq2.length && ri < 12; ri++) {
+          var cell2 = ws.getCell(colL + (row0 + ri));
+          var cur2 = cell2.value;
+          if (cur2 && cur2.richText) cur2 = cur2.richText.map(function (t) { return t.text; }).join('');
+          if (cur2 !== null && cur2 !== undefined && String(cur2).trim() !== '') continue;
+          cell2.value = seq2[ri];
+        }
+      } else {
+        // v1.6.68 单格模式：preset 坐标映射经人工校准且必须 carrier 精确匹配才触发，
+        //   故值非空时直接覆盖（其他机制可能已写入「品名+HS」等近似值，以 preset 为准）；
+        //   preset 值为空时不写（保留模板原样/其他机制输出）。
+        var cell = ws.getCell(addr);
+        cell.value = v;
+        if (String(v).indexOf('\n') >= 0) {
+          cell.alignment = Object.assign({}, cell.alignment || {}, { wrapText: true });
+        }
+      }
+    });
+  }
+
+/** v1.6.20：在前 90 行里找首个命中 anchor 的行号（-1 = 未命中）。 */
   function _findAnchorRow(ws, re) {
     if (!ws || !re) return -1;
     var maxR = Math.min(ws.rowCount || 0, 90);
@@ -2468,7 +2585,12 @@
     //   （_findBookingDetailBlock），按列头语义定位明细区并反推列映射，不再依赖承运商专属锚点词。
     var _bkPreset = null;
     var _bkBlock = null;
+    var _bkForm = null; // v1.6.68 汇总表单式预设
     if (IS_BOOKING) {
+      _bkForm = _matchBookingFormPreset(ws, options && options.carrier); // v1.6.68 先查表单直写（Manor/RXO 类）
+      if (_bkForm) {
+        itemsRowNum = -1; // 表单式无明细展开区，关闭通用明细机制
+      } else {
       _bkPreset = _matchBookingDetailPreset(ws, options && options.carrier); // v1.6.67 绑定承运商
       if (_bkPreset) {
         itemsRowNum = -1;
@@ -2478,6 +2600,7 @@
         //   否则通用机制会按 itemsRowNum 逐行铺 items（ANHAI 会写 R25+R26 两行、Aramex 会写 R21+R22），
         //   与单值口径冲突并产生 "undefined"。
         if (_bkBlock) itemsRowNum = -1;
+      }
       }
     }
 
@@ -2759,6 +2882,11 @@
           }
         });
       }
+    }
+    // v1.6.68（仅订舱单）：汇总表单式预设直写（Manor/RXO 类）——放在所有其他填充之后，
+    //   坐标级精确值最终落位；目标格非空则跳过（绝不覆盖模板标签/固定文本）。
+    if (IS_BOOKING && _bkForm) {
+      _writeBookingFormPreset(ws, _bkForm, data);
     }
     // ⑥ 把源模板 logo 贴回输出 workbook（预览与导出都能显示）
     addLogo(wb, ws, options.logo);
