@@ -908,6 +908,14 @@
     { name: 'RXO', cells: {
       A10: 'consignee@lines', C33: 'boxCount', D33: 'nameEn@line', D41: 'nameCn@line',
       F32: 'gw', G32: 'volume', B42: 'hsCode6', C41: 'crd'
+    } },
+    { name: 'HARVEST', cells: {
+      A30: 'orderNos@line', C30: 'boxCount', D30: 'gw', F30: 'nameDesc@line'
+    } },
+    { name: 'UNITEX', cells: {
+      A14: 'consignee', B31: 'crd', B39: 'incoterms', A39: 'orderNos@line',
+      C38: 'nameCn@line', D38: 'nameEn@line', E38: 'hsCode@line',
+      F38: 'boxCount', G38: 'gwNum'
     } }
   ];
 
@@ -949,6 +957,10 @@
         var sp = data.shipper || {};
         return [sp.name, sp.address].filter(Boolean).join('\n');
       }
+      if (spec === 'consignee') {
+        var cn1 = data.consignee || {};
+        return [cn1.name, cn1.address].filter(Boolean).join('\n');
+      }
       if (spec === 'boxCount') {
         var bc = Math.round(Number(totals.boxCount) || 0);
         return bc > 0 ? bc + 'ctns' : '';
@@ -958,6 +970,40 @@
       if (spec === 'hsCode') return hsSeq[0] || '';
       if (spec === 'hsCode6') { var h = String(hsSeq[0] || ''); return h ? h.slice(0, 6) : ''; }
       if (spec === 'crd') return String(data.crd || ''); // 商单易暂无 CRD 字段 → ''（留白手填）
+      if (spec === 'gwNum') { var g2 = Number(totals.gw) || 0; return g2 > 0 ? _formNum(g2, 2) : ''; }
+      if (spec === 'incoterms') return String(data.incoterms || '');
+      if (spec === 'orderNos@line') {
+        var ons = String(data.orderNos || '').split(/,\s*/).filter(Boolean);
+        return { __lines: ons };
+      }
+      if (spec === 'nameDesc@line') {
+        // 纯净品名 + 空格 + HS（Harvest 等模板的「品名 HS」同格习惯），按 items 顺序配对去重
+        var pairs = [];
+        (items || []).forEach(function (it) {
+          var nm = String((it._name != null && it._name !== '') ? it._name : (it.nameEn || '')).trim();
+          var hs = String(it.hsCode || '').trim();
+          var v2 = nm + (hs ? (' ' + hs) : '');
+          if (v2.trim() && pairs.indexOf(v2) < 0) pairs.push(v2);
+        });
+        return { __lines: pairs };
+      }
+      if (spec === 'hsCode@line') {
+        // 不去重：与品名行一一对齐（items 已按 name+hs 聚合，行数天然一致）
+        return { __lines: (items || []).map(function (it) { return String(it.hsCode || '').trim(); }).filter(Boolean) };
+      }
+      var mIt = spec.match(/^item:([A-Za-z]+)@line$/);
+      if (mIt) {
+        // items 聚合行字段逐行（boxCount 整数 / gw·volume 数字格式化 / 其余原样）
+        var f2 = mIt[1];
+        var ls2 = (items || []).map(function (it) {
+          var x = it[f2];
+          if (x === undefined || x === null || x === '') return '';
+          if (f2 === 'boxCount') return String(Math.round(Number(x) || 0)) || '';
+          if (f2 === 'gw' || f2 === 'nw' || f2 === 'volume' || f2 === 'amount') return _formNum(Number(x) || 0, 4);
+          return String(x);
+        }).filter(Boolean);
+        return { __lines: ls2 };
+      }
       var mN = spec.match(/^(nameEn|nameCn)@(\d+)$/);
       if (mN) { var sq = mN[1] === 'nameEn' ? nameEnSeq : nameCnSeq; return sq[Number(mN[2]) - 1] || ''; }
       var mL = spec.match(/^(nameEn|nameCn)@line$/);
