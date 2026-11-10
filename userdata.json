@@ -1972,6 +1972,91 @@
           "labelMap": []
         },
         "createdAt": 1794310753409
+      },
+      {
+        "id": "tpl_booking_rsdair",
+        "name": "RSD-订舱单",
+        "kind": "booking",
+        "carrier": "RSD",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1794311334424,
+        "filePath": "templates/tpl_booking_rsdair.xlsx",
+        "fileSize": 475604,
+        "fileName": "Booking-RSD空运NEW-RSD.xlsx",
+        "mapping": {
+          "required": [],
+          "labelMap": []
+        },
+        "createdAt": 1794311334424
+      },
+      {
+        "id": "tpl_booking_kedilcl",
+        "name": "凯迪海运-订舱单",
+        "kind": "booking",
+        "carrier": "KEDI",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1794311334424,
+        "filePath": "templates/tpl_booking_kedilcl.xlsx",
+        "fileSize": 483393,
+        "fileName": "LCL Booking Form-KEDI.xlsx",
+        "mapping": {
+          "required": [],
+          "labelMap": []
+        },
+        "createdAt": 1794311334424
+      },
+      {
+        "id": "tpl_booking_charterlink",
+        "name": "嘉林国际-订舱单",
+        "kind": "booking",
+        "carrier": "CHARTERLINK",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1794311334424,
+        "filePath": "templates/tpl_booking_charterlink.xlsx",
+        "fileSize": 18290,
+        "fileName": "booking form-CharterLink.xlsx",
+        "mapping": {
+          "required": [],
+          "labelMap": []
+        },
+        "createdAt": 1794311334424
+      },
+      {
+        "id": "tpl_booking_ventana",
+        "name": "Ventana-订舱单",
+        "kind": "booking",
+        "carrier": "VENTANA",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1794311334424,
+        "filePath": "templates/tpl_booking_ventana.xlsx",
+        "fileSize": 352638,
+        "fileName": "Ventana BOOKING SEA-Ventana.xlsx",
+        "mapping": {
+          "required": [],
+          "labelMap": []
+        },
+        "createdAt": 1794311334424
+      },
+      {
+        "id": "tpl_booking_rainbow",
+        "name": "彩虹-订舱单",
+        "kind": "booking",
+        "carrier": "RAINBOW",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1794311334424,
+        "filePath": "templates/tpl_booking_rainbow.xlsx",
+        "fileSize": 37594,
+        "fileName": "彩虹托书模板2026-RAINBOW.xlsx",
+        "mapping": {
+          "required": [],
+          "labelMap": []
+        },
+        "createdAt": 1794311334424
       }
     ]
   },
