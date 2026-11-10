@@ -1938,6 +1938,40 @@
           "labelMap": []
         },
         "createdAt": 1794309183943
+      },
+      {
+        "id": "tpl_booking_harvestair",
+        "name": "Harvest-订舱单",
+        "kind": "booking",
+        "carrier": "HARVEST",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1794310753409,
+        "filePath": "templates/tpl_booking_harvestair.xlsx",
+        "fileSize": 23485,
+        "fileName": "Harvest AIR BOOKING-Harvest.xlsx",
+        "mapping": {
+          "required": [],
+          "labelMap": []
+        },
+        "createdAt": 1794310753409
+      },
+      {
+        "id": "tpl_booking_unitexair",
+        "name": "Unitex-订舱单",
+        "kind": "booking",
+        "carrier": "UNITEX",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1794310753409,
+        "filePath": "templates/tpl_booking_unitexair.xlsx",
+        "fileSize": 34152,
+        "fileName": "AIR booking form-Unitex.xlsx",
+        "mapping": {
+          "required": [],
+          "labelMap": []
+        },
+        "createdAt": 1794310753409
       }
     ]
   },
