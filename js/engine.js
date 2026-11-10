@@ -916,6 +916,25 @@
       A14: 'consignee', B31: 'crd', B39: 'incoterms', A39: 'orderNos@line',
       C38: 'nameCn@line', D38: 'nameEn@line', E38: 'hsCode@line',
       F38: 'boxCount', G38: 'gwNum'
+    } },
+    { name: 'RSD', cells: {
+      A9: 'consignee', D27: 'nameDesc', H27: 'gwNum'
+    } },
+    { name: 'KEDI', cells: {
+      A22: 'pol', D22: 'pod', A26: 'orderNos@line:SO： ', C26: 'boxCount',
+      D26: 'nameEn@join:/', D27: 'hs@join:/', I26: 'gwNum', K27: 'volumeNum', E31: 'incoterms'
+    } },
+    { name: 'CHARTERLINK', cells: {
+      A12: 'consignee', B30: 'boxCount', F31: 'gwNum', H30: 'volumeNum',
+      C32: 'nameCn@line', D32: 'nameEn@line', E32: 'hsCode@line'
+    } },
+    { name: 'VENTANA', cells: {
+      A8: 'consignee@lines', E32: 'nameDesc', I32: 'gwNum', J32: 'volumeNum',
+      D37: 'boxCount', F46: 'incoterms'
+    } },
+    { name: 'RAINBOW', cells: {
+      A29: 'orderNos@cell:SO:', C29: 'boxCount', E29: 'nameCn@join:、',
+      J29: 'gwNum', M29: 'volumeNum', L12: 'crd'
     } }
   ];
 
@@ -976,6 +995,36 @@
         var ons = String(data.orderNos || '').split(/,\s*/).filter(Boolean);
         return { __lines: ons };
       }
+      // v1.6.70 扩充：orderNos@cell:PREFIX（单格多行，可选前缀）/ orderNos@line:PREFIX（逐行带前缀）
+      var mOrd = spec.match(/^orderNos@(cell|line)(?::(.+))?$/);
+      if (mOrd) {
+        var ons0 = String(data.orderNos || '').split(/,\s*/).filter(Boolean);
+        var pre0 = mOrd[2] || '';
+        var withPre = ons0.map(function (n) { return pre0 + n; });
+        return (mOrd[1] === 'line') ? { __lines: withPre } : withPre.join('\n');
+      }
+      if (spec === 'nameDesc') {
+        // 品名+HS 单格多行（RSD D27 / Ventana E32 形态）
+        var pd = [];
+        (items || []).forEach(function (it) {
+          var nm = String((it._name != null && it._name !== '') ? it._name : (it.nameEn || '')).trim();
+          var hs = String(it.hsCode || '').trim();
+          var v3 = nm + (hs ? (' ' + hs) : '');
+          if (v3.trim() && pd.indexOf(v3) < 0) pd.push(v3);
+        });
+        return pd.join('\n');
+      }
+      // nameEn/nameCn/hs @join:SEP —— 单格连接（凯迪 D26 斜杠品名 / D27 HS 列表 / 彩虹 E29 顿号中文品名）
+      var mJ = spec.match(/^(nameEn|nameCn|hs)@join:(.+)$/);
+      if (mJ) {
+        // hs 与品名行一一对齐（不去重，items 已按 name+hs 聚合）
+        var sq2 = (mJ[1] === 'nameEn') ? nameEnSeq : (mJ[1] === 'nameCn' ? nameCnSeq
+          : (items || []).map(function (it) { return String(it.hsCode || '').trim(); }).filter(Boolean));
+        return sq2.join(mJ[2]);
+      }
+      if (spec === 'volumeNum') { var vv2 = Number(totals.volume) || 0; return vv2 > 0 ? _formNum(vv2, 4) : ''; }
+      if (spec === 'pol') return String(data.pol || '');
+      if (spec === 'pod') return String(data.pod || '');
       if (spec === 'nameDesc@line') {
         // 纯净品名 + 空格 + HS（Harvest 等模板的「品名 HS」同格习惯），按 items 顺序配对去重
         var pairs = [];
