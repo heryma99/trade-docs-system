@@ -901,10 +901,16 @@
   }
 
   /** v1.6.20（仅订舱单）：命中哪一条承运商明细区预设（未命中返回 null）。 */
-  function _matchBookingDetailPreset(ws) {
+  function _matchBookingDetailPreset(ws, carrier) {
     if (!ws) return null;
+    // v1.6.67（P0 修复）：模板绑定了承运商（tpl.carrier 非空）时，预设必须与承运商一致才套用，
+    //   防止其他物流商模板因锚点词巧合被误命中（实证：COH 订舱单含 "No. of Pkg" 误走 CHR 直写）。
+    //   不匹配 → 返回 null，走通用结构识别（v1.6.21）。carrier 为空 = 旧行为（仅按锚点匹配）。
+    var _c = String(carrier == null ? '' : carrier).trim().toUpperCase();
     for (var i = 0; i < BOOKING_DETAIL_PRESETS.length; i++) {
-      if (_findAnchorRow(ws, BOOKING_DETAIL_PRESETS[i].anchor) > 0) return BOOKING_DETAIL_PRESETS[i];
+      var _p = BOOKING_DETAIL_PRESETS[i];
+      if (_c && String(_p.name || '').trim().toUpperCase() !== _c) continue;
+      if (_findAnchorRow(ws, _p.anchor) > 0) return _p;
     }
     return null;
   }
@@ -2463,7 +2469,7 @@
     var _bkPreset = null;
     var _bkBlock = null;
     if (IS_BOOKING) {
-      _bkPreset = _matchBookingDetailPreset(ws);
+      _bkPreset = _matchBookingDetailPreset(ws, options && options.carrier); // v1.6.67 绑定承运商
       if (_bkPreset) {
         itemsRowNum = -1;
       } else {
