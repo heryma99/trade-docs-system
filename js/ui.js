@@ -6846,13 +6846,29 @@
 
 
 
-        '<div><label>备注</label><input id="bw-remark" value="' + esc(m.remark || '') + '"></div></div>' +
+        '<div><label>备注</label><input id="bw-remark" value="' + esc(m.remark || '') + '"></div>' +
+
+
+        '<div id="bw-extra" style="margin-top:14px"></div></div>' +
 
 
 
         '<div style="margin-top:14px;display:flex;gap:8px"><button class="btn ghost" id="bw-back2">← 上一步</button><button class="btn" id="bw-next2">下一步：校验 →</button></div></div>';
 
 
+
+      // v1.6.75 模板驱动动态字段：按所选模板 preset 声明渲染特有字段
+      var _bkTplC = '';
+      try {
+        var _bkT = (_allBkTpls || []).filter(function (t) { return t.id === w.templateId; })[0];
+        _bkTplC = (_bkT && _bkT.carrier) || '';
+      } catch (e) {}
+      var _bkExtras = (window.TD && window.TD.engine && window.TD.engine.bookingExtras) ? window.TD.engine.bookingExtras(_bkTplC) : [];
+      var _exHtml = '';
+      _bkExtras.forEach(function (f) {
+        _exHtml += '<div><label>' + esc(f.label) + '</label><input type="' + esc(f.type || 'text') + '" id="bw-x-' + esc(f.key) + '" value="' + esc(m[f.key] || '') + '"></div>';
+      });
+      document.getElementById('bw-extra').innerHTML = _exHtml ? '<div style="font-size:12px;color:#1f4e79;margin:2px 0 8px">本模板特有字段</div><div class="form-grid">' + _exHtml + '</div>' : '';
 
       document.getElementById('bw-back2').onclick = function () { w.step = 1; render(); };
 
