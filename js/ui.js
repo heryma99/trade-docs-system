@@ -7228,7 +7228,7 @@
 
 
 
-      var audit = (window.TD && window.TD.audit) ? window.TD.audit.auditFilled(wb, tplWb, ctx.data, { kind: 'booking', labelMap: ((tpl.mapping && tpl.mapping.labelMap) || []) }) : { ok: true, blocks: [], warns: [], info: [] };
+      var audit = (window.TD && window.TD.audit) ? window.TD.audit.auditFilled(wb, tplWb, ctx.data, { kind: 'booking', labelMap: ((tpl.mapping && tpl.mapping.labelMap) || []), carrier: ((tpl && tpl.carrier) || '') }) : { ok: true, blocks: [], warns: [], info: [] };
 
 
 
