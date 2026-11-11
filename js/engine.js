@@ -712,6 +712,9 @@
       flight: meta.flight || '',
       pickup: meta.pickup || '',
       cutoff: meta.cutoff || '',
+      soNo: meta.soNo || '',
+      placeOfReceipt: meta.placeOfReceipt || '',
+      finalDest: meta.finalDest || '',
       refId: refId,
       shipper: shipper, consignee: consignee, notify: notify,
       incoterms: meta.incoterms || '',
@@ -993,6 +996,14 @@
       A14: 'orderNos@cell:SO:', E15: 'boxCountNum',
       G14: 'nameCn@join: ', G15: 'nameEn@join: ', G16: 'hs@join: ',
       H14: 'gwNum', N15: 'volumeNum'
+    } },
+    // v1.6.83：存量校准 O1——KLN 与 KEAS 原版（Booking_SI_VGM Form）逐格差分 0 漂移（差分清单 2026-11-11），
+    //   补 9 格字段入口；坐标均为合并区主格，静态勾选区（FCL/LCL、提单方式、币种、发票类型）一律不写。
+    //   keepDetail:true —— 表头区走表单直写、明细区继续走 KLN 明细预设逐行展开（两者共存）。
+    { name: 'KLN', mode: 'sea', keepDetail: true, extraFields: [{ key: 'soNo', label: 'S/O 号（选填）', type: 'text' }, { key: 'crd', label: '货好日期 CRD', type: 'date' }, { key: 'placeOfReceipt', label: '收货地点', type: 'text' }, { key: 'finalDest', label: '最终目的地（选填）', type: 'text' }], cells: {
+      K2: 'soNo', K4: 'crd', H17: 'incoterms', A23: 'vessel',
+      A26: 'placeOfReceipt', E26: 'pol', A29: 'pod', E29: 'finalDest',
+      A36: 'marks'
     } }
   ];
 
@@ -1107,6 +1118,10 @@
       if (spec === 'cutoff') return String(data.cutoff || '');
       if (spec === 'etd') return String(data.etd || '');
       if (spec === 'vessel') return String(data.vessel || '');
+      // v1.6.83：存量校准 O1 新增值语义（KLN 预设：S/O 号 / 收货地点 / 最终目的地）
+      if (spec === 'soNo') return String(data.soNo || '');
+      if (spec === 'placeOfReceipt') return String(data.placeOfReceipt || '');
+      if (spec === 'finalDest') return String(data.finalDest || '');
       var mEt = spec.match(/^etd@inline:(.+)$/);
       if (mEt) { var et2 = String(data.etd || ''); return mEt[1] + et2; }
       if (spec === 'notify') { var ny0 = data.notify || {}; return [ny0.name, ny0.address].filter(Boolean).join(String.fromCharCode(10)); }
@@ -2792,7 +2807,12 @@
     if (IS_BOOKING) {
       _bkForm = _matchBookingFormPreset(ws, options && options.carrier); // v1.6.68 先查表单直写（Manor/RXO 类）
       if (_bkForm) {
-        itemsRowNum = -1; // 表单式无明细展开区，关闭通用明细机制
+        // v1.6.83：keepDetail —— 表单直写与承运商明细直写共存（KLN：表头区 9 格表单直写 + 明细区仍逐行展开）；
+        //   未声明 keepDetail 的表单式模板（Manor/RXO 等）行为完全不变。
+        if (_bkForm.keepDetail) {
+          _bkPreset = _matchBookingDetailPreset(ws, options && options.carrier);
+        }
+        itemsRowNum = -1; // 表单式无通用明细展开区，关闭通用明细机制
       } else {
       _bkPreset = _matchBookingDetailPreset(ws, options && options.carrier); // v1.6.67 绑定承运商
       if (_bkPreset) {
