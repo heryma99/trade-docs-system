@@ -950,6 +950,7 @@
     } },
     { name: 'OVD', cells: {
       B9: 'consignee', B24: 'orderNos@cell:SO：', E25: 'nameEn@join:、',
+      C35: 'nameCn@join:、', C37: 'hs@join:、',
       J26: 'boxCountNum', J28: 'gwNum', J30: 'volumeNum'
     } },
     { name: 'FORTUNES', cells: {
