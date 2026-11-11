@@ -6864,14 +6864,28 @@
         _bkTplC = (_bkT && _bkT.carrier) || '';
       } catch (e) {}
       var _bkExtras = (window.TD && window.TD.engine && window.TD.engine.bookingExtras) ? window.TD.engine.bookingExtras(_bkTplC) : [];
+      var _bkMode = (window.TD && window.TD.engine && window.TD.engine.bookingMode) ? window.TD.engine.bookingMode(_bkTplC) : '';
       var _bkTplName = '';
       try { var _bkT2 = (_allBkTpls || []).filter(function (t) { return t.id === w.templateId; })[0]; _bkTplName = (_bkT2 && _bkT2.name) || ''; } catch (e) {}
-      console.log('[bw] template=', _bkTplName, '| carrier=', _bkTplC, '| extraFields=', _bkExtras.length); // v1.6.76 诊断
+      console.log('[bw] template=', _bkTplName, '| carrier=', _bkTplC, '| mode=', _bkMode, '| extraFields=', _bkExtras.length); // v1.6.78 诊断
+      // v1.6.78 海/空运表单区分：空运隐藏柜型/柜量/船名航次，改 ETD/目的港标签
+      if (_bkMode === 'air') {
+        ['bw-vessel', 'bw-ctype', 'bw-cqty'].forEach(function (_id) {
+          var _el = document.getElementById(_id);
+          if (_el && _el.parentNode) _el.parentNode.style.display = 'none';
+        });
+        var _etdL = document.querySelector('label[for="bw-etd"], #bw-etd');
+        var _etdEl = document.getElementById('bw-etd');
+        if (_etdEl && _etdEl.parentNode && _etdEl.parentNode.querySelector('label')) _etdEl.parentNode.querySelector('label').textContent = 'ETD 起飞日期';
+        var _podEl = document.getElementById('bw-pod');
+        if (_podEl && _podEl.parentNode && _podEl.parentNode.querySelector('label')) _podEl.parentNode.querySelector('label').textContent = '目的港/机场 POD';
+      }
       var _exHtml = '';
       _bkExtras.forEach(function (f) {
         _exHtml += '<div><label>' + esc(f.label) + '</label><input type="' + esc(f.type || 'text') + '" id="bw-x-' + esc(f.key) + '" value="' + esc(m[f.key] || '') + '"></div>';
       });
-      var _exHead = '<div style="font-size:12.5px;color:#1f4e79;margin:10px 0 8px;padding:6px 10px;background:#eef5ff;border-left:3px solid #1f4e79">当前模板：<b>' + esc(_bkTplName || '(未选)') + '</b>（' + esc(_bkTplC || '无承运商标识') + '）</div>';
+      var _modeTxt = _bkMode === 'air' ? '【空运】' : (_bkMode === 'sea' ? '【海运】' : '');
+      var _exHead = '<div style="font-size:12.5px;color:#1f4e79;margin:10px 0 8px;padding:6px 10px;background:#eef5ff;border-left:3px solid #1f4e79">当前模板：<b>' + esc(_bkTplName || '(未选)') + '</b>（' + esc(_bkTplC || '无承运商标识') + '）' + _modeTxt + '</div>';
       var _exBody = _exHtml ? '<div class="form-grid">' + _exHtml + '</div>'
         : '<div style="font-size:12px;color:#888;margin:4px 0">该模板无特有字段——件数/毛重/体积/品名/SO号等已由订单与装箱清单自动写入，无需手工填写。</div>';
       document.getElementById('bw-extra').innerHTML = _exHead + _exBody;
@@ -6910,7 +6924,7 @@
 
 
 
-          customsType: val('bw-customs'), remark: val('bw-remark'), crd: (document.getElementById('bw-x-crd') || {}).value || ''
+          customsType: val('bw-customs'), remark: val('bw-remark'), crd: (document.getElementById('bw-x-crd') || {}).value || '', flight: (document.getElementById('bw-x-flight') || {}).value || ''
 
 
 
