@@ -2031,9 +2031,9 @@
         "carrier": "VENTANA",
         "status": "active",
         "isSeed": false,
-        "updatedAt": 1794311334424,
+        "updatedAt": 1794392708007,
         "filePath": "templates/tpl_booking_ventana.xlsx",
-        "fileSize": 352638,
+        "fileSize": 352587,
         "fileName": "Ventana BOOKING SEA-Ventana.xlsx",
         "mapping": {
           "required": [],
@@ -2048,9 +2048,9 @@
         "carrier": "RAINBOW",
         "status": "active",
         "isSeed": false,
-        "updatedAt": 1794375833005,
+        "updatedAt": 1794392708007,
         "filePath": "templates/tpl_booking_rainbow.xlsx",
-        "fileSize": 37592,
+        "fileSize": 37582,
         "fileName": "彩虹托书模板2026-RAINBOW.xlsx",
         "mapping": {
           "required": [],
