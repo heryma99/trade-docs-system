@@ -708,6 +708,7 @@
       invoiceDate: meta.invoiceDate || new Date().toISOString().slice(0, 10),
       contractNo: meta.contractNo || '',
       orderNos: orderList.join(', '),
+      crd: meta.crd || '',
       refId: refId,
       shipper: shipper, consignee: consignee, notify: notify,
       incoterms: meta.incoterms || '',
@@ -900,12 +901,12 @@
    *    nameEn@line / nameCn@line  品名从该格起向下逐行（RXO 纵排）
    *    crd                        货好日（商单易暂无该字段，留白——见阶段3方案第五节） */
   var BOOKING_FORM_PRESETS = [
-    { name: 'MANOR', cells: {
+    { name: 'MANOR', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
       B7: 'shipper', B18: 'crd', C25: 'boxCount',
       E23: 'nameCn@1', F23: 'nameCn@2', E24: 'nameEn@1', F24: 'nameEn@2',
       G24: 'gw', H23: 'volume', E25: 'hsCode', F25: 'hsCode'
     } },
-    { name: 'RXO', cells: {
+    { name: 'RXO', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
       A3: 'shipper', A10: 'consignee@lines', C33: 'boxCount', D33: 'nameEn@line', D41: 'nameCn@line',
       F32: 'gw', G32: 'volume', B42: 'hsCode6', C41: 'crd'
     } },
@@ -913,7 +914,7 @@
       A2: 'shipper@lines', A4: 'shipperTel', A10: 'consignee@lines',
       A30: 'orderNos@line:SO:', C30: 'boxCount', D30: 'gw', F30: 'nameDesc@line'
     } },
-    { name: 'UNITEX', cells: {
+    { name: 'UNITEX', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
       A3: 'shipperName', A14: 'consignee', B31: 'crd', B39: 'incoterms', A39: 'orderNos@line',
       C38: 'nameCn@line', D38: 'nameEn@line', E38: 'hsCode@line',
       F38: 'boxCount', G38: 'gwNum'
@@ -934,7 +935,7 @@
       A8: 'consignee@lines', E32: 'nameDesc', I32: 'gwNum', J32: 'volumeNum',
       D37: 'boxCount', F46: 'incoterms'
     } },
-    { name: 'RAINBOW', cells: {
+    { name: 'RAINBOW', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
       A3: 'shipper', A8: 'consignee',
       A29: 'orderNos@cell:SO:', C29: 'boxCount', E29: 'nameCn@join:、',
       J29: 'gwNum', M29: 'volumeNum', L12: 'crd'
@@ -3672,6 +3673,14 @@
     verifyLogoPreserved: verifyLogoPreserved,
     makeBuiltinInvoiceTemplate: makeBuiltinInvoiceTemplate,
     makeBuiltinBookingTemplate: makeBuiltinBookingTemplate,
+    bookingExtras: function (carrier) {
+      var _c = String(carrier == null ? '' : carrier).trim().toUpperCase();
+      if (!_c) return [];
+      for (var i = 0; i < BOOKING_FORM_PRESETS.length; i++) {
+        if (String(BOOKING_FORM_PRESETS[i].name || '').trim().toUpperCase() === _c) return BOOKING_FORM_PRESETS[i].extraFields || [];
+      }
+      return [];
+    },
     REQUIRED_FIELDS: REQUIRED_FIELDS
   };
 });
