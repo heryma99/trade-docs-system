@@ -910,7 +910,8 @@
       F32: 'gw', G32: 'volume', B42: 'hsCode6', C41: 'crd'
     } },
     { name: 'HARVEST', cells: {
-      A30: 'orderNos@line', C30: 'boxCount', D30: 'gw', F30: 'nameDesc@line'
+      A10: 'consignee@lines',
+      A30: 'orderNos@line:SO:', C30: 'boxCount', D30: 'gw', F30: 'nameDesc@line'
     } },
     { name: 'UNITEX', cells: {
       A14: 'consignee', B31: 'crd', B39: 'incoterms', A39: 'orderNos@line',
@@ -921,6 +922,7 @@
       A9: 'consignee', D27: 'nameDesc', H27: 'gwNum'
     } },
     { name: 'KEDI', cells: {
+      A10: 'consignee@lines',
       A22: 'pol', D22: 'pod', A26: 'orderNos@line:SO： ', C26: 'boxCount',
       D26: 'nameEn@join:/', D27: 'hs@join:/', I26: 'gwNum', K27: 'volumeNum', E31: 'incoterms'
     } },
@@ -933,10 +935,12 @@
       D37: 'boxCount', F46: 'incoterms'
     } },
     { name: 'RAINBOW', cells: {
+      A8: 'consignee',
       A29: 'orderNos@cell:SO:', C29: 'boxCount', E29: 'nameCn@join:、',
       J29: 'gwNum', M29: 'volumeNum', L12: 'crd'
     } },
     { name: 'SFE', cells: {
+      A12: 'consignee@lines',
       B36: 'orderNos@line:SO:', D36: 'boxCount',
       H36: 'nameCn@line', I36: 'nameEn@line', J36: 'hsCode@line',
       M36: 'gwNum', O36: 'volumeNum'
@@ -953,17 +957,21 @@
       C20: 'boxCount', E20: 'nameBi', G20: 'gwNum', I20: 'volumeNum'
     } },
     { name: 'CEVA', cells: {
+      A6: 'shipper', A14: 'consignee',
       A40: 'orderNos@line', E40: 'boxCountNum', H40: 'nameDesc',
       N40: 'gwNum', Q40: 'volumeNum'
     } },
     { name: 'COH', cells: {
+      C30: 'consigneeName', C31: 'consigneeAddr',
       D59: 'boxCountNum', F59: 'nameBi@line', J59: 'hsCode@line',
       K60: 'gwNum', N60: 'volumeNum'
     } },
     { name: 'WELLFAST', cells: {
+      C17: 'consignee', C32: 'pol', C35: 'pod',
       K42: 'boxCountNum', W42: 'nameBi'
     } },
     { name: 'SINOTEK', cells: {
+      A8: 'consignee',
       A14: 'orderNos@cell:SO:', E15: 'boxCountNum',
       G14: 'nameCn@join: ', G15: 'nameEn@join: ', G16: 'hs@join: ',
       H14: 'gwNum', N15: 'volumeNum'
@@ -1071,6 +1079,8 @@
       if (spec === 'nameBi@line') return { __lines: _biPairs() };
       if (spec === 'pol') return String(data.pol || '');
       if (spec === 'pod') return String(data.pod || '');
+      if (spec === 'consigneeName') { var cn2 = data.consignee || {}; return String(cn2.name || ''); }
+      if (spec === 'consigneeAddr') { var cn3 = data.consignee || {}; return String(cn3.address || ''); }
       if (spec === 'nameDesc@line') {
         // 纯净品名 + 空格 + HS（Harvest 等模板的「品名 HS」同格习惯），按 items 顺序配对去重
         var pairs = [];
