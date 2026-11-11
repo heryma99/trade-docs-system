@@ -2057,6 +2057,142 @@
           "labelMap": []
         },
         "createdAt": 1794311334424
+      },
+      {
+        "id": "tpl_booking_sfesea",
+        "name": "SFE-订舱单",
+        "kind": "booking",
+        "carrier": "SFE",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1794399900000,
+        "filePath": "templates/tpl_booking_sfesea.xlsx",
+        "fileSize": 115489,
+        "fileName": "Shipping Order-SFE.xlsx",
+        "mapping": {
+          "required": [],
+          "labelMap": []
+        },
+        "createdAt": 1794399900000
+      },
+      {
+        "id": "tpl_booking_asoscfs",
+        "name": "ASOS-订舱单",
+        "kind": "booking",
+        "carrier": "ASOS",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1794399900000,
+        "filePath": "templates/tpl_booking_asoscfs.xlsx",
+        "fileSize": 22070,
+        "fileName": "ASOS order form-ASOS.xlsx",
+        "mapping": {
+          "required": [],
+          "labelMap": []
+        },
+        "createdAt": 1794399900000
+      },
+      {
+        "id": "tpl_booking_ovdair",
+        "name": "OVD欧沃迪-订舱单",
+        "kind": "booking",
+        "carrier": "OVD",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1794399900000,
+        "filePath": "templates/tpl_booking_ovdair.xlsx",
+        "fileSize": 34249,
+        "fileName": "OVD AIR CARGO-OVD.xlsx",
+        "mapping": {
+          "required": [],
+          "labelMap": []
+        },
+        "createdAt": 1794399900000
+      },
+      {
+        "id": "tpl_booking_fortunes",
+        "name": "富通胜-订舱单",
+        "kind": "booking",
+        "carrier": "FORTUNES",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1794399900000,
+        "filePath": "templates/tpl_booking_fortunes.xlsx",
+        "fileSize": 61909,
+        "fileName": "BOOKING 托书模板-FORTUNES.xlsx",
+        "mapping": {
+          "required": [],
+          "labelMap": []
+        },
+        "createdAt": 1794399900000
+      },
+      {
+        "id": "tpl_booking_ceva",
+        "name": "CEVA-订舱单",
+        "kind": "booking",
+        "carrier": "CEVA",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1794399900000,
+        "filePath": "templates/tpl_booking_ceva.xlsx",
+        "fileSize": 139625,
+        "fileName": "CEVA BOOKING FORM-CEVA.xlsx",
+        "mapping": {
+          "required": [],
+          "labelMap": []
+        },
+        "createdAt": 1794399900000
+      },
+      {
+        "id": "tpl_booking_coh",
+        "name": "COH-订舱单",
+        "kind": "booking",
+        "carrier": "COH",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1794399900000,
+        "filePath": "templates/tpl_booking_coh.xlsx",
+        "fileSize": 63437,
+        "fileName": "COH_SE_BOOKING-COH.xlsx",
+        "mapping": {
+          "required": [],
+          "labelMap": []
+        },
+        "createdAt": 1794399900000
+      },
+      {
+        "id": "tpl_booking_wellfast",
+        "name": "WELLFAST-订舱单",
+        "kind": "booking",
+        "carrier": "WELLFAST",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1794399900000,
+        "filePath": "templates/tpl_booking_wellfast.xlsx",
+        "fileSize": 116219,
+        "fileName": "WELLFAST 托书-WELLFAST.xlsx",
+        "mapping": {
+          "required": [],
+          "labelMap": []
+        },
+        "createdAt": 1794399900000
+      },
+      {
+        "id": "tpl_booking_sinotek",
+        "name": "思诺空运-订舱单",
+        "kind": "booking",
+        "carrier": "SINOTEK",
+        "status": "active",
+        "isSeed": false,
+        "updatedAt": 1794399900000,
+        "filePath": "templates/tpl_booking_sinotek.xlsx",
+        "fileSize": 33615,
+        "fileName": "工厂订舱托书-思诺-SINOTEK.xlsx",
+        "mapping": {
+          "required": [],
+          "labelMap": []
+        },
+        "createdAt": 1794399900000
       }
     ]
   },
