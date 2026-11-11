@@ -143,12 +143,27 @@
       //   A：上行区(r<detailStart)的保护区文字（长 CJK 装饰/警告，且非占位符）被改写 → 抓 v1.4.63/1.4.65
       //   D：明细表头行(r==itemsRow)的非占位符/非标签目标单元格被改写 → 抓 v1.4.58 表头被覆盖
       // 其余上行区变更（引擎合法填样本/标签格）不阻断，避免误报。
+      // v1.6.80：订舱单「表单直写预设」授权格（carrier 绑定 + 人工校准坐标）→ 受控写入，跳过 A/D 判定
+      var _formCellSet = {};
+      try {
+        var _fc = (opts.carrier && engine && engine.bookingFormCells) ? engine.bookingFormCells(opts.carrier) : [];
+        _fc.forEach(function (a) {
+          var m = /^([A-Z]{1,2})(\d+)$/.exec(a);
+          if (!m) return;
+          var col = 0;
+          for (var i = 0; i < m[1].length; i++) col = col * 26 + (m[1].charCodeAt(i) - 64);
+          _formCellSet[Number(m[2]) + ':' + col] = 1;
+        });
+        if (_fc.length) report.info.push({ dim: 'A/D', msg: '表单直写预设授权格 ' + _fc.length + ' 个（' + opts.carrier + '）纳入受控白名单' });
+      } catch (e) {}
+
       var changedCount = 0, protectedChanged = 0, headerChanged = 0;
       for (var r = 1; r <= maxR; r++) {
         for (var c = 1; c <= maxC; c++) {
           var pv = cellText(tws.getCell(r, c));
           var fv = cellText(fws.getCell(r, c));
           if (eqVal(pv, fv)) continue;
+          if (_formCellSet[r + ':' + c]) continue;
           changedCount++;
           // 受控写入：占位符替换 / 标签映射目标 / 明细数据区 → 合法，跳过
           if (isPlaceholder(pv) || labelTargets[r + ':' + c] || (r >= detailStart)) continue;
