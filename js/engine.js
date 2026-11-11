@@ -3697,6 +3697,17 @@
     verifyLogoPreserved: verifyLogoPreserved,
     makeBuiltinInvoiceTemplate: makeBuiltinInvoiceTemplate,
     makeBuiltinBookingTemplate: makeBuiltinBookingTemplate,
+    bookingFormCells: function (carrier) {
+      var _c = String(carrier == null ? '' : carrier).trim().toUpperCase();
+      if (!_c) return [];
+      for (var i = 0; i < BOOKING_FORM_PRESETS.length; i++) {
+        var _p = BOOKING_FORM_PRESETS[i];
+        if (String(_p.name || '').trim().toUpperCase() === _c) {
+          return Object.keys(_p.cells || {}).filter(function (a) { return /^[A-Z]{1,2}\d+$/.test(a); });
+        }
+      }
+      return [];
+    },
     bookingMode: function (carrier) {
       var _c = String(carrier == null ? '' : carrier).trim().toUpperCase();
       if (!_c) return '';
