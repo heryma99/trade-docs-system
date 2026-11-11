@@ -935,6 +935,38 @@
     { name: 'RAINBOW', cells: {
       A29: 'orderNos@cell:SO:', C29: 'boxCount', E29: 'nameCn@join:、',
       J29: 'gwNum', M29: 'volumeNum', L12: 'crd'
+    } },
+    { name: 'SFE', cells: {
+      B36: 'orderNos@line:SO:', D36: 'boxCount',
+      H36: 'nameCn@line', I36: 'nameEn@line', J36: 'hsCode@line',
+      M36: 'gwNum', O36: 'volumeNum'
+    } },
+    { name: 'ASOS', cells: {
+      C16: 'orderNos@line', E16: 'boxCountNum', F16: 'gwNum', G16: 'volumeNum'
+    } },
+    { name: 'OVD', cells: {
+      B9: 'consignee', B24: 'orderNos@cell:SO：', E25: 'nameEn@join:、',
+      J26: 'boxCountNum', J28: 'gwNum', J30: 'volumeNum'
+    } },
+    { name: 'FORTUNES', cells: {
+      A4: 'shipper', A8: 'consignee', A16: 'pol', E16: 'pod',
+      C20: 'boxCount', E20: 'nameBi', G20: 'gwNum', I20: 'volumeNum'
+    } },
+    { name: 'CEVA', cells: {
+      A40: 'orderNos@line', E40: 'boxCountNum', H40: 'nameDesc',
+      N40: 'gwNum', Q40: 'volumeNum'
+    } },
+    { name: 'COH', cells: {
+      D59: 'boxCountNum', F59: 'nameBi@line', J59: 'hsCode@line',
+      K60: 'gwNum', N60: 'volumeNum'
+    } },
+    { name: 'WELLFAST', cells: {
+      K42: 'boxCountNum', W42: 'nameBi'
+    } },
+    { name: 'SINOTEK', cells: {
+      A14: 'orderNos@cell:SO:', E15: 'boxCountNum',
+      G14: 'nameCn@join: ', G15: 'nameEn@join: ', G16: 'hs@join: ',
+      H14: 'gwNum', N15: 'volumeNum'
     } }
   ];
 
@@ -1023,6 +1055,20 @@
         return sq2.join(mJ[2]);
       }
       if (spec === 'volumeNum') { var vv2 = Number(totals.volume) || 0; return vv2 > 0 ? _formNum(vv2, 4) : ''; }
+      if (spec === 'boxCountNum') { var bc2 = Math.round(Number(totals.boxCount) || 0); return bc2 > 0 ? String(bc2) : ''; }
+      // nameBi / nameBi@line：中文+空格+英文（COH F 列 / WELLFAST W42 的双语一格形态）
+      function _biPairs() {
+        var pb = [];
+        (items || []).forEach(function (it) {
+          var cn = String((it._nameCn != null && it._nameCn !== '') ? it._nameCn : (it.nameCn || '')).trim();
+          var en = String((it._name != null && it._name !== '') ? it._name : (it.nameEn || '')).trim();
+          var v4 = (cn && en) ? (cn + ' ' + en) : (cn || en);
+          if (v4 && pb.indexOf(v4) < 0) pb.push(v4);
+        });
+        return pb;
+      }
+      if (spec === 'nameBi') return _biPairs().join(String.fromCharCode(10));
+      if (spec === 'nameBi@line') return { __lines: _biPairs() };
       if (spec === 'pol') return String(data.pol || '');
       if (spec === 'pod') return String(data.pod || '');
       if (spec === 'nameDesc@line') {
