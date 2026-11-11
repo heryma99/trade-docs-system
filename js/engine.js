@@ -1157,10 +1157,15 @@
       }
       return '';
     }
+    var PARTY_CLEAR = /^(shipperName|shipperAddr|consigneeName|consigneeAddr|notifyName|notifyAddr)$/;
     Object.keys(preset.cells).forEach(function (addr) {
       var spec = preset.cells[addr];
       var v = valOf(spec);
-      if (v === '' || v == null) return;
+      if (v === '' || v == null) {
+        // v1.6.79 收发通知人分格字段：未选时也要写空串清掉模板残留（JW PEI 等）
+        if (!PARTY_CLEAR.test(spec)) return;
+        v = '';
+      }
       var mm = String(addr).match(/^([A-Z]{1,2})(\d+)$/);
       if (!mm) return;
       var colL = mm[1], row0 = Number(mm[2]);
