@@ -710,6 +710,8 @@
       orderNos: orderList.join(', '),
       crd: meta.crd || '',
       flight: meta.flight || '',
+      pickup: meta.pickup || '',
+      cutoff: meta.cutoff || '',
       refId: refId,
       shipper: shipper, consignee: consignee, notify: notify,
       incoterms: meta.incoterms || '',
@@ -908,6 +910,7 @@
       G24: 'gw', H23: 'volume', E25: 'hsCode', F25: 'hsCode'
     } },
     { name: 'RXO', mode: 'air', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }, { key: 'flight', label: '航班号', type: 'text' }], cells: {
+      A32: 'marks',
       A3: 'shipper', A10: 'consignee@lines', C33: 'boxCount', D33: 'nameEn@line', D41: 'nameCn@line',
       F32: 'gw', G32: 'volume', B42: 'hsCode6', C41: 'crd'
     } },
@@ -917,24 +920,25 @@
       A30: 'orderNos@line:SO:', C30: 'boxCount', D30: 'gw', F30: 'nameDesc@line'
     } },
     { name: 'UNITEX', mode: 'air', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }, { key: 'flight', label: '航班号', type: 'text' }], cells: {
-      A3: 'shipperName', A14: 'consignee', B31: 'crd', B39: 'incoterms', A39: 'orderNos@line',
+      A3: 'shipperName', A14: 'consignee', D15: 'remark', B31: 'crd', B39: 'incoterms', A39: 'orderNos@line',
       C38: 'nameCn@line', D38: 'nameEn@line', E38: 'hsCode@line',
       F38: 'boxCount', G38: 'gwNum'
     } },
     { name: 'RSD', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }], cells: {
-      A3: 'shipper', A9: 'consignee', E23: 'flight', D27: 'nameDesc', H27: 'gwNum'
+      A3: 'shipper', A9: 'consignee', E23: 'flight', G23: 'remark', D27: 'nameDesc', H27: 'gwNum'
     } },
-    { name: 'KEDI', mode: 'sea', cells: {
+    { name: 'KEDI', mode: 'sea', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
+      B23: 'marks', E32: 'crd',
       A3: 'shipper@lines', A10: 'consignee@lines',
       A22: 'pol', D22: 'pod', A26: 'orderNos@line:SO： ', C26: 'boxCount',
       D26: 'nameEn@join:/', D27: 'hs@join:/', I26: 'gwNum', K27: 'volumeNum', E31: 'incoterms'
     } },
-    { name: 'CHARTERLINK', mode: 'sea', cells: {
-      A1: 'shipper@inline:Shipper托運人 (名稱, 地址, 電話 & 傳真)       ', A12: 'consignee', B30: 'boxCount', F31: 'gwNum', H30: 'volumeNum',
+    { name: 'CHARTERLINK', mode: 'sea', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
+      A1: 'shipper@inline:Shipper托運人 (名稱, 地址, 電話 & 傳真)       ', D40: 'crd', A12: 'consignee', B30: 'boxCount', F31: 'gwNum', H30: 'volumeNum',
       C32: 'nameCn@line', D32: 'nameEn@line', E32: 'hsCode@line'
     } },
-    { name: 'VENTANA', mode: 'sea', cells: {
-      A2: 'shipperName', A4: 'shipperAddr', A14: 'notifyName', A15: 'notifyAddr',
+    { name: 'VENTANA', mode: 'sea', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
+      A2: 'shipperName', A4: 'shipperAddr', A14: 'notifyName', A15: 'notifyAddr', F47: 'crd',
       A30: 'shipperName@prefix:SUPPLIER: ',
       A8: 'consignee@lines', E32: 'nameDesc', I32: 'gwNum', J32: 'volumeNum',
       D37: 'boxCount', F46: 'incoterms'
@@ -944,14 +948,16 @@
       A29: 'orderNos@cell:SO:', C29: 'boxCount', E29: 'nameCn@join:、',
       J29: 'gwNum', M29: 'volumeNum', L12: 'crd'
     } },
-    { name: 'SFE', mode: 'sea', cells: {
+    { name: 'SFE', mode: 'sea', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
+      A34: 'marks', M66: 'crd',
       A5: 'shipper@lines', A12: 'consignee@lines',
       B36: 'orderNos@line:SO:', D36: 'boxCount',
       H36: 'nameCn@line', I36: 'nameEn@line', J36: 'hsCode@line',
       A28: 'vessel', N71: 'etd',
       M36: 'gwNum', O36: 'volumeNum'
     } },
-    { name: 'ASOS', mode: 'sea', cells: {
+    { name: 'ASOS', mode: 'sea', extraFields: [{ key: 'pickup', label: '提货时间', type: 'text' }, { key: 'cutoff', label: '截仓时间', type: 'text' }], cells: {
+      A16: 'pickup', B16: 'cutoff', F52: 'remark',
       C16: 'orderNos@line', E16: 'boxCountNum', F16: 'gwNum', G16: 'volumeNum'
     } },
     { name: 'OVD', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }], cells: {
@@ -959,26 +965,30 @@
       C35: 'nameCn@join:、', C37: 'hs@join:、',
       J26: 'boxCountNum', J28: 'gwNum', J30: 'volumeNum'
     } },
-    { name: 'FORTUNES', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }], cells: {
+    { name: 'FORTUNES', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }], extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
+      A20: 'marks', I16: 'crd',
       A4: 'shipper', A8: 'consignee', A16: 'pol', E16: 'pod',
       C20: 'boxCount', E20: 'nameBi', G20: 'gwNum', I20: 'volumeNum'
     } },
-    { name: 'CEVA', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }], cells: {
+    { name: 'CEVA', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }, { key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
+      B37: 'crd', B53: 'remark',
       A6: 'shipper', A14: 'consignee',
       J7: 'etd@inline:ETD:',
       A40: 'orderNos@line', E40: 'boxCountNum', H40: 'nameDesc',
       N40: 'gwNum', Q40: 'volumeNum'
     } },
-    { name: 'COH', mode: 'sea', cells: {
+    { name: 'COH', mode: 'sea', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
+      C56: 'marks', C78: 'crd',
       C20: 'shipperName', C21: 'shipperAddr', C30: 'consigneeName', C31: 'consigneeAddr',
       D59: 'boxCountNum', F59: 'nameBi@line', J59: 'hsCode@line',
       K60: 'gwNum', N60: 'volumeNum'
     } },
     { name: 'WELLFAST', mode: 'sea', cells: {
-      C8: 'shipper', C17: 'consignee', C32: 'pol', C35: 'pod',
+      C8: 'shipper', C17: 'consignee', C32: 'pol', C35: 'pod', D39: 'marks', C57: 'remark',
       K42: 'boxCountNum', W42: 'nameBi'
     } },
     { name: 'SINOTEK', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }], cells: {
+      B13: 'marks',
       A2: 'shipper', A8: 'consignee',
       A14: 'orderNos@cell:SO:', E15: 'boxCountNum',
       G14: 'nameCn@join: ', G15: 'nameEn@join: ', G16: 'hs@join: ',
@@ -1091,6 +1101,10 @@
       if (spec === 'consigneeAddr') { var cn3 = data.consignee || {}; return String(cn3.address || ''); }
       if (spec === 'shipperName') { var sp2 = data.shipper || {}; return String(sp2.name || ''); }
       if (spec === 'flight') return String(data.flight || '');
+      if (spec === 'marks') { var mk = data.shippingMarks || ''; return (mk === 'N/M') ? '' : String(mk); }
+      if (spec === 'remark') return String(data.remark || '');
+      if (spec === 'pickup') return String(data.pickup || '');
+      if (spec === 'cutoff') return String(data.cutoff || '');
       if (spec === 'etd') return String(data.etd || '');
       if (spec === 'vessel') return String(data.vessel || '');
       var mEt = spec.match(/^etd@inline:(.+)$/);
