@@ -6864,11 +6864,17 @@
         _bkTplC = (_bkT && _bkT.carrier) || '';
       } catch (e) {}
       var _bkExtras = (window.TD && window.TD.engine && window.TD.engine.bookingExtras) ? window.TD.engine.bookingExtras(_bkTplC) : [];
+      var _bkTplName = '';
+      try { var _bkT2 = (_allBkTpls || []).filter(function (t) { return t.id === w.templateId; })[0]; _bkTplName = (_bkT2 && _bkT2.name) || ''; } catch (e) {}
+      console.log('[bw] template=', _bkTplName, '| carrier=', _bkTplC, '| extraFields=', _bkExtras.length); // v1.6.76 诊断
       var _exHtml = '';
       _bkExtras.forEach(function (f) {
         _exHtml += '<div><label>' + esc(f.label) + '</label><input type="' + esc(f.type || 'text') + '" id="bw-x-' + esc(f.key) + '" value="' + esc(m[f.key] || '') + '"></div>';
       });
-      document.getElementById('bw-extra').innerHTML = _exHtml ? '<div style="font-size:12px;color:#1f4e79;margin:2px 0 8px">本模板特有字段</div><div class="form-grid">' + _exHtml + '</div>' : '';
+      var _exHead = '<div style="font-size:12.5px;color:#1f4e79;margin:10px 0 8px;padding:6px 10px;background:#eef5ff;border-left:3px solid #1f4e79">当前模板：<b>' + esc(_bkTplName || '(未选)') + '</b>（' + esc(_bkTplC || '无承运商标识') + '）</div>';
+      var _exBody = _exHtml ? '<div class="form-grid">' + _exHtml + '</div>'
+        : '<div style="font-size:12px;color:#888;margin:4px 0">该模板无特有字段——件数/毛重/体积/品名/SO号等已由订单与装箱清单自动写入，无需手工填写。</div>';
+      document.getElementById('bw-extra').innerHTML = _exHead + _exBody;
 
       document.getElementById('bw-back2').onclick = function () { w.step = 1; render(); };
 
