@@ -6937,6 +6937,11 @@
 
 
         };
+        // v1.6.82 动态收集全部特有字段（bw-x-*），不再逐 key 硬编码
+        document.querySelectorAll('[id^="bw-x-"]').forEach(function (el) {
+          var _k = el.id.slice(5);
+          if (el.value) w.meta[_k] = el.value;
+        });
 
 
 
