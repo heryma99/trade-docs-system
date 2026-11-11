@@ -6897,6 +6897,14 @@
       var _bNoEl = document.getElementById('bw-no');
       if (_bNoEl) _bNoEl.addEventListener('input', function () { w._invNoAuto = false; });
       document.getElementById('bw-next2').onclick = function () {
+        // v1.6.79 必填校验：带 * 字段未填不得进入下一步
+        var _reqMiss = [];
+        if (!val('bw-shipper')) _reqMiss.push('SHIPPER 托运人');
+        if (!val('bw-consignee')) _reqMiss.push('CONSIGNEE 收货人');
+        if (!val('bw-pol')) _reqMiss.push('起运港 POL');
+        if (!val('bw-pod')) _reqMiss.push('目的港 POD');
+        if (!val('bw-freight')) _reqMiss.push('运费条款');
+        if (_reqMiss.length) { toast('必填项未填写：' + _reqMiss.join('、'), 'err'); return; }
 
 
 
