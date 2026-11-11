@@ -6888,7 +6888,7 @@
 
 
 
-          customsType: val('bw-customs'), remark: val('bw-remark')
+          customsType: val('bw-customs'), remark: val('bw-remark'), crd: (document.getElementById('bw-x-crd') || {}).value || ''
 
 
 
