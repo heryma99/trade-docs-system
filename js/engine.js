@@ -920,7 +920,7 @@
       F38: 'boxCount', G38: 'gwNum'
     } },
     { name: 'RSD', cells: {
-      A9: 'consignee', D27: 'nameDesc', H27: 'gwNum'
+      A3: 'shipper', A9: 'consignee', D27: 'nameDesc', H27: 'gwNum'
     } },
     { name: 'KEDI', cells: {
       A3: 'shipper@lines', A10: 'consignee@lines',
@@ -928,15 +928,17 @@
       D26: 'nameEn@join:/', D27: 'hs@join:/', I26: 'gwNum', K27: 'volumeNum', E31: 'incoterms'
     } },
     { name: 'CHARTERLINK', cells: {
-      A12: 'consignee', B30: 'boxCount', F31: 'gwNum', H30: 'volumeNum',
+      A1: 'shipper@inline:Shipper托運人 (名稱, 地址, 電話 & 傳真)       ', A12: 'consignee', B30: 'boxCount', F31: 'gwNum', H30: 'volumeNum',
       C32: 'nameCn@line', D32: 'nameEn@line', E32: 'hsCode@line'
     } },
     { name: 'VENTANA', cells: {
+      A2: 'shipperName', A4: 'shipperAddr', A14: 'notifyName', A15: 'notifyAddr',
+      A30: 'shipperName@prefix:SUPPLIER: ',
       A8: 'consignee@lines', E32: 'nameDesc', I32: 'gwNum', J32: 'volumeNum',
       D37: 'boxCount', F46: 'incoterms'
     } },
     { name: 'RAINBOW', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
-      A3: 'shipper', A8: 'consignee',
+      A3: 'shipper', A8: 'consignee', A13: 'notify', A17: 'incoterms',
       A29: 'orderNos@cell:SO:', C29: 'boxCount', E29: 'nameCn@join:、',
       J29: 'gwNum', M29: 'volumeNum', L12: 'crd'
     } },
@@ -1084,6 +1086,14 @@
       if (spec === 'consigneeName') { var cn2 = data.consignee || {}; return String(cn2.name || ''); }
       if (spec === 'consigneeAddr') { var cn3 = data.consignee || {}; return String(cn3.address || ''); }
       if (spec === 'shipperName') { var sp2 = data.shipper || {}; return String(sp2.name || ''); }
+      if (spec === 'notify') { var ny0 = data.notify || {}; return [ny0.name, ny0.address].filter(Boolean).join(String.fromCharCode(10)); }
+      if (spec === 'notifyName') { var ny1 = data.notify || {}; return String(ny1.name || ''); }
+      if (spec === 'notifyAddr') { var ny2 = data.notify || {}; return String(ny2.address || ''); }
+      // shipperName@prefix:P = 'P' + 发货人名（Ventana 'SUPPLIER: JW PEI' 行）；shipper@inline:L = 'L'+名+换行+地址（嘉林 标签数据混排同格）
+      var mSpP = spec.match(/^shipperName@prefix:(.+)$/);
+      if (mSpP) { var sp6 = data.shipper || {}; return mSpP[1] + String(sp6.name || ''); }
+      var mSpI = spec.match(/^shipper@inline:(.+)$/);
+      if (mSpI) { var sp7 = data.shipper || {}; return mSpI[1] + String(sp7.name || '') + ((sp7.address) ? (String.fromCharCode(10) + String(sp7.address)) : ''); }
       if (spec === 'shipperAddr') { var sp3 = data.shipper || {}; return String(sp3.address || ''); }
       if (spec === 'shipperTel') { var sp4 = data.shipper || {}; return String(sp4.tel || ''); }
       if (spec === 'shipper@lines') {
