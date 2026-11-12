@@ -6879,6 +6879,18 @@
         var _podEl = document.getElementById('bw-pod');
         if (_podEl && _podEl.parentNode && _podEl.parentNode.querySelector('label')) _podEl.parentNode.querySelector('label').textContent = '目的港/机场 POD';
       }
+      // v1.6.86 共性字段按模板过滤：显示集合 = 预设已映射的栏位（与写入严格同源，绝不「显示却写不进」）。
+      //   _cm===null（存量 5 家无预设）保持全集现状；window.BK_LEGACY_FORM=true 可一键回退全集模式。
+      //   隐藏用 display:none（值仍收集进 meta，写入层无映射自然不落格，无害）。
+      var _cm = (window.TD && window.TD.engine && window.TD.engine.bookingCommonMap && !window.BK_LEGACY_FORM) ? window.TD.engine.bookingCommonMap(_bkTplC) : null;
+      if (_cm) {
+        var _cmHide = { 'bw-pol': 'pol', 'bw-pod': 'pod', 'bw-inco': 'incoterms', 'bw-vessel': 'vessel', 'bw-etd': 'etd', 'bw-marks': 'marks', 'bw-ctype': 'containerType', 'bw-cqty': 'containerQty', 'bw-remark': 'remark', 'bw-agent': 'agent', 'bw-goods': 'goodsSummary', 'bw-dg': 'dangerous', 'bw-customs': 'customsType' };
+        Object.keys(_cmHide).forEach(function (_id) {
+          if (_cm[_cmHide[_id]]) return;
+          var _el = document.getElementById(_id);
+          if (_el && _el.parentNode) _el.parentNode.style.display = 'none';
+        });
+      }
       var _exHtml = '';
       _bkExtras.forEach(function (f) {
         _exHtml += '<div><label>' + esc(f.label) + '</label><input type="' + esc(f.type || 'text') + '" id="bw-x-' + esc(f.key) + '" value="' + esc(m[f.key] || '') + '"></div>';
@@ -6900,8 +6912,8 @@
         var _reqMiss = [];
         if (!val('bw-shipper')) _reqMiss.push('SHIPPER 托运人');
         if (!val('bw-consignee')) _reqMiss.push('CONSIGNEE 收货人');
-        if (!val('bw-pol')) _reqMiss.push('起运港 POL');
-        if (!val('bw-pod')) _reqMiss.push('目的港 POD');
+        if ((!_cm || _cm.pol) && !val('bw-pol')) _reqMiss.push('起运港 POL');
+        if ((!_cm || _cm.pod) && !val('bw-pod')) _reqMiss.push('目的港 POD');
         if (!val('bw-freight')) _reqMiss.push('运费条款');
         if (_reqMiss.length) { toast('必填项未填写：' + _reqMiss.join('、'), 'err'); return; }
 
