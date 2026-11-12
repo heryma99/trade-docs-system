@@ -195,6 +195,15 @@
         }
         if (detailEnd < detailStart) detailEnd = detailStart;
       }
+  // v1.6.89：勾选符号写入放行——filled 相对 template 仅差 ☑/☐/√ 前缀或括号内容变化（勾选引擎的合法输出）
+  function _cbLegit(pv, fv) {
+    if (!pv) return false;
+    var b = String(fv == null ? '' : fv);
+    if (b === String(pv)) return false;
+    if (!/[☑☐√]/.test(b)) return false;
+    var strip = function (x) { return String(x).replace(/^[☑☐√\s]+/, '').replace(/[（(][\s*√☑☐]*[）)]/g, '()').replace(/\s+/g, ''); };
+    return strip(pv) === strip(b);
+  }
       for (var r = 1; r <= maxR; r++) {
         for (var c = 1; c <= maxC; c++) {
           if (_slaveSet[r + ':' + c]) continue;
@@ -202,6 +211,7 @@
           var fv = cellText(fws.getCell(r, c));
           if (eqVal(pv, fv)) continue;
           if (_formCellSet[r + ':' + c]) continue;
+          if (_cbLegit(pv, fv)) continue;
           changedCount++;
           // 受控写入：占位符替换 / 标签映射目标 / 明细数据区 → 合法，跳过
           if (isPlaceholder(pv) || labelTargets[r + ':' + c] || (r >= detailStart)) continue;
