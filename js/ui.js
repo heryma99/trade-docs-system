@@ -6857,16 +6857,15 @@
 
 
 
-      // v1.6.75 模板驱动动态字段：按所选模板 preset 声明渲染特有字段
-      var _bkTplC = '';
-      try {
-        var _bkT = (_allBkTpls || []).filter(function (t) { return t.id === w.templateId; })[0];
-        _bkTplC = (_bkT && _bkT.carrier) || '';
-      } catch (e) {}
+      // v1.6.85 修复：「当前模板」恒显 (未选)——_allBkTpls 是第 2 步分支的局部变量，
+      //   渲染第 3 步分支时未经赋值（var 提升为 undefined），filter 恒为空 → carrier/name 恒为空。
+      //   改为按 templateId 直接查库（与第 5 步预览同源），不再依赖跨分支局部变量。
+      var _bkT = null;
+      try { _bkT = (w.templateId ? await db.get('templates', w.templateId) : null) || null; } catch (e) {}
+      var _bkTplC = (_bkT && _bkT.carrier) || '';
       var _bkExtras = (window.TD && window.TD.engine && window.TD.engine.bookingExtras) ? window.TD.engine.bookingExtras(_bkTplC) : [];
       var _bkMode = (window.TD && window.TD.engine && window.TD.engine.bookingMode) ? window.TD.engine.bookingMode(_bkTplC) : '';
-      var _bkTplName = '';
-      try { var _bkT2 = (_allBkTpls || []).filter(function (t) { return t.id === w.templateId; })[0]; _bkTplName = (_bkT2 && _bkT2.name) || ''; } catch (e) {}
+      var _bkTplName = (_bkT && _bkT.name) || '';
       console.log('[bw] template=', _bkTplName, '| carrier=', _bkTplC, '| mode=', _bkMode, '| extraFields=', _bkExtras.length); // v1.6.78 诊断
       // v1.6.78 海/空运表单区分：空运隐藏柜型/柜量/船名航次，改 ETD/目的港标签
       if (_bkMode === 'air') {
