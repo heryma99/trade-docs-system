@@ -3776,6 +3776,27 @@
       }
       return [];
     },
+    bookingCommonMap: function (carrier) {
+      /* v1.6.86：模板驱动表单——返回该模板「已映射的共性栏位」集合（显示与写入严格同源）。
+       *   无预设 → null（存量 5 家保持全集现状）；有预设 → 按 preset.cells 的值语义反推。
+       *   freightTerms 恒为 true：运费条款由复选框/占位符/标签多路径驱动，普遍存在。
+       *   回退开关：window.BK_LEGACY_FORM === true 时由 ui 侧强制走 null（全集模式）。 */
+      var _c = String(carrier == null ? '' : carrier).trim().toUpperCase();
+      if (!_c) return null;
+      var _p = null;
+      for (var i = 0; i < BOOKING_FORM_PRESETS.length; i++) {
+        if (String(BOOKING_FORM_PRESETS[i].name || '').trim().toUpperCase() === _c) { _p = BOOKING_FORM_PRESETS[i]; break; }
+      }
+      if (!_p) return null;
+      var m = { pol: false, pod: false, incoterms: false, vessel: false, etd: false, marks: false, containerType: false, containerQty: false, remark: false };
+      var _keys = Object.keys(_p.cells || {});
+      for (var j = 0; j < _keys.length; j++) {
+        var k = String(_p.cells[_keys[j]]).split('@')[0].split(':')[0];
+        if (k in m) m[k] = true;
+      }
+      m.freightTerms = true;
+      return m;
+    },
     REQUIRED_FIELDS: REQUIRED_FIELDS
   };
 });
