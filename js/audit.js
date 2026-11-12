@@ -1,4 +1,4 @@
-/* 输出成品审计层（v1.5.0 新增）
+/* 输出成品审计层（v1.5.0 新增；v1.6.82 数据区结束行/从格过滤）
  * 设计目标：把"模板原件"当基准，填充后做一次逐格 diff，只允许三类受控变更：
  *   ① 占位符 {{path}} 被替换；② 标签映射目标格被填值；③ 明细数据区(行>itemsRow)被写入。
  * 任何"计划外写入"或"保护区文字被改"都判为 bug → 列入 blocks 拦截导出。
@@ -116,6 +116,9 @@
         if (e && e.row && e.col) labelTargets[e.row + ':' + e.col] = 1;
       });
 
+      var maxR = Math.max(fws.rowCount || 0, tws.rowCount || 0);
+      var maxC = Math.max(fws.columnCount || 0, tws.columnCount || 0);
+
       // 明细数据区下界（行 > itemsRow 视为数据区，受控写入集之三）
       // v1.6.24 修正：若 itemsRow 行本身仍是 items 占位符（模板制作者遗留的草稿槽位），
       //   该行是"占位符行"而非"数据行"；把 detailStart 推到占位符块结束之后，
@@ -134,10 +137,7 @@
         report.info.push({ dim: 'E', msg: '检测到占位符数据块 R' + itemsRow + '~R' + _phEnd + '，明细扫描起点顺延至 R' + detailStart });
       }
 
-      var maxR = Math.max(fws.rowCount || 0, tws.rowCount || 0);
-      var maxC = Math.max(fws.columnCount || 0, tws.columnCount || 0);
-
-      // ---- 维度 A（模板保真/保护区）+ 维度 D（明细表头行非授权改写）----
+      // ---- 维度 A（模板保真/保护区）（maxR/maxC 已前移到明细窗口定义前，v1.6.82）+ 维度 D（明细表头行非授权改写）----
       // 设计取舍：不做"逐格 diff 全盘白名单"——模板含大量合法示例数据/样本文字（如"美国""GOODYEAR"）
       // 与长占位符，引擎合法改写它们，白名单极易误杀正确导出。改为两类高置信阻断点：
       //   A：上行区(r<detailStart)的保护区文字（长 CJK 装饰/警告，且非占位符）被改写 → 抓 v1.4.63/1.4.65
@@ -157,6 +157,7 @@
         if (_fc.length) report.info.push({ dim: 'A/D', msg: '表单直写预设授权格 ' + _fc.length + ' 个（' + opts.carrier + '）纳入受控白名单' });
       } catch (e) {}
 
+
       var changedCount = 0, protectedChanged = 0, headerChanged = 0;
       // v1.6.81：合并区从格过滤 —— ExcelJS 内存对象中从格镜像主格值（写出文件时从格不产生内容），
       //   逐格 diff 若不含从格会产出假差异（CEVA R40 品名写入 H40 主格，从格 I40-M40 被判
@@ -174,6 +175,26 @@
               if (!(rr === r1 && cc === c1)) _slaveSet[rr + ':' + cc] = 1;
         });
       } catch (e) {}
+      // v1.6.82：数据区结束行 —— 自 detailStart 起「连续 2 整行全空」即视为数据区结束。
+      //   此前 B/C/E 维扫描到表尾，模板底部的静态说明文字（如 KLN R46 "VGM DATA"）
+      //   落在体积/箱号列上被误报「应为数值但为文本」。截断后不再扫静态区。
+      //   空行判定同步跳过合并从格（从格镜像主格值，否则 KLN 唛头 A36:A45 的从格
+      //   会让 R38-45 被误判非空、截断失效）。
+      var detailEnd = maxR;
+      {
+        var _blankRun = 0;
+        for (var _de = detailStart; _de <= maxR; _de++) {
+          var _rowHas = false;
+          for (var _dc = 1; _dc <= maxC; _dc++) {
+            if (_slaveSet[_de + ':' + _dc]) continue;
+            var _dt = cellText(fws.getCell(_de, _dc));
+            if (_dt && String(_dt).replace(/\s/g, '') !== '') { _rowHas = true; break; }
+          }
+          if (_rowHas) _blankRun = 0;
+          else { _blankRun++; if (_blankRun >= 2) { detailEnd = _de - _blankRun; break; } }
+        }
+        if (detailEnd < detailStart) detailEnd = detailStart;
+      }
       for (var r = 1; r <= maxR; r++) {
         for (var c = 1; c <= maxC; c++) {
           if (_slaveSet[r + ':' + c]) continue;
@@ -229,7 +250,7 @@
       }
       if (expectBoxNo && boxNoCol > 0) {
         var boxFilled = false;
-        for (var br = detailStart; br <= fws.rowCount; br++) {
+        for (var br = detailStart; br <= detailEnd; br++) {
           if (cellText(fws.getCell(br, boxNoCol))) { boxFilled = true; break; }
         }
         if (!boxFilled) {
@@ -247,7 +268,7 @@
         });
         if (col > 0) {
           var anyVal = false;
-          for (var dr = detailStart; dr <= fws.rowCount; dr++) {
+          for (var dr = detailStart; dr <= detailEnd; dr++) {
             if (cellText(fws.getCell(dr, col))) { anyVal = true; break; }
           }
           if (!anyVal) report.warns.push({ dim: 'B', cell: cellRef(itemsRow, col), msg: '明细列「' + fld + '」整列为空（模板有该列但无数据）' });
@@ -269,7 +290,7 @@
       // 总箱数 vs 明细行数（boxMode）
       if (boxMode && data.totals && data.totals.boxCount) {
         var detailRows = 0;
-        for (var rr = detailStart; rr <= fws.rowCount; rr++) {
+        for (var rr = detailStart; rr <= detailEnd; rr++) {
           var rowHas = false;
           for (var c2 = 1; c2 <= maxC; c2++) { if (cellText(fws.getCell(rr, c2))) { rowHas = true; break; } }
           if (rowHas) detailRows++;
@@ -295,7 +316,8 @@
           }
           if (!numField) continue;
           // 检查该列明细值是否均为数值（允许空）
-          for (var er = detailStart; er <= fws.rowCount; er++) {
+          for (var er = detailStart; er <= detailEnd; er++) {
+            if (_slaveSet[er + ':' + hc]) continue;
             var cv = fws.getCell(er, hc).value;
             if (cv == null || cv === '') continue;
             if (typeof cv !== 'number') {
@@ -307,7 +329,8 @@
         // boxNo 连续性（boxMode）
         if (boxNoCol > 0) {
           var seq = [];
-          for (var sr = detailStart; sr <= fws.rowCount; sr++) {
+          for (var sr = detailStart; sr <= detailEnd; sr++) {
+            if (_slaveSet[sr + ':' + boxNoCol]) continue;
             var bv = cellText(fws.getCell(sr, boxNoCol));
             if (bv == null || bv === '') continue;
             // v1.6.26 修正：只把「纯整数」当作箱号参与连续性校验。
