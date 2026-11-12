@@ -721,6 +721,11 @@
       blRequire: meta.blRequire || '',
       showHs: meta.showHs || '',
       specialCargo: meta.specialCargo || '',
+      shipMode: meta.shipMode || '',
+      blType: meta.blType || '',
+      invoiceType: meta.invoiceType || '',
+      docsAttach: meta.docsAttach || '',
+      clearanceMode: meta.clearanceMode || '',
       refId: refId,
       shipper: shipper, consignee: consignee, notify: notify,
       incoterms: meta.incoterms || '',
@@ -2318,6 +2323,7 @@
               if (mG && mG.r1 === r1 && mG.c1 === col && mG.r2 > mG.r1) return; // 纵向跨行合并主格=静态表头列
             }
           }
+          if (_cbIsLabel(s) || CB_BRACKET_ADDRS[String(cell.address || '').toUpperCase()]) return; // v1.6.89 CB 保护
           cell.value = null; // v1.6.28: null 替代 ''（空串序列化后挡邻格溢出，ANHAI H19→G19 实证）
           return;
         }
@@ -2325,7 +2331,7 @@
         // v1.4.63：valueCols 清空也要跳合并从属格（同样的联动问题）
         if (mergedSubordinate[r1 + ',' + col]) return;
         // v1.6.34（仅订舱单）：valueCols 清空同样要过静态表头保护词典——CHR 的 CY/CY、BL Type 等复选框标签在值列上，此前被此路径清空
-        if (valueCols[col] && !KEEP.test(s) && !(isBooking && BOOKING_STATIC_HEADER_RE.test(String(s).replace(/\s+/g, ' ').trim()))) cell.value = null; // v1.6.28: null 替代 ''（防挡邻格溢出）
+        if (valueCols[col] && !KEEP.test(s) && !_cbIsLabel(s) && !CB_BRACKET_ADDRS[String(cell.address || '').toUpperCase()] && !(isBooking && BOOKING_STATIC_HEADER_RE.test(String(s).replace(/\s+/g, ' ').trim()))) cell.value = null; // v1.6.28: null 替代 ''（防挡邻格溢出；v1.6.89 加 CB 保护）
       });
     }
 
@@ -2520,18 +2526,41 @@
   //      用于合并区整行形态（CHR Payment/Trade Term、BL Type、Currency）。
   // 数据映射：freightTerms→Prepaid/Collect（KLN: PREPAID 预付/COLLECT 到付）；incoterms→EXW/FOA/FOB/CIF；
   //   Service Mode、BL Type、Currency、装卸方式、发票类型暂无表单字段 → 全 ☐（不猜）。
+  // v1.6.89：组定义升级——key+map 数据驱动（表单值→模板标签原文映射）、multi 多选、rows 组专属行窗口。
+  //   组成立门槛不变（窗口内 ≥2 个标签精确在场才动该组，防误伤）；pick 兼容保留。
   var CB_GROUP_DEFS = [
-    { labels: ['COLLECT 到付', 'PREPAID 预付'], pick: function (d) {
-        var v = String((d && d.freightTerms) || '').toUpperCase();
-        if (v.indexOf('PREPAID') >= 0) return 'PREPAID 预付';
-        if (v.indexOf('COLLECT') >= 0) return 'COLLECT 到付';
-        return null;
-      } },
-    { labels: ['FCL', 'LCL', 'BULK'], pick: function () { return null; } },
-    { labels: ['正本提单', '电放提单', 'SEA WAYBILL'], pick: function () { return null; } },
+    { key: 'freightTerms', labels: ['COLLECT 到付', 'PREPAID 预付'], map: { 'FREIGHT COLLECT': 'COLLECT 到付', 'FREIGHT PREPAID': 'PREPAID 预付' } },
+    { key: 'freightTerms', labels: ['PREPAID', 'COLLECT'], map: { 'FREIGHT COLLECT': 'COLLECT', 'FREIGHT PREPAID': 'PREPAID' }, rows: [40, 55] },
+    { key: 'freightTerms', labels: ['FREIGHT COLLECT', 'FREIGHT PREPAID'], map: { 'FREIGHT COLLECT': 'FREIGHT COLLECT', 'FREIGHT PREPAID': 'FREIGHT PREPAID' }, rows: [52, 70] },
+    { key: 'freightTerms', labels: ['FREIGHT COLLECT 到付', 'FREIGHT PREPAID  预付'], map: { 'FREIGHT COLLECT': 'FREIGHT COLLECT 到付', 'FREIGHT PREPAID': 'FREIGHT PREPAID  预付' } },
+    { key: 'shipMode', labels: ['FCL', 'LCL', 'BULK'], map: { FCL: 'FCL', LCL: 'LCL', BULK: 'BULK' } },
+    { key: 'blType', labels: ['正本提单', '电放提单', 'SEA WAYBILL'], map: { '正本提单': '正本提单', '电放提单': '电放提单', 'SEA WAYBILL': 'SEA WAYBILL' } },
+    { key: 'blType', labels: ['Bill  of Lading  提单正本', 'Telex-release  提单电放'], map: { '正本提单': 'Bill  of Lading  提单正本', '电放提单': 'Telex-release  提单电放' } },
+    { key: 'invoiceType', labels: ['增值税普通发票', '增值税专用发票'], map: { '增值税普通发票': '增值税普通发票', '增值税专用发票': '增值税专用发票' } },
+    { key: 'docsAttach', multi: true, labels: ['Commercial Invoice', 'Customs Invoice', 'Proforma Invoice', 'Packing List', 'Interim Footwear Invoice'], map: { 'Commercial Invoice': 'Commercial Invoice', 'Customs Invoice': 'Customs Invoice', 'Proforma Invoice': 'Proforma Invoice', 'Packing List': 'Packing List', 'Interim Footwear Invoice': 'Interim Footwear Invoice' }, rows: [40, 55] },
     { labels: ['RMB', 'HKD', 'USD'], pick: function () { return null; } },
-    { labels: ['增值税普通发票', '增值税专用发票'], pick: function () { return null; } },
     { labels: ['CY/CY', 'CY/DR', 'CFS/CFS', 'CFS/CY'], pick: function () { return null; } }
+  ];
+  // v1.6.89：括号填空型勾选（选项自带 (  )，选中项括号内填 √；未选项槽位清空）。
+  //   cells 变体：每个选项独立格（格内恰 1 个括号 + 关键词守卫防跨模板误伤）；
+  //   slotCell 变体：单格多槽位（第 n 个括号对应第 n 选项，未选项槽位清 √）。
+  var CB_BRACKET_DEFS = [
+    { key: 'freightTerms', rows: [30, 36], cells: [
+        { v: 'FREIGHT PREPAID', addr: 'A33', kw: 'prepaid' },
+        { v: 'FREIGHT COLLECT', addr: 'F33', kw: 'collect' }
+      ] },
+    { key: 'freightTerms', rows: [30, 38], slotCell: 'F33', kw: '海运费', slots: [
+        { v: 'FREIGHT PREPAID', slot: 1 }, { v: 'FREIGHT COLLECT', slot: 2 }
+      ] },
+    { key: 'clearanceMode', rows: [30, 38], slotCell: 'B35', kw: '报关方式', slots: [
+        { v: '清关', slot: 1 }, { v: '转关', slot: 2 }
+      ] },
+    { key: 'shipMode', rows: [14, 24], cells: [
+        { v: 'LCL/LCL', addr: 'G16', kw: 'lcl/lcl' },
+        { v: 'LCL/FCL', addr: 'G18', kw: 'lcl/fcl' },
+        { v: 'FCL/FCL', addr: 'G20', kw: 'fcl/fcl' },
+        { v: 'FCL/LCL', addr: 'G22', kw: 'fcl/lcl' }
+      ] }
   ];
   // 行内复选框串渲染器（占位符 {{cb_xxx}} → 整串）
   var CB_RENDERERS = {
@@ -2547,8 +2576,21 @@
     blType: function () { return '☐ Original BL       ☐ Seaway BL       ☐ Telex release BL'; },
     currency: function () { return '☐ CNY       ☐ HKD       ☐ USD'; }
   };
-  // 只在复选框区生效的行窗口（KLN 17-28 / CHR 5-18 均覆盖），避免同名短词（RMB/FCL 等）在别处被误改
   var CB_ROW_MIN = 4, CB_ROW_MAX = 31;
+  // v1.6.89：CB 保护——标签填充/清值路径不得触碰勾选标签格与括号选项格（否则组消失、勾选失效）
+  function _cbIsLabel(t) {
+    var x = String(t == null ? '' : t).trim();
+    if (!x) return false;
+    for (var i = 0; i < CB_GROUP_DEFS.length; i++) if (CB_GROUP_DEFS[i].labels.indexOf(x) >= 0) return true;
+    return false;
+  }
+  var CB_BRACKET_ADDRS = {};
+  (function () {
+    CB_BRACKET_DEFS.forEach(function (g) {
+      if (g.cells) g.cells.forEach(function (it) { CB_BRACKET_ADDRS[String(it.addr).toUpperCase()] = 1; });
+      if (g.slotCell) CB_BRACKET_ADDRS[String(g.slotCell).toUpperCase()] = 1;
+    });
+  })();
   function cbCellFullText(v) {
     if (v && v.richText) return v.richText.map(function (p) { return p.text; }).join('');
     return typeof v === 'string' ? v : null;
@@ -2630,58 +2672,95 @@
     return n;
   }
 
+  // v1.6.89：括号填空工具——把第 slot 个括号（半角/全角）内容替换为 √ 或清空
+  function _bracketFill(txt, slot, mark) {
+    var re = /([（(])([^）)]*)([）)])/g, idx = 0;
+    return txt.replace(re, function (all, l, inner, r) {
+      idx++;
+      if (idx !== slot) return all;
+      return l + (mark ? ' √ ' : '    ') + r;
+    });
+  }
   function applyCheckboxGroups(ws, data) {
     // 合并从属格跳过（只在主格/普通格写符号）
     var slave = {};
     (ws.model.merges || []).forEach(function (ref) {
       var m = parseMergeRef(ref);
       if (!m) return;
-      for (var r = m.top; r <= m.bottom; r++) {
-        for (var c = m.left; c <= m.right; c++) {
-          if (r === m.top && c === m.left) continue;
-          slave[r + ',' + c] = true;
-        }
-      }
+      for (var r = m.top; r <= m.bottom; r++)
+        for (var c = m.left; c <= m.right; c++)
+          if (!(r === m.top && c === m.left)) slave[r + ',' + c] = true;
     });
-    // 第一遍：收集行窗口内每格 trim 文本 → 判定「组成立」（同组 ≥2 个标签同时在场才动该组，防误伤）
-    var seen = {};   // label -> true
+    // v1.6.89：全表收集主格文本（原窗口仅 4-31 行，DETRANS R44/GEODIS R62 等勾选区够不到）
+    var pool = [];
     ws.eachRow({ includeEmpty: false }, function (row, rn) {
-      if (rn < CB_ROW_MIN || rn > CB_ROW_MAX) return;
       row.eachCell({ includeEmpty: false }, function (cell, cn) {
         if (slave[rn + ',' + cn]) return;
         var ft = cbCellFullText(cell.value);
         if (ft === null) return;
         var t = ft.trim();
-        if (t) seen[t] = true;
+        if (t) pool.push({ cell: cell, text: t, row: rn, addr: String(cell.address || '').toUpperCase() });
       });
     });
-    var labelSet = {}, picked = {}, anyGroup = false;
-    CB_GROUP_DEFS.forEach(function (g) {
-      var found = 0, p = null;
-      try { p = g.pick(data); } catch (e) { p = null; }
-      g.labels.forEach(function (L) { if (seen[L]) found++; });
-      if (found < 2) return;                 // 组不成立 → 整组不动
-      anyGroup = true;
-      g.labels.forEach(function (L) {
-        if (!seen[L]) return;
-        labelSet[L] = true;
-        if (p === L) picked[L] = true;
-      });
-    });
-    if (!anyGroup) return 0;
-    // 第二遍：对成立组的标签格写符号（自守卫：格值仍等于标签原文才写）
+    function _inWin(g, rn) {
+      var w0 = g.rows ? g.rows[0] : CB_ROW_MIN, w1 = g.rows ? g.rows[1] : CB_ROW_MAX;
+      return rn >= w0 && rn <= w1;
+    }
+    function _pick(g) {
+      if (g.pick) { try { return g.pick(data); } catch (e) { return null; } }
+      var raw = String((data && data[g.key]) || '').trim();
+      if (!raw) return null;
+      if (g.multi) return raw.split(/[、,，;；]/).map(function (x) { return g.map ? (g.map[x.trim()] || '') : x.trim(); }).filter(Boolean);
+      return g.map ? (g.map[raw] || null) : raw;
+    }
     var n = 0;
-    ws.eachRow({ includeEmpty: false }, function (row, rn) {
-      if (rn < CB_ROW_MIN || rn > CB_ROW_MAX) return;
-      row.eachCell({ includeEmpty: false }, function (cell, cn) {
-        if (slave[rn + ',' + cn]) return;
-        var ft = cbCellFullText(cell.value);
-        if (ft === null) return;
-        var t = ft.trim();
-        if (!labelSet[t]) return;
-        cbApplySymbol(cell, t, picked[t] ? '☑' : '☐');
+    // ① 前缀符号组（组成立门槛：窗口内 ≥2 个标签精确在场；自守卫=按收集到的原文写）
+    CB_GROUP_DEFS.forEach(function (g) {
+      // v1.6.89：组成立即写符号（沿用 v1.6.33 语义）——有数据 ☑ 选中/☐ 未选；无数据全 ☐（不猜）
+      var want = _pick(g);
+      if (g.multi && (!want || !want.length)) want = [];
+      var found = {}, cnt = 0;
+      pool.forEach(function (p) {
+        if (!_inWin(g, p.row)) return;
+        if (g.labels.indexOf(p.text) >= 0 && !found[p.text]) { found[p.text] = p; cnt++; }
+      });
+      if (cnt < 2) return;
+      var chosen = {};
+      if (g.multi) want.forEach(function (L) { chosen[L] = 1; });
+      else if (want) chosen[want] = 1;
+      Object.keys(found).forEach(function (L) {
+        cbApplySymbol(found[L].cell, L, chosen[L] ? '☑' : '☐');
         n++;
       });
+    });
+    // ② 括号填空组
+    CB_BRACKET_DEFS.forEach(function (g) {
+      var raw = String((data && data[g.key]) || '').trim();
+      if (!raw) return;
+      if (g.cells) {
+        g.cells.forEach(function (it) {
+          if (String(it.v).toUpperCase() !== raw.toUpperCase()) return;
+          pool.forEach(function (p) {
+            if (!_inWin(g, p.row) || p.addr !== it.addr.toUpperCase()) return;
+            var brs = p.text.match(/[（(][^）)]*[）)]/g) || [];
+            if (brs.length !== 1) return;                                    // 恰 1 个括号才适用
+            if (p.text.toLowerCase().indexOf(String(it.kw).toLowerCase()) < 0) return; // 关键词守卫
+            p.cell.value = _bracketFill(p.text, 1, true);
+            n++;
+          });
+        });
+      } else if (g.slots) {
+        pool.forEach(function (p) {
+          if (!_inWin(g, p.row) || p.addr !== String(g.slotCell).toUpperCase()) return;
+          if (g.kw && p.text.indexOf(g.kw) < 0) return;
+          if ((p.text.match(/[（(][^）)]*[）)]/g) || []).length < g.slots.length) return;
+          var t = p.text;
+          g.slots.forEach(function (s2) {
+            t = _bracketFill(t, s2.slot, String(s2.v).toUpperCase() === raw.toUpperCase());
+          });
+          if (t !== p.text) { p.cell.value = t; n++; }
+        });
+      }
     });
     return n;
   }
@@ -3848,6 +3927,32 @@
         if (String(BOOKING_FORM_PRESETS[i].name || '').trim().toUpperCase() === _c) return BOOKING_FORM_PRESETS[i].extraFields || [];
       }
       return [];
+    },
+    bookingCheckFields: function (carrier) {
+      /* v1.6.89：勾选字段声明（按承运商）——ui 特有字段区据此渲染 select/multi，
+       *   值收集进 meta 后由 CB_GROUP_DEFS/CB_BRACKET_DEFS 消费。freightTerms 自动驱动不在此列。 */
+      var _c = String(carrier == null ? '' : carrier).trim().toUpperCase();
+      var M = {
+        KLN: [
+          { key: 'shipMode', label: '装运方式（FCL/LCL）', type: 'select', options: ['FCL', 'LCL'], def: 'FCL' },
+          { key: 'blType', label: '提单方式', type: 'select', options: ['正本提单', '电放提单', 'SEA WAYBILL'], def: '正本提单' },
+          { key: 'invoiceType', label: '发票类型', type: 'select', options: ['增值税普通发票', '增值税专用发票'], def: '增值税普通发票' }
+        ],
+        DETRANS: [
+          { key: 'docsAttach', label: '随附单证（可多选）', type: 'multi', options: ['Commercial Invoice', 'Customs Invoice', 'Proforma Invoice', 'Packing List', 'Interim Footwear Invoice'] }
+        ],
+        CHARTERLINK: [
+          { key: 'shipMode', label: '装运条款', type: 'select', options: ['FCL/FCL', 'LCL/LCL', 'FCL/LCL', 'LCL/FCL'], def: 'FCL/FCL' }
+        ],
+        KEDI: [
+          { key: 'clearanceMode', label: '报关方式', type: 'select', options: ['清关', '转关'], def: '清关' }
+        ],
+        RAINBOW: [
+          { key: 'blType', label: '提单方式', type: 'select', options: ['正本提单', '电放提单'], def: '正本提单' }
+        ],
+        GEODIS: [], ANHAI: []
+      };
+      return M[_c] ? M[_c].slice() : [];
     },
     bookingCommonMap: function (carrier) {
       /* v1.6.86：模板驱动表单——返回该模板「已映射的共性栏位」集合（显示与写入严格同源）。
