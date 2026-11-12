@@ -6514,6 +6514,11 @@
           var hay = (op.getAttribute('data-q') || op.text || '').toLowerCase();
           op.hidden = !!q && hay.indexOf(q) < 0;
         });
+        // v1.6.89：筛选结果唯一时自动选中（输入名称直接出模板）
+        if (q) {
+          var _vis = Array.prototype.filter.call(sel.options, function (op) { return !op.hidden && op.value; });
+          if (_vis.length === 1) sel.value = _vis[0].value;
+        }
       };
     }
 
@@ -6879,6 +6884,7 @@
       try { _bkT = (w.templateId ? await db.get('templates', w.templateId) : null) || null; } catch (e) {}
       var _bkTplC = (_bkT && _bkT.carrier) || '';
       var _bkExtras = (window.TD && window.TD.engine && window.TD.engine.bookingExtras) ? window.TD.engine.bookingExtras(_bkTplC) : [];
+      var _bkChecks = (window.TD && window.TD.engine && window.TD.engine.bookingCheckFields) ? window.TD.engine.bookingCheckFields(_bkTplC) : []; // v1.6.89 勾选字段
       var _bkMode = (window.TD && window.TD.engine && window.TD.engine.bookingMode) ? window.TD.engine.bookingMode(_bkTplC) : '';
       var _bkTplName = (_bkT && _bkT.name) || '';
       console.log('[bw] template=', _bkTplName, '| carrier=', _bkTplC, '| mode=', _bkMode, '| extraFields=', _bkExtras.length); // v1.6.78 诊断
@@ -6907,7 +6913,16 @@
         });
       }
       var _exHtml = '';
-      _bkExtras.forEach(function (f) {
+      _bkExtras.concat(_bkChecks).forEach(function (f) {
+        // v1.6.89 支持 multi 多选（勾选组，容器 div 内 checkbox，收集器聚合为逗号串）
+        if (f.type === 'multi' && f.options && f.options.length) {
+          var _cur = String(m[f.key] || '');
+          var _cbs = f.options.map(function (o) {
+            return '<label style="display:inline-flex;align-items:center;gap:4px;margin-right:12px;font-weight:normal;white-space:nowrap"><input type="checkbox" value="' + esc(o) + '"' + (_cur.indexOf(o) >= 0 ? ' checked' : '') + '>' + esc(o) + '</label>';
+          }).join('');
+          _exHtml += '<div style="grid-column:1/-1"><label>' + esc(f.label) + '</label><div id="bw-x-' + esc(f.key) + '">' + _cbs + '</div></div>';
+          return;
+        }
         // v1.6.87 支持 select 下拉（preset extraFields 声明 options + def 默认值）
         if (f.type === 'select' && f.options && f.options.length) {
           var _cur = esc(m[f.key] || f.def || f.options[0]);
@@ -6976,6 +6991,11 @@
         // v1.6.82 动态收集全部特有字段（bw-x-*），不再逐 key 硬编码
         document.querySelectorAll('[id^="bw-x-"]').forEach(function (el) {
           var _k = el.id.slice(5);
+          if (el.tagName === 'DIV') { // v1.6.89 multi 勾选组容器
+            var _v = Array.prototype.map.call(el.querySelectorAll('input[type="checkbox"]:checked'), function (b) { return b.value; }).join(',');
+            if (_v) w.meta[_k] = _v;
+            return;
+          }
           if (el.value) w.meta[_k] = el.value;
         });
 
