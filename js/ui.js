@@ -6800,7 +6800,7 @@
       }
       function _partyId(type, inputId, allowSame) {
         var _t = ((document.getElementById(inputId) || {}).value || '').trim();
-        if (allowSame && _t === 'SAME AS CONSIGNEE（同收货人）') return '';
+        if (allowSame && (_t === 'SAME AS CONSIGNEE' || _t === 'SAME AS CONSIGNEE（同收货人）')) return '';
         if (!_t) return '';
         var _ps = parties.filter(function (p) { return p.type === type && p.name === _t; });
         if (!_ps.length) _ps = parties.filter(function (p) { return p.type === type && p.name.indexOf(_t) >= 0; });
@@ -6834,7 +6834,7 @@
 
 
 
-        '<div><label>NOTIFY 通知人</label><input id="bw-notify-q" list="bw-notify-list" placeholder="留空=同收货人" style="width:100%;padding:4px 8px" value="' + (w.notifyId ? esc(_pName('notify', w.notifyId)) : 'SAME AS CONSIGNEE（同收货人）') + '"><datalist id="bw-notify-list"><option value="SAME AS CONSIGNEE（同收货人）">（不选=同收货人）</option>' + optsDl('notify') + '</datalist></div>' +
+        '<div><label>NOTIFY 通知人</label><input id="bw-notify-q" list="bw-notify-list" placeholder="留空=同收货人" style="width:100%;padding:4px 8px" value="' + (w.notifyId ? esc(_pName('notify', w.notifyId)) : 'SAME AS CONSIGNEE') + '"><datalist id="bw-notify-list"><option value="SAME AS CONSIGNEE">（不选=同收货人）</option>' + optsDl('notify') + '</datalist></div>' +
 
 
 
