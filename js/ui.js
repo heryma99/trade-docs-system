@@ -6644,7 +6644,10 @@
 
 
 
-      var tplOpts = tpls.map(function (t) { return '<option value="' + t.id + '"' + (w.templateId === t.id ? ' selected' : '') + '>' + esc(t.name) + '（' + esc(t.carrier) + '）</option>'; }).join('');
+      // v1.6.91：模板选择改为输入式组合框（datalist）——输入名称直接显示/选中模板，单框搞定
+      var tplOpts = tpls.map(function (t) { var _lb = esc(t.name) + '（' + esc(t.carrier) + '）'; return '<option value="' + _lb + '">' + _lb + '</option>'; }).join('');
+      var _selT = tpls.filter(function (t) { return t.id === w.templateId; })[0];
+      var _tplLabel = _selT ? (esc(_selT.name) + '（' + esc(_selT.carrier) + '）') : '';
 
 
 
@@ -6672,7 +6675,7 @@
 
 
 
-        '<div><label class="req">订舱单模板（仅启用中）</label><input id="bw-tpl-q" placeholder="🔍 输入筛选" style="width:100%;padding:3px 8px;margin-bottom:4px;font-size:12px"><select id="bw-tpl"><option value="">请选择</option>' + tplOpts + '</select></div>' +
+        '<div><label class="req">订舱单模板（仅启用中）</label><input id="bw-tpl-q" list="bw-tpl-list" placeholder="输入名称直接选择模板" style="width:100%;padding:4px 8px" value="' + _tplLabel + '"><datalist id="bw-tpl-list">' + tplOpts + '</datalist></div>' +
 
 
 
@@ -6688,17 +6691,20 @@
 
 
 
-      _bwAttachSelFilter('bw-tpl');
 
       document.getElementById('bw-next1').onclick = async function () {
 
 
 
-        var tpl = val('bw-tpl');
+        // v1.6.91：按输入文本解析模板（精确匹配 名称（承运商）或名称，唯一前缀兜底）
+        var _txt = ((document.getElementById('bw-tpl-q') || {}).value || '').trim();
+        var _tt = _txt ? tpls.filter(function (t) { return (t.name + '（' + t.carrier + '）') === _txt || t.name === _txt; })[0] : null;
+        if (!_tt && _txt) { var _cands = tpls.filter(function (t) { return t.name.indexOf(_txt) >= 0; }); if (_cands.length === 1) _tt = _cands[0]; }
+        var tpl = _tt ? _tt.id : '';
 
 
 
-        if (!tpl) { toast('请选择订舱单模板', 'err'); return; }
+        if (!tpl) { toast('请输入并从下拉列表中选择订舱单模板', 'err'); return; }
 
 
 
