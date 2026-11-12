@@ -972,7 +972,7 @@
       A28: 'vessel', N71: 'etd',
       M36: 'gwNum', O36: 'volumeNum'
     } },
-    { name: 'ASOS', mode: 'sea', extraFields: [{ key: 'pickup', label: '提货时间', type: 'text' }, { key: 'cutoff', label: '截仓时间', type: 'text' }], cells: {
+    { name: 'ASOS', mode: 'sea', extraFields: [{ key: 'pickup', label: '提货时间', type: 'datetime-local' }, { key: 'cutoff', label: '截仓时间', type: 'datetime-local' }], cells: {
       B12: 'customsType', A16: 'pickup', B16: 'cutoff', F52: 'remark',
       C16: 'orderNos@line', E16: 'boxCountNum', F16: 'gwNum', G16: 'volumeNum'
     } },
@@ -1144,8 +1144,8 @@
       if (spec === 'flight') return String(data.flight || '');
       if (spec === 'marks') { var mk = data.shippingMarks || ''; return (mk === 'N/M') ? '' : String(mk); }
       if (spec === 'remark') return String(data.remark || '');
-      if (spec === 'pickup') return String(data.pickup || '');
-      if (spec === 'cutoff') return String(data.cutoff || '');
+      if (spec === 'pickup') return String(data.pickup || '').replace('T', ' '); // datetime-local 值规范化
+      if (spec === 'cutoff') return String(data.cutoff || '').replace('T', ' ');
       if (spec === 'etd') return String(data.etd || '');
       if (spec === 'vessel') return String(data.vessel || '');
       // v1.6.83：存量校准 O1 新增值语义（KLN 预设：S/O 号 / 收货地点 / 最终目的地）
