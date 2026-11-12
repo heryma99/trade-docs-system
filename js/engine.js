@@ -1793,10 +1793,28 @@
     // 兜底：没有占位符明细行时，识别真实表头区域（>=3 个可识别列头）
     if (result.itemsRow === -1) {
       var best = { row: -1, count: 0, map: {} };
+      // v1.6.84：合并区从格在 ExcelJS 中镜像主格值 → 每行 count 虚高到接近满行
+      //   （KLN 的 R16 与真表头 R34 同为 13），`count > best.count` 严格比较退化为
+      //   「先到的满格行获胜」→ 误选 R16（INCOTERMS/OCEAN FREIGHT 区）→ itemsRow=17，
+      //   审计维度 D 把 R17 运费复选框 ☑/☐ 合法渲染误判为「表头被改写」而拦截导出。
+      //   此处构建合并从格坐标集，统计只数主格；配合上限 30→60（KLN 表头 R34、GEODIS R37）。
+      //   fillTemplate 不走 scanTemplate（明细定位有独立 preset/block 机制），仅影响审计与 ui 解析。
+      var _mset = {};
+      try {
+        (ws.model.merges || []).forEach(function (m) {
+          var mm = String(m).match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+          if (!mm) return;
+          var _c1 = _colNum(mm[1]), _c2 = _colNum(mm[3]);
+          for (var _rr = parseInt(mm[2], 10); _rr <= parseInt(mm[4], 10); _rr++)
+            for (var _cc = _c1; _cc <= _c2; _cc++)
+              if (!(_rr === parseInt(mm[2], 10) && _cc === _c1)) _mset[_rr + ':' + _cc] = 1;
+        });
+      } catch (e) {}
       ws.eachRow({ includeEmpty: false }, function (row, rowNumber) {
-        if (rowNumber > 30) return;
+        if (rowNumber > 60) return;
         var map = {}, count = 0;
         row.eachCell({ includeEmpty: false }, function (cell, colNumber) {
+          if (_mset[rowNumber + ':' + colNumber]) return;
           var v = cell.value;
           var s = (v && v.richText) ? v.richText.map(function (t) { return t.text; }).join('') : (typeof v === 'string' ? v : '');
           var f = matchHeaderAlias(s);
