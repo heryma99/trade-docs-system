@@ -6788,6 +6788,24 @@
 
 
 
+      function _pName(type, id) {
+        var p = parties.filter(function (x) { return x.type === type && x.id === id; })[0];
+        return p ? (p.name || '') : '';
+      }
+      function optsDl(type) {
+        return parties.filter(function (p) { return p.type === type; }).map(function (p) {
+          var _sub = [p.company, p.country, p.city, p.warehouseCode].filter(Boolean).join(' · ');
+          return '<option value="' + esc(p.name) + '">' + esc(_sub) + '</option>';
+        }).join('');
+      }
+      function _partyId(type, inputId, allowSame) {
+        var _t = ((document.getElementById(inputId) || {}).value || '').trim();
+        if (allowSame && _t === 'SAME AS CONSIGNEE（同收货人）') return '';
+        if (!_t) return '';
+        var _ps = parties.filter(function (p) { return p.type === type && p.name === _t; });
+        if (!_ps.length) _ps = parties.filter(function (p) { return p.type === type && p.name.indexOf(_t) >= 0; });
+        return _ps.length ? _ps[0].id : '';
+      }
       function opts(type, sel, ph) {
 
         return '<option value="">' + esc(ph || '请选择') + '</option>' + parties.filter(function (p) { return p.type === type; }).map(function (p) { var _q = [p.name, p.company, p.country, p.city, p.warehouseCode].filter(Boolean).join(' '); return '<option value="' + p.id + '"' + (sel === p.id ? ' selected' : '') + ' data-q="' + esc(_q) + '">' + esc(p.name) + '</option>'; }).join('');
@@ -6808,15 +6826,15 @@
 
 
 
-        '<div><label class="req">SHIPPER 托运人</label><input id="bw-shipper-q" placeholder="🔍 输入筛选" style="width:100%;padding:3px 8px;margin-bottom:4px;font-size:12px"><select id="bw-shipper">' + opts('shipper', w.shipperId) + '</select></div>' +
+        '<div><label class="req">SHIPPER 托运人</label><input id="bw-shipper-q" list="bw-shipper-list" placeholder="输入名称选择" style="width:100%;padding:4px 8px" value="' + esc(_pName('shipper', w.shipperId)) + '"><datalist id="bw-shipper-list">' + optsDl('shipper') + '</datalist></div>' +
 
 
 
-        '<div><label class="req">CONSIGNEE 收货人</label><input id="bw-consignee-q" placeholder="🔍 输入筛选" style="width:100%;padding:3px 8px;margin-bottom:4px;font-size:12px"><select id="bw-consignee">' + opts('consignee', w.consigneeId) + '</select></div>' +
+        '<div><label class="req">CONSIGNEE 收货人</label><input id="bw-consignee-q" list="bw-consignee-list" placeholder="输入名称选择" style="width:100%;padding:4px 8px" value="' + esc(_pName('consignee', w.consigneeId)) + '"><datalist id="bw-consignee-list">' + optsDl('consignee') + '</datalist></div>' +
 
 
 
-        '<div><label>NOTIFY 通知人</label><input id="bw-notify-q" placeholder="🔍 输入筛选" style="width:100%;padding:3px 8px;margin-bottom:4px;font-size:12px"><select id="bw-notify">' + opts('notify', w.notifyId, 'SAME AS CONSIGNEE（同收货人）') + '</select></div>' +
+        '<div><label>NOTIFY 通知人</label><input id="bw-notify-q" list="bw-notify-list" placeholder="留空=同收货人" style="width:100%;padding:4px 8px" value="' + (w.notifyId ? esc(_pName('notify', w.notifyId)) : 'SAME AS CONSIGNEE（同收货人）') + '"><datalist id="bw-notify-list"><option value="SAME AS CONSIGNEE（同收货人）">（不选=同收货人）</option>' + optsDl('notify') + '</datalist></div>' +
 
 
 
@@ -6950,8 +6968,6 @@
 
       var _bNoEl = document.getElementById('bw-no');
       if (_bNoEl) _bNoEl.addEventListener('input', function () { w._invNoAuto = false; });
-      // v1.6.88 P2 模糊筛选：4 个下拉挂载
-      ['bw-shipper', 'bw-consignee', 'bw-notify', 'bw-tpl'].forEach(_bwAttachSelFilter);
 
       document.getElementById('bw-next2').onclick = function () {
         // v1.6.79 必填校验：带 * 字段未填不得进入下一步
@@ -6965,7 +6981,14 @@
 
 
 
-        w.shipperId = val('bw-shipper'); w.consigneeId = val('bw-consignee'); w.notifyId = val('bw-notify');
+        // v1.6.92：往来单位输入式组合框——按文本解析 id（精确名称，唯一包含兜底）
+        var _sid = _partyId('shipper', 'bw-shipper-q');
+        var _cid = _partyId('consignee', 'bw-consignee-q');
+        var _nid = _partyId('notify', 'bw-notify-q', true);
+        if (!_sid) { toast('请输入并从列表中选择 SHIPPER 托运人', 'err'); return; }
+        if (!_cid) { toast('请输入并从列表中选择 CONSIGNEE 收货人', 'err'); return; }
+        if (_nid === undefined) _nid = '';
+        w.shipperId = _sid; w.consigneeId = _cid; w.notifyId = _nid;
 
 
 
