@@ -6893,7 +6893,14 @@
       }
       var _exHtml = '';
       _bkExtras.forEach(function (f) {
-        _exHtml += '<div><label>' + esc(f.label) + '</label><input type="' + esc(f.type || 'text') + '" id="bw-x-' + esc(f.key) + '" value="' + esc(m[f.key] || '') + '"></div>';
+        // v1.6.87 支持 select 下拉（preset extraFields 声明 options + def 默认值）
+        if (f.type === 'select' && f.options && f.options.length) {
+          var _cur = esc(m[f.key] || f.def || f.options[0]);
+          var _opt = f.options.map(function (o) { return '<option' + (esc(o) === _cur ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('');
+          _exHtml += '<div><label>' + esc(f.label) + '</label><select id="bw-x-' + esc(f.key) + '">' + _opt + '</select></div>';
+        } else {
+          _exHtml += '<div><label>' + esc(f.label) + '</label><input type="' + esc(f.type || 'text') + '" id="bw-x-' + esc(f.key) + '" value="' + esc(m[f.key] || '') + '"></div>';
+        }
       });
       var _modeTxt = _bkMode === 'air' ? '【空运】' : (_bkMode === 'sea' ? '【海运】' : '');
       var _exHead = '<div style="font-size:12.5px;color:#1f4e79;margin:10px 0 8px;padding:6px 10px;background:#eef5ff;border-left:3px solid #1f4e79">当前模板：<b>' + esc(_bkTplName || '(未选)') + '</b>（' + esc(_bkTplC || '无承运商标识') + '）' + _modeTxt + '</div>';
