@@ -158,8 +158,25 @@
       } catch (e) {}
 
       var changedCount = 0, protectedChanged = 0, headerChanged = 0;
+      // v1.6.81：合并区从格过滤 —— ExcelJS 内存对象中从格镜像主格值（写出文件时从格不产生内容），
+      //   逐格 diff 若不含从格会产出假差异（CEVA R40 品名写入 H40 主格，从格 I40-M40 被判
+      //   「明细表头被非授权改写」假阳性）。此处按模板合并区构建从格坐标集并跳过。
+      var _slaveSet = {};
+      try {
+        (tws.model.merges || []).forEach(function (m) {
+          var mm = String(m).match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+          if (!mm) return;
+          function _cn(a) { var n = 0; for (var i = 0; i < a.length; i++) n = n * 26 + (a.charCodeAt(i) - 64); return n; }
+          var r1 = parseInt(mm[2], 10), r2 = parseInt(mm[4], 10);
+          var c1 = _cn(mm[1]), c2 = _cn(mm[3]);
+          for (var rr = r1; rr <= r2; rr++)
+            for (var cc = c1; cc <= c2; cc++)
+              if (!(rr === r1 && cc === c1)) _slaveSet[rr + ':' + cc] = 1;
+        });
+      } catch (e) {}
       for (var r = 1; r <= maxR; r++) {
         for (var c = 1; c <= maxC; c++) {
+          if (_slaveSet[r + ':' + c]) continue;
           var pv = cellText(tws.getCell(r, c));
           var fv = cellText(fws.getCell(r, c));
           if (eqVal(pv, fv)) continue;
