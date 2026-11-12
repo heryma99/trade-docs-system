@@ -726,6 +726,8 @@
       invoiceType: meta.invoiceType || '',
       docsAttach: meta.docsAttach || '',
       clearanceMode: meta.clearanceMode || '',
+      docsCustoms: meta.docsCustoms || '',
+      cargoNature: meta.cargoNature || '',
       refId: refId,
       shipper: shipper, consignee: consignee, notify: notify,
       incoterms: meta.incoterms || '',
@@ -930,7 +932,7 @@
     } },
     { name: 'HARVEST', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }], cells: {
       A2: 'shipper@lines', A4: 'shipperTel', A10: 'consignee@lines',
-      B18: 'flight',
+      B18: 'flight', A37: 'cargoNature',
       A30: 'orderNos@line:SO:', C30: 'boxCount', D30: 'gw', F30: 'nameDesc@line'
     } },
     { name: 'UNITEX', mode: 'air', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }, { key: 'flight', label: '航班号', type: 'text' }], cells: {
@@ -971,7 +973,7 @@
       M36: 'gwNum', O36: 'volumeNum'
     } },
     { name: 'ASOS', mode: 'sea', extraFields: [{ key: 'pickup', label: '提货时间', type: 'text' }, { key: 'cutoff', label: '截仓时间', type: 'text' }], cells: {
-      A16: 'pickup', B16: 'cutoff', F52: 'remark',
+      B12: 'customsType', A16: 'pickup', B16: 'cutoff', F52: 'remark',
       C16: 'orderNos@line', E16: 'boxCountNum', F16: 'gwNum', G16: 'volumeNum'
     } },
     { name: 'OVD', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }], cells: {
@@ -2538,6 +2540,11 @@
     { key: 'blType', labels: ['Bill  of Lading  提单正本', 'Telex-release  提单电放'], map: { '正本提单': 'Bill  of Lading  提单正本', '电放提单': 'Telex-release  提单电放' } },
     { key: 'invoiceType', labels: ['增值税普通发票', '增值税专用发票'], map: { '增值税普通发票': '增值税普通发票', '增值税专用发票': '增值税专用发票' } },
     { key: 'docsAttach', multi: true, labels: ['Commercial Invoice', 'Customs Invoice', 'Proforma Invoice', 'Packing List', 'Interim Footwear Invoice'], map: { 'Commercial Invoice': 'Commercial Invoice', 'Customs Invoice': 'Customs Invoice', 'Proforma Invoice': 'Proforma Invoice', 'Packing List': 'Packing List', 'Interim Footwear Invoice': 'Interim Footwear Invoice' }, rows: [40, 55] },
+    // v1.6.90 第二批：SFE/OVD 运费（Prepaid/Collect 精确标签两模板共用）、SFE 提单方式、OVD/RSD 随附单证多选
+    { key: 'freightTerms', labels: ['Prepaid', 'Collect'], map: { 'FREIGHT COLLECT': 'Collect', 'FREIGHT PREPAID': 'Prepaid' } },
+    { key: 'blType', labels: ['Original Bill of Lading :', 'Telex Release :'], map: { '正本提单': 'Original Bill of Lading :', '电放提单': 'Telex Release :' }, rows: [60, 75] },
+    { key: 'docsAttach', multi: true, labels: ['Commercial invoice', 'Consular Invoice', 'Packing List'], map: { 'Commercial Invoice': 'Commercial invoice', 'Consular Invoice': 'Consular Invoice', 'Packing List': 'Packing List' }, rows: [43, 48] },
+    { key: 'docsAttach', multi: true, labels: ['Packing List 装箱单', 'Commercial Invoice 发票', 'Consular Invoice 领事证'], map: { 'Packing List': 'Packing List 装箱单', 'Commercial Invoice': 'Commercial Invoice 发票', 'Consular Invoice': 'Consular Invoice 领事证' }, rows: [37, 42] },
     { labels: ['RMB', 'HKD', 'USD'], pick: function () { return null; } },
     { labels: ['CY/CY', 'CY/DR', 'CFS/CFS', 'CFS/CY'], pick: function () { return null; } }
   ];
@@ -2560,6 +2567,12 @@
         { v: 'LCL/FCL', addr: 'G18', kw: 'lcl/fcl' },
         { v: 'FCL/FCL', addr: 'G20', kw: 'fcl/fcl' },
         { v: 'FCL/LCL', addr: 'G22', kw: 'fcl/lcl' }
+      ] },
+    { key: 'incoterms', rows: [17, 21], slotCell: 'A19', kw: 'EXW', slots: [
+        { v: 'EXW', slot: 1 }, { v: 'FCA', slot: 2 }, { v: 'FOB', slot: 3 }
+      ] },
+    { key: 'docsCustoms', rows: [26, 30], slotCell: 'A28', kw: '请勾选', slots: [
+        { v: '有', slot: 1 }, { v: '无', slot: 2 }
       ] }
   ];
   // 行内复选框串渲染器（占位符 {{cb_xxx}} → 整串）
@@ -3949,6 +3962,21 @@
         ],
         RAINBOW: [
           { key: 'blType', label: '提单方式', type: 'select', options: ['正本提单', '电放提单'], def: '正本提单' }
+        ],
+        SFE: [
+          { key: 'blType', label: '提单方式', type: 'select', options: ['正本提单', '电放提单'], def: '正本提单' }
+        ],
+        OVD: [
+          { key: 'docsAttach', label: '随附单证（可多选）', type: 'multi', options: ['Commercial Invoice', 'Consular Invoice', 'Packing List'] }
+        ],
+        RSD: [
+          { key: 'docsAttach', label: '随附单证（可多选）', type: 'multi', options: ['Packing List', 'Commercial Invoice', 'Consular Invoice'] }
+        ],
+        SINOTEK: [
+          { key: 'docsCustoms', label: '是否有报关资料', type: 'select', options: ['有', '无'], def: '无' }
+        ],
+        HARVEST: [
+          { key: 'cargoNature', label: '货物属性（敏感货申报）', type: 'select', options: ['普货', '含电池', '磁性', '液体/粉末', '马达', '危险品'], def: '普货' }
         ],
         GEODIS: [], ANHAI: []
       };
