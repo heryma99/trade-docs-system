@@ -715,6 +715,12 @@
       soNo: meta.soNo || '',
       placeOfReceipt: meta.placeOfReceipt || '',
       finalDest: meta.finalDest || '',
+      entrustCustoms: meta.entrustCustoms || '',
+      customsDocStatus: meta.customsDocStatus || '',
+      pickupTrucking: meta.pickupTrucking || '',
+      blRequire: meta.blRequire || '',
+      showHs: meta.showHs || '',
+      specialCargo: meta.specialCargo || '',
       refId: refId,
       shipper: shipper, consignee: consignee, notify: notify,
       incoterms: meta.incoterms || '',
@@ -968,11 +974,28 @@
       C35: 'nameCn@join:、', C37: 'hs@join:、',
       J26: 'boxCountNum', J28: 'gwNum', J30: 'volumeNum'
     } },
-    { name: 'FORTUNES', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }], extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
-      A20: 'marks', I16: 'crd',
-      A4: 'shipper', A8: 'consignee', A16: 'pol', E16: 'pod',
-      C20: 'boxCount', E20: 'nameBi', G20: 'gwNum', I20: 'volumeNum'
-    } },
+    { name: 'FORTUNES', mode: 'air',
+      /* v1.6.87：基于物流商原始模板（0464_BOOKING 托书模板.xlsx，2026-11-09）黄色必填区（FFFF00 23 格）全量校准。
+       *   原始模板为填空制（无勾选控件）；补齐报关信息/贸易条款/提单要求/HS显示/特殊货物等 10 个栏位映射；
+       *   noFill：标签识别禁写格（F3「报关信息」F4「报关单位抬头（含发货人字样）」等易被误识别为 party 字段）；
+       *   preset 单格写入（值非空直接覆盖）不受影响，F4 报关抬头/贸易条款等会以正确值覆盖。 */
+      noFill: ['F3', 'F4', 'H5', 'J5', 'H6', 'F8', 'F12', 'A18', 'E18', 'I18', 'F26'],
+      extraFields: [
+        { key: 'crd', label: '货好日期 CRD', type: 'date' },
+        { key: 'entrustCustoms', label: '是否委托报关', type: 'select', options: ['委托报关', '自行报关'], def: '委托报关' },
+        { key: 'customsDocStatus', label: '报关资料状态', type: 'select', options: ['资料已齐', '待补'], def: '资料已齐' },
+        { key: 'pickupTrucking', label: '提货/拖车（是否委托、装货地址、联系人/电话、时间）', type: 'text' },
+        { key: 'blRequire', label: '提单要求', type: 'text' },
+        { key: 'showHs', label: '是否显示 HS CODE', type: 'select', options: ['不显示', '显示'], def: '不显示' },
+        { key: 'specialCargo', label: '特殊货物', type: 'select', options: ['无', '含电池', '磁性', '化工品', '其它'], def: '无' }
+      ],
+      cells: {
+        A20: 'marks', I16: 'crd',
+        A4: 'shipper', A8: 'consignee', A12: 'notify', A16: 'pol', E16: 'pod',
+        F4: 'customsTitle', H5: 'entrustCustoms', J5: 'customsType', H6: 'customsDocStatus',
+        F8: 'pickupTrucking', F12: 'tradeChargeTxt', A18: 'blRequire', E18: 'showHs', I18: 'specialCargo',
+        C20: 'boxCount', E20: 'nameBi', G20: 'gwNum', I20: 'volumeNum'
+      } },
     { name: 'CEVA', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }, { key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
       B37: 'crd', B53: 'remark',
       A6: 'shipper', A14: 'consignee',
@@ -1122,6 +1145,16 @@
       if (spec === 'soNo') return String(data.soNo || '');
       if (spec === 'placeOfReceipt') return String(data.placeOfReceipt || '');
       if (spec === 'finalDest') return String(data.finalDest || '');
+      // v1.6.87：FORTUNES 原始模板黄色必填区接入
+      if (spec === 'customsTitle') { var _ct = String(data.customsType || ''); return _ct.indexOf('买单') >= 0 ? '买单报关' : ((data.shipper || {}).name || ''); }
+      if (spec === 'entrustCustoms') return String(data.entrustCustoms || '委托报关');
+      if (spec === 'customsDocStatus') return String(data.customsDocStatus || '资料已齐');
+      if (spec === 'pickupTrucking') return String(data.pickupTrucking || '');
+      if (spec === 'blRequire') return String(data.blRequire || '');
+      if (spec === 'showHs') return String(data.showHs || '不显示');
+      if (spec === 'specialCargo') return String(data.specialCargo || '无');
+      if (spec === 'tradeChargeTxt') { var _tc = []; if (data.incoterms) _tc.push('贸易条款：' + data.incoterms); if (data.freightTerms) _tc.push('费用条款：' + (String(data.freightTerms).indexOf('PREPAID') >= 0 ? '预付' : '到付')); return _tc.join(String.fromCharCode(10)); }
+      if (spec === 'customsType') return String(data.customsType || '');
       var mEt = spec.match(/^etd@inline:(.+)$/);
       if (mEt) { var et2 = String(data.etd || ''); return mEt[1] + et2; }
       if (spec === 'notify') { var ny0 = data.notify || {}; return [ny0.name, ny0.address].filter(Boolean).join(String.fromCharCode(10)); }
@@ -2688,6 +2721,19 @@
         }
       });
     });
+    // v1.6.87：原始文本值快照（noFill 格误写恢复用——fillHeaderByLabels 会把含「发货人」字样的
+    //   说明格误识别为 party 值格，需按快照回滚，随后 preset 阶段写入正确值）。
+    var origValues = {};
+    try {
+      ws.eachRow({ includeEmpty: true }, function (row, rn) {
+        row.eachCell({ includeEmpty: true }, function (cell, cn) {
+          var v = cell.value;
+          if (v == null) return;
+          var txt = (v && v.richText) ? v.richText.map(function (t) { return t.text; }).join('') : String(v);
+          if (txt !== '') origValues[rn + ':' + cn] = txt;
+        });
+      });
+    } catch (e) {}
     // 同时抓取原始合并单元格，插入明细行后需要按行位移重新计算并应用，
     // 否则下方合并区域会与新插入行重叠或错位，导致内容显示不全。
     var origMerges = (ws.model.merges || []).slice().map(parseMergeRef).filter(Boolean);
@@ -2776,6 +2822,18 @@
     var _labelMap = (options && options.labelMap && options.labelMap.length)
       ? options.labelMap
       : buildLabelMap(wb, itemsRowNum, { booking: IS_BOOKING });
+    // v1.6.87：预设 noFill 格从标签填充中剔除（FORTUNES F3「报关信息」F4「报关单位抬头」等
+    //   含「发货人/地址」字样的标签说明文字会被误识别为 party 字段写入，覆盖模板栏位）。
+    if (_bkForm && (_bkForm.noFill || []).length) {
+      var _nf = {};
+      (_bkForm.noFill || []).forEach(function (a) { _nf[a] = 1; });
+      _labelMap = _labelMap.filter(function (e) {
+        if (!e || !e.row || !e.col) return true;
+        var n = e.col, s = '';
+        while (n > 0) { var md = (n - 1) % 26; s = String.fromCharCode(65 + md) + s; n = Math.floor((n - 1) / 26); }
+        return !_nf[s + e.row];
+      });
+    }
     fillByFieldLabels(ws, data, _labelMap, mergedMaps, IS_BOOKING);
 
     // 明细区下界（供 2.5 清理残留行与 3 跳过明细区使用，必须在前面算出）
@@ -3126,6 +3184,21 @@
     }
     // v1.6.68（仅订舱单）：汇总表单式预设直写（Manor/RXO 类）——放在所有其他填充之后，
     //   坐标级精确值最终落位；目标格非空则跳过（绝不覆盖模板标签/固定文本）。
+    // v1.6.87：noFill 格恢复模板原始值——fillHeaderByLabels/fillByFieldLabels 会把含「发货人/地址」
+    //   字样的说明格（FORTUNES F3「报关信息」F4「报关单位抬头」F26「托运人证实」）误识别为 party 值格；
+    //   按快照回滚后，随后的 preset 直写对已映射格（F4/H5/J5/H6/F8/F12/A18/E18/I18）写入正确值。
+    if (_bkForm && (_bkForm.noFill || []).length) {
+      (_bkForm.noFill || []).forEach(function (a) {
+        var mm = String(a).match(/^([A-Z]+)(\d+)$/);
+        if (!mm) return;
+        var cn = 0;
+        for (var ii = 0; ii < mm[1].length; ii++) cn = cn * 26 + (mm[1].charCodeAt(ii) - 64);
+        var rn = Number(mm[2]);
+        var orig = origValues[rn + ':' + cn];
+        if (orig != null) ws.getCell(rn, cn).value = orig;
+        else ws.getCell(rn, cn).value = null;
+      });
+    }
     if (IS_BOOKING && _bkForm) {
       _writeBookingFormPreset(ws, _bkForm, data);
     }
