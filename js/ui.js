@@ -6503,6 +6503,19 @@
 
 
     if (!body) return;
+    // v1.6.88 P2：下拉模糊筛选挂载器（输入只隐藏不匹配的 option，取值/收集逻辑不变）
+    function _bwAttachSelFilter(sid) {
+      var inp = document.getElementById(sid + '-q'), sel = document.getElementById(sid);
+      if (!inp || !sel) return;
+      inp.oninput = function () {
+        var q = inp.value.trim().toLowerCase();
+        Array.prototype.forEach.call(sel.options, function (op) {
+          if (!op.value) { op.hidden = false; return; }
+          var hay = (op.getAttribute('data-q') || op.text || '').toLowerCase();
+          op.hidden = !!q && hay.indexOf(q) < 0;
+        });
+      };
+    }
 
 
 
@@ -6522,31 +6535,14 @@
 
 
 
-      var rows = orders.map(function (o) {
-
-
-
+      // v1.6.88 P1 分页：行渲染抽取 + 每页默认 10 条（10/20/50 可选）
+      function bwOrdRow(o) {
         var qty = (o.items || []).reduce(function (s, i) { return s + i.qty; }, 0);
-
-
-
         var ck = w.orderIds.indexOf(o.id) >= 0 ? ' checked' : '';
-
-
-
         return '<tr class="checkrow"><td><input type="checkbox" class="bw-ord" value="' + o.id + '"' + ck + '></td>' +
-
-
-
           '<td class="mono">' + esc(o.orderNo) + '</td><td>' + (o.source === 'from_packing' ? '<span class="badge purple">箱单直生</span>' : '<span class="badge blue">聚水潭</span>') + '</td>' +
-
-
-
           '<td class="num">' + qty + '</td></tr>';
-
-
-
-      }).join('');
+      }
 
 
 
@@ -6554,11 +6550,9 @@
 
 
 
-        '<table class="grid"><tr><th></th><th>订单号</th><th>来源</th><th>数量</th></tr>' +
+        '<table class="grid"><tr><th></th><th>订单号</th><th>来源</th><th>数量</th></tr><tbody id="bw-ord-tbody"></tbody></table>' +
 
-
-
-        (rows || '<tr><td colspan="4" class="empty">暂无订单</td></tr>') + '</table>' +
+        '<div style="margin-top:8px;display:flex;align-items:center;gap:10px;font-size:12.5px;color:#555"><button class="btn" id="bw-ord-prev" style="padding:2px 10px">← 上一页</button><span id="bw-ord-info"></span><button class="btn" id="bw-ord-next" style="padding:2px 10px">下一页 →</button><label style="margin-left:auto">每页 <select id="bw-ord-per" style="padding:1px 4px"><option>10</option><option>20</option><option>50</option></select> 条</label></div>' +
 
 
 
@@ -6566,11 +6560,34 @@
 
 
 
+      w._ordPage = w._ordPage || 0;
+      function bwOrdRender() {
+        var per = Number((document.getElementById('bw-ord-per') || {}).value || 10) || 10;
+        var totalPages = Math.max(1, Math.ceil(orders.length / per));
+        if (w._ordPage >= totalPages) w._ordPage = totalPages - 1;
+        if (w._ordPage < 0) w._ordPage = 0;
+        document.getElementById('bw-ord-tbody').innerHTML = orders.slice(w._ordPage * per, w._ordPage * per + per).map(bwOrdRow).join('') || '<tr><td colspan="4" class="empty">暂无订单</td></tr>';
+        document.getElementById('bw-ord-info').textContent = '共 ' + orders.length + ' 单 · 第 ' + (w._ordPage + 1) + ' / ' + totalPages + ' 页';
+        document.getElementById('bw-ord-prev').disabled = w._ordPage <= 0;
+        document.getElementById('bw-ord-next').disabled = w._ordPage >= totalPages - 1;
+        Array.prototype.forEach.call(document.querySelectorAll('.bw-ord'), function (c) {
+          c.onchange = function () {
+            var i = w.orderIds.indexOf(c.value);
+            if (c.checked && i < 0) w.orderIds.push(c.value);
+            if (!c.checked && i >= 0) w.orderIds.splice(i, 1);
+          };
+        });
+      }
+      document.getElementById('bw-ord-prev').onclick = function () { w._ordPage--; bwOrdRender(); };
+      document.getElementById('bw-ord-next').onclick = function () { w._ordPage++; bwOrdRender(); };
+      document.getElementById('bw-ord-per').onchange = function () { w._ordPage = 0; bwOrdRender(); };
+      bwOrdRender();
+
       document.getElementById('bw-next0').onclick = function () {
 
 
 
-        var ids = Array.from(document.querySelectorAll('.bw-ord:checked')).map(function (c) { return c.value; });
+        var ids = (w.orderIds || []).slice(); // v1.6.88 分页下勾选状态持久在 w.orderIds，跨页保留
 
 
 
@@ -6650,7 +6667,7 @@
 
 
 
-        '<div><label class="req">订舱单模板（仅启用中）</label><select id="bw-tpl"><option value="">请选择</option>' + tplOpts + '</select></div>' +
+        '<div><label class="req">订舱单模板（仅启用中）</label><input id="bw-tpl-q" placeholder="🔍 输入筛选" style="width:100%;padding:3px 8px;margin-bottom:4px;font-size:12px"><select id="bw-tpl"><option value="">请选择</option>' + tplOpts + '</select></div>' +
 
 
 
@@ -6665,6 +6682,8 @@
       document.getElementById('bw-back1').onclick = function () { w.step = 0; render(); };
 
 
+
+      _bwAttachSelFilter('bw-tpl');
 
       document.getElementById('bw-next1').onclick = async function () {
 
@@ -6758,13 +6777,9 @@
 
 
 
-      function opts(type, sel) {
+      function opts(type, sel, ph) {
 
-
-
-        return '<option value="">请选择</option>' + parties.filter(function (p) { return p.type === type; }).map(function (p) { return '<option value="' + p.id + '"' + (sel === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>'; }).join('');
-
-
+        return '<option value="">' + esc(ph || '请选择') + '</option>' + parties.filter(function (p) { return p.type === type; }).map(function (p) { var _q = [p.name, p.company, p.country, p.city, p.warehouseCode].filter(Boolean).join(' '); return '<option value="' + p.id + '"' + (sel === p.id ? ' selected' : '') + ' data-q="' + esc(_q) + '">' + esc(p.name) + '</option>'; }).join('');
 
       }
 
@@ -6782,15 +6797,15 @@
 
 
 
-        '<div><label class="req">SHIPPER 托运人</label><select id="bw-shipper">' + opts('shipper', w.shipperId) + '</select></div>' +
+        '<div><label class="req">SHIPPER 托运人</label><input id="bw-shipper-q" placeholder="🔍 输入筛选" style="width:100%;padding:3px 8px;margin-bottom:4px;font-size:12px"><select id="bw-shipper">' + opts('shipper', w.shipperId) + '</select></div>' +
 
 
 
-        '<div><label class="req">CONSIGNEE 收货人</label><select id="bw-consignee">' + opts('consignee', w.consigneeId) + '</select></div>' +
+        '<div><label class="req">CONSIGNEE 收货人</label><input id="bw-consignee-q" placeholder="🔍 输入筛选" style="width:100%;padding:3px 8px;margin-bottom:4px;font-size:12px"><select id="bw-consignee">' + opts('consignee', w.consigneeId) + '</select></div>' +
 
 
 
-        '<div><label>NOTIFY 通知人</label><select id="bw-notify">' + opts('notify', w.notifyId) + '</select></div>' +
+        '<div><label>NOTIFY 通知人</label><input id="bw-notify-q" placeholder="🔍 输入筛选" style="width:100%;padding:3px 8px;margin-bottom:4px;font-size:12px"><select id="bw-notify">' + opts('notify', w.notifyId, 'SAME AS CONSIGNEE（同收货人）') + '</select></div>' +
 
 
 
@@ -6834,7 +6849,7 @@
 
 
 
-        '<div><label>唛头</label><input id="bw-marks" value="' + esc(m.shippingMarks || 'N/M') + '"></div>' +
+        '<div><label>唛头</label><input id="bw-marks" value="' + esc(m.shippingMarks || '') + '" placeholder="无唛头可留空"></div>' +
 
 
 
@@ -6914,6 +6929,9 @@
 
       var _bNoEl = document.getElementById('bw-no');
       if (_bNoEl) _bNoEl.addEventListener('input', function () { w._invNoAuto = false; });
+      // v1.6.88 P2 模糊筛选：4 个下拉挂载
+      ['bw-shipper', 'bw-consignee', 'bw-notify', 'bw-tpl'].forEach(_bwAttachSelFilter);
+
       document.getElementById('bw-next2').onclick = function () {
         // v1.6.79 必填校验：带 * 字段未填不得进入下一步
         var _reqMiss = [];
