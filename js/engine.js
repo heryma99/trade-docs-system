@@ -994,7 +994,7 @@
        *   H5/J5/H6 不再写文字（是/否·已提供/待补充·单证/买单 由 zipPost 表单复选框自动勾选表达）；
        *   新增 entrustPickup（是否委托提货，驱动「是否委托我们提货」是/否复选框）。
        * noFill：标签识别禁写格；preset 单格写入（值非空直接覆盖）不受 noFill 限制。 */
-      noFill: ['F3', 'F4', 'H5', 'J5', 'H6', 'F7', 'F8', 'F12', 'A18', 'E18', 'I18', 'F26', 'K8', 'I15'],
+      noFill: ['F3', 'F4', 'H5', 'J5', 'H6', 'F7', 'F8', 'F12', 'A18', 'E18', 'I18', 'F26', 'K8', 'I15', 'K12'],
       extraFields: [
         { key: 'crd', label: '货好日期 CRD', type: 'date' },
         { key: 'entrustCustoms', label: '是否委托报关', type: 'select', options: ['委托报关', '自行报关'], def: '委托报关' },
