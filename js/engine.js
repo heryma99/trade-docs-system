@@ -1194,7 +1194,8 @@
       if (spec === 'placeOfReceipt') return String(data.placeOfReceipt || '');
       if (spec === 'finalDest') return String(data.finalDest || '');
       // v1.6.87：FORTUNES 原始模板黄色必填区接入
-      if (spec === 'customsTitle') { var _ct = String(data.customsType || ''); return _ct.indexOf('买单') >= 0 ? '买单报关' : ((data.shipper || {}).name || ''); }
+      // v1.7.3：F4 标题「报关单位抬头 CUSTOMS INFORMATION」保留在首行，答案写在下一行（不整格覆盖）
+      if (spec === 'customsTitle') { var _ct = String(data.customsType || ''); var _ctv = _ct.indexOf('买单') >= 0 ? '买单报关' : ((data.shipper || {}).name || ''); return _ctv ? '报关单位抬头 CUSTOMS INFORMATION' + String.fromCharCode(10) + _ctv : ''; }
       if (spec === 'entrustCustoms') return String(data.entrustCustoms || '委托报关');
       if (spec === 'customsDocStatus') return String(data.customsDocStatus || '资料已齐');
       if (spec === 'pickupTrucking') return String(data.pickupTrucking || '');
