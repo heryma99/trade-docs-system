@@ -7539,7 +7539,15 @@
         //   ActiveX 复选框控件链 + <pageSetUpPr fitToPage="1"/>（A4 一页宽总开关）。
         //   后处理失败自动回退原始 buffer，不阻断导出；发票/申报/装箱单仍走 exporter.download 原路径。
         if (typeof exporter.downloadProcessed === 'function') {
-          await exporter.downloadProcessed(w._wb, fname, { srcBuffer: w._tplBuf });
+          // v1.7.1：附带勾选数据 → zip 层自动勾选物流商表单复选框（当前仅 FORTUNES 有映射表）
+          var _bkD = w._data || {};
+          await exporter.downloadProcessed(w._wb, fname, { srcBuffer: w._tplBuf, ctrlData: {
+            carrier: w.carrier,
+            entrustCustoms: _bkD.entrustCustoms, customsDocStatus: _bkD.customsDocStatus,
+            customsType: _bkD.customsType, incoterms: _bkD.incoterms, freightTerms: _bkD.freightTerms,
+            showHs: _bkD.showHs, specialCargo: _bkD.specialCargo, docsAttach: _bkD.docsAttach,
+            blRequire: _bkD.blRequire, entrustPickup: _bkD.entrustPickup
+          } });
         } else {
           await exporter.download(w._wb, fname);
         }
