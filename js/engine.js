@@ -717,6 +717,7 @@
       finalDest: meta.finalDest || '',
       entrustCustoms: meta.entrustCustoms || '',
       customsDocStatus: meta.customsDocStatus || '',
+      entrustPickup: meta.entrustPickup || '',
       pickupTrucking: meta.pickupTrucking || '',
       blRequire: meta.blRequire || '',
       showHs: meta.showHs || '',
@@ -988,14 +989,17 @@
     } },
     { name: 'FORTUNES', mode: 'air',
       /* v1.6.87：基于物流商原始模板（0464_BOOKING 托书模板.xlsx，2026-11-09）黄色必填区（FFFF00 23 格）全量校准。
-       *   原始模板为填空制（无勾选控件）；补齐报关信息/贸易条款/提单要求/HS显示/特殊货物等 10 个栏位映射；
-       *   noFill：标签识别禁写格（F3「报关信息」F4「报关单位抬头（含发货人字样）」等易被误识别为 party 字段）；
-       *   preset 单格写入（值非空直接覆盖）不受影响，F4 报关抬头/贸易条款等会以正确值覆盖。 */
-      noFill: ['F3', 'F4', 'H5', 'J5', 'H6', 'F8', 'F12', 'A18', 'E18', 'I18', 'F26'],
+       * v1.7.1：修正三处通用标签扫描溢出（F7「提货/拖车」标题 / K8 空白格 / I15「货好时间 CRD」标签被收货人地址与 POD 误写）；
+       *   pickupTrucking 写入目标 F8→K8（保留 F8 物流商 5 行填空模板原样）；
+       *   H5/J5/H6 不再写文字（是/否·已提供/待补充·单证/买单 由 zipPost 表单复选框自动勾选表达）；
+       *   新增 entrustPickup（是否委托提货，驱动「是否委托我们提货」是/否复选框）。
+       * noFill：标签识别禁写格；preset 单格写入（值非空直接覆盖）不受 noFill 限制。 */
+      noFill: ['F3', 'F4', 'H5', 'J5', 'H6', 'F7', 'F8', 'F12', 'A18', 'E18', 'I18', 'F26', 'K8', 'I15'],
       extraFields: [
         { key: 'crd', label: '货好日期 CRD', type: 'date' },
         { key: 'entrustCustoms', label: '是否委托报关', type: 'select', options: ['委托报关', '自行报关'], def: '委托报关' },
         { key: 'customsDocStatus', label: '报关资料状态', type: 'select', options: ['资料已齐', '待补'], def: '资料已齐' },
+        { key: 'entrustPickup', label: '是否委托提货', type: 'select', options: ['是', '否'] },
         { key: 'pickupTrucking', label: '提货/拖车（是否委托、装货地址、联系人/电话、时间）', type: 'text' },
         { key: 'blRequire', label: '提单要求', type: 'text' },
         { key: 'showHs', label: '是否显示 HS CODE', type: 'select', options: ['不显示', '显示'], def: '不显示' },
@@ -1004,8 +1008,8 @@
       cells: {
         A20: 'marks', I16: 'crd',
         A4: 'shipper', A8: 'consignee', A12: 'notify', A16: 'pol', E16: 'pod',
-        F4: 'customsTitle', H5: 'entrustCustoms', J5: 'customsType', H6: 'customsDocStatus',
-        F8: 'pickupTrucking', F12: 'tradeChargeTxt', A18: 'blRequire', E18: 'showHs', I18: 'specialCargo',
+        F4: 'customsTitle',
+        K8: 'pickupTrucking', F12: 'tradeChargeTxt', A18: 'blRequire', E18: 'showHs', I18: 'specialCargo',
         C20: 'boxCount', E20: 'nameBiHs', G20: 'gwNum', I20: 'volumeNum', A30: 'docsChecklistTxt'
       } },
     { name: 'CEVA', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }, { key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
@@ -1194,20 +1198,32 @@
       if (spec === 'entrustCustoms') return String(data.entrustCustoms || '委托报关');
       if (spec === 'customsDocStatus') return String(data.customsDocStatus || '资料已齐');
       if (spec === 'pickupTrucking') return String(data.pickupTrucking || '');
+      if (spec === 'entrustPickup') return String(data.entrustPickup || '');
       if (spec === 'blRequire') return String(data.blRequire || '');
       if (spec === 'showHs') return String(data.showHs || '不显示');
-      if (spec === 'specialCargo') return String(data.specialCargo || '无');
-      if (spec === 'tradeChargeTxt') { var _tc = []; if (data.incoterms) _tc.push('贸易条款：' + data.incoterms); if (data.freightTerms) _tc.push('费用条款：' + (String(data.freightTerms).indexOf('PREPAID') >= 0 ? '预付' : '到付')); return _tc.join(String.fromCharCode(10)); }
+      // v1.7.1：无/含电池/磁性 → 由 zipPost 复选框勾选表达（普货/带电/磁性），不写文字；化工品/其它保留文字写入
+      if (spec === 'specialCargo') { var _scv = String(data.specialCargo == null ? '' : data.specialCargo).trim() || '无'; return ({ '无': 1, '含电池': 1, '磁性': 1 })[_scv] ? '' : _scv; }
+      // v1.7.1：EXW/FOB + PREPAID/COLLECT → 复选框勾选表达（zipPost），不再覆写「贸易条款：/费用条款：」标签格
+      if (spec === 'tradeChargeTxt') {
+        var _incT = String(data.incoterms || '').trim().toUpperCase();
+        var _ftT = String(data.freightTerms || '').toUpperCase();
+        if ((_incT === 'EXW' || _incT === 'FOB') && (_ftT.indexOf('PREPAID') >= 0 || _ftT.indexOf('COLLECT') >= 0)) return '';
+        var _tc = []; if (data.incoterms) _tc.push('贸易条款：' + data.incoterms); if (data.freightTerms) _tc.push('费用条款：' + (String(data.freightTerms).indexOf('PREPAID') >= 0 ? '预付' : '到付')); return _tc.join(String.fromCharCode(10));
+      }
       if (spec === 'customsType') return String(data.customsType || '');
       if (spec === 'batteryQty') return String(data.batteryQty || '');
       if (spec === 'truckerName') return String(data.truckerName || '');
       if (spec === 'truckerVehicle') return String(data.truckerVehicle || '');
       if (spec === 'truckerPhone') return String(data.truckerPhone || '');
       if (spec === 'docsChecklistTxt') {
+        // v1.7.1：清单选项由 zipPost 表单复选框勾选表达（模板 6 个 ☐ 控件）；仅模板无对应复选框的
+        //   选项（如 CUSTOMS DECLARATION 报关单）回写文字兜底，全部可勾选时保留模板原标签不写。
         var _copts = ['COMMERCIAL INVOICE 发票', 'PACKING LIST 装箱单', 'CUSTOMS DECLARATION 报关单', 'POWER OF ATTORNEY 报关委托书', 'DECLARATION ELEMENTS 申报要素', 'MSDS/磁检报告'];
+        var _tickable = ['COMMERCIAL INVOICE 发票', 'PACKING LIST 装箱单', 'POWER OF ATTORNEY 报关委托书', 'DECLARATION ELEMENTS 申报要素', 'MSDS/磁检报告'];
         var _ch = String(data.docsAttach || '').split(/[、,，;；]/).map(function (x) { return x.trim(); });
-        var _line = _copts.map(function (o) { return (_ch.indexOf(o) >= 0 ? '☑' : '☐') + ' ' + o; }).join('   ');
-        return '附件资料清单DOCUMENTS CHECKLIST：' + String.fromCharCode(10) + _line;
+        var _rest = _ch.filter(function (o) { return o && _copts.indexOf(o) >= 0 && _tickable.indexOf(o) < 0; });
+        if (!_rest.length) return '';
+        return '附件资料清单DOCUMENTS CHECKLIST：' + String.fromCharCode(10) + _rest.map(function (o) { return '☑ ' + o; }).join('   ');
       }
       var mEt = spec.match(/^etd@inline:(.+)$/);
       if (mEt) { var et2 = String(data.etd || ''); return mEt[1] + et2; }
