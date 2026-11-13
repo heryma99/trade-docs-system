@@ -10130,7 +10130,7 @@
 
 
 
-    var head = await fetch(SYNC_API + '?ref=' + SYNC_BRANCH, { headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' } });
+    var head = await fetch(SYNC_API + '?ref=' + SYNC_BRANCH + '&_=' + Date.now(), { headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json', 'Cache-Control': 'no-cache' } }); // v1.6.98 缓存穿透：刚提交后 GET 可能拿到 CDN 缓存的旧 sha → 拿旧 sha PUT 恒 409
 
 
 
@@ -10362,7 +10362,7 @@
 
 
 
-          var head = await fetch(SYNC_API + '?ref=' + SYNC_BRANCH, { headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' } });
+          var head = await fetch(SYNC_API + '?ref=' + SYNC_BRANCH + '&_=' + Date.now(), { headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json', 'Cache-Control': 'no-cache' } }); // v1.6.98 缓存穿透：刚提交后 GET 可能拿到 CDN 缓存的旧 sha → 拿旧 sha PUT 恒 409
 
 
 
@@ -10586,7 +10586,7 @@
 
 
 
-      if (res.status === 409 || res.status === 422) { lastErr = '并发提交，自动重试 ' + attempt + '/5'; continue; }
+      if (res.status === 409 || res.status === 422) { lastErr = '并发提交，自动重试 ' + attempt + '/5'; await new Promise(function (r) { setTimeout(r, 900 * attempt); }); continue; } // v1.6.98 退避：等缓存过期与并发写入落定
 
 
 
