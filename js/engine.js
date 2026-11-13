@@ -1009,7 +1009,7 @@
         A20: 'marks', I16: 'crd',
         A4: 'shipper', A8: 'consignee', A12: 'notify', A16: 'pol', E16: 'pod',
         F4: 'customsTitle',
-        K8: 'pickupTrucking', F12: 'tradeChargeTxt', A18: 'blRequire', E18: 'showHs', I18: 'specialCargo',
+        K8: 'pickupTrucking', F12: 'tradeChargeTxt', A18: 'blRequire', I18: 'specialCargo',
         C20: 'boxCount', E20: 'nameBiHs', G20: 'gwNum', I20: 'volumeNum', A30: 'docsChecklistTxt'
       } },
     { name: 'CEVA', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }, { key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
