@@ -327,6 +327,7 @@
             'ctrlProp28.xml': function (d) { return String(d.docsAttach || '').indexOf('POWER OF ATTORNEY') >= 0; },
             'ctrlProp29.xml': function (d) { return String(d.docsAttach || '').indexOf('MSDS') >= 0; }
           };
+          var tickedProps = [];
           for (var pn in TICK_RULES) {
             var _tp = 'xl/ctrlProps/' + pn;
             if (!E[_tp]) continue;
@@ -335,8 +336,9 @@
                 var _px = await readEntry(E, _tp);
                 if (_px && _px.indexOf('checked=') < 0) {
                   setText(E, _tp, _px.replace('<formControlPr ', '<formControlPr checked="Checked" '));
-                  rep.ticked = (rep.ticked || 0) + 1;
                 }
+                tickedProps.push(pn);
+                rep.ticked = (rep.ticked || 0) + 1;
               }
             } catch (eTk) {}
           }
@@ -392,6 +394,57 @@
             }
           }
         } catch (eVM) {}
+
+        // B2.6) v1.7.3 勾选状态双写：VML ClientData 有独立于 ctrlProps 的勾选状态，
+        //   部分查看器（WPS/在线预览）只认 VML 层 —— 按「控件锚点 ↔ VML x:Anchor」配对同步写入。
+        //   锚点换算：VML 偏移单位 = px（EMU/9525），行/列号一致即配对（±2px 容差）。
+        if (tickedProps && tickedProps.length) {
+          try {
+            var _srcSheet = await readEntry(srcEntries, 'xl/worksheets/sheet1.xml');
+            var _srcRels = await readEntry(srcEntries, 'xl/worksheets/_rels/sheet1.xml.rels');
+            var _relM = {};
+            (_srcRels.match(/<Relationship[^>]*\/>/g) || []).forEach(function (r) {
+              _relM[(r.match(/Id="(rId\d+)"/) || [])[1]] = (r.match(/Target="([^"]+)"/) || [])[1];
+            });
+            var _anchorByProp = {};
+            (_srcSheet.match(/<control\b[^>]+><controlPr[^>]*><anchor[^>]*><from><xdr:col>(\d+)<\/xdr:col><xdr:colOff>(\d+)<\/xdr:colOff><xdr:row>(\d+)<\/xdr:row><xdr:rowOff>(\d+)<\/xdr:rowOff>/g) || []).forEach(function (blk) {
+              var _rid = (blk.match(/r:id="(rId\d+)"/) || [])[1];
+              var _c = parseInt((blk.match(/<xdr:col>(\d+)</) || [])[1], 10);
+              var _co = parseInt((blk.match(/<xdr:colOff>(\d+)</) || [])[1], 10);
+              var _r = parseInt((blk.match(/<xdr:row>(\d+)</) || [])[1], 10);
+              var _ro = parseInt((blk.match(/<xdr:rowOff>(\d+)</) || [])[1], 10);
+              var _tg = (_relM[_rid] || '').split('/').pop();
+              if (_tg) _anchorByProp[_tg] = { c: _c, co: Math.round(_co / 9525), r: _r, ro: Math.round(_ro / 9525) };
+            });
+            for (var vv3 in E) {
+              if (!/^xl\/drawings\/vmlDrawing\d+\.vml$/.test(vv3)) continue;
+              var _vx = await readEntry(E, vv3);
+              if (!_vx) continue;
+              var _vmod = false;
+              var _shapes = _vx.match(/<v:shape[^>]*>[\s\S]*?<\/v:shape>/g) || [];
+              for (var si3 = 0; si3 < _shapes.length; si3++) {
+                var _sh = _shapes[si3];
+                var _cd = _sh.match(/<x:ClientData ObjectType="Checkbox">([\s\S]*?)<\/x:ClientData>/);
+                if (!_cd) continue;
+                var _an = (_cd[1].match(/<x:Anchor>([^<]+)<\/x:Anchor>/) || [])[1];
+                if (!_an) continue;
+                var _p = _an.split(',').map(function (x) { return parseInt(x, 10); });
+                var _hit = null;
+                for (var tp2 = 0; tp2 < tickedProps.length; tp2++) {
+                  var _a2 = _anchorByProp[tickedProps[tp2]];
+                  if (_a2 && _a2.r === _p[2] && _a2.c === _p[0] && Math.abs(_a2.co - _p[1]) <= 2 && Math.abs(_a2.ro - _p[3]) <= 2) { _hit = tickedProps[tp2]; break; }
+                }
+                if (_hit && _cd[1].indexOf('<x:Checked>') < 0) {
+                  var _newSh = _sh.replace(/(<x:ClientData ObjectType="Checkbox">)/, '$1<x:Checked>1</x:Checked>');
+                  _vx = _vx.split(_sh).join(_newSh);
+                  _vmod = true;
+                  rep.vmlTicked = (rep.vmlTicked || 0) + 1;
+                }
+              }
+              if (_vmod) setText(E, vv3, _vx);
+            }
+          } catch (eVT) {}
+        }
 
         // B3) 按 sheet 顺序映射，注入 <controls> + rels
         var os = await sheetOrder(srcEntries), oo = await sheetOrder(E);
