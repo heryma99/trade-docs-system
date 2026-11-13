@@ -7044,7 +7044,7 @@
           var _opt = f.options.map(function (o) { return '<option' + (esc(o) === _cur ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('');
           _exHtml += '<div><label>' + esc(f.label) + '</label><select id="bw-x-' + esc(f.key) + '">' + _opt + '</select></div>';
         } else {
-          _exHtml += '<div><label>' + esc(f.label) + '</label><input type="' + esc(f.type || 'text') + '" id="bw-x-' + esc(f.key) + '" value="' + esc(m[f.key] || '') + '"></div>';
+          _exHtml += '<div><label>' + esc(f.label) + '</label><input type="' + esc(f.type || 'text') + '" id="bw-x-' + esc(f.key) + '" value="' + esc(m[f.key] || f.def || '') + '"></div>';
         }
       });
       var _modeTxt = _bkMode === 'air' ? '【空运】' : (_bkMode === 'sea' ? '【海运】' : '');
