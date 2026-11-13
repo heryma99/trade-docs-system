@@ -64,7 +64,7 @@
       var chain;
       if (pp && src) {
         chain = Promise.resolve()
-          .then(function () { return pp(buf, src); })
+          .then(function () { return pp(buf, src, opts.ctrlData); })  // v1.7.1：透传复选框勾选数据
           .catch(function () { return buf; });      // 后处理异常 → 回退原始
       } else {
         chain = Promise.resolve(buf);
