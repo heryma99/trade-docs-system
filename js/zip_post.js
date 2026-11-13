@@ -244,7 +244,7 @@
    * @param {ArrayBuffer|Uint8Array} [srcBuffer]  源模板 xlsx（提供才做 ActiveX 注入）
    * @returns {Promise<Uint8Array>} 处理后 xlsx；任何异常 → 原样返回入参（不阻断导出）
    */
-  async function postProcessBooking(buffer, srcBuffer) {
+  async function postProcessBooking(buffer, srcBuffer, ctrlData) {
     var u8 = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
     try {
       var out = await unzip(u8);
@@ -295,6 +295,50 @@
           if (/^xl\/(activeX|ctrlProps)\//.test(sn)) {
             var b = await readEntryBytes(srcEntries, sn);
             if (b) { setBytes(E, sn, b); rep.parts++; }
+          }
+        }
+
+        // B1.5) v1.7.1 表单复选框自动勾选（FORTUNES）：按用户选择把物流商托书上的 ☐ 控件置为 Checked。
+        //   映射表 = 线上模板 tpl_booking_fortunes.xlsx 的 ctrlProp 部件 ↔ VML 文字标签逐一锚点比对（29/29 实证）。
+        //   只勾选、从不取消 —— 模板默认勾选（MAWB主单 ctrlProp13）原样保留。
+        if (ctrlData && String(ctrlData.carrier || '').trim().toUpperCase() === 'FORTUNES') {
+          var TICK_RULES = {
+            'ctrlProp1.xml':  function (d) { return String(d.entrustCustoms || '').trim() === '委托报关'; },
+            'ctrlProp2.xml':  function (d) { return String(d.entrustCustoms || '').trim() === '自行报关'; },
+            'ctrlProp3.xml':  function (d) { return String(d.customsType || '').indexOf('单证') >= 0; },
+            'ctrlProp4.xml':  function (d) { return String(d.customsType || '').indexOf('买单') >= 0; },
+            'ctrlProp5.xml':  function (d) { return String(d.customsDocStatus || '').trim() === '资料已齐'; },
+            'ctrlProp6.xml':  function (d) { return String(d.customsDocStatus || '').trim() === '待补'; },
+            'ctrlProp7.xml':  function (d) { return String(d.entrustPickup || '').trim() === '是'; },
+            'ctrlProp8.xml':  function (d) { return String(d.entrustPickup || '').trim() === '否'; },
+            'ctrlProp9.xml':  function (d) { return String(d.incoterms || '').trim().toUpperCase() === 'EXW'; },
+            'ctrlProp10.xml': function (d) { return String(d.incoterms || '').trim().toUpperCase() === 'FOB'; },
+            'ctrlProp11.xml': function (d) { return String(d.freightTerms || '').toUpperCase().indexOf('PREPAID') >= 0; },
+            'ctrlProp12.xml': function (d) { return String(d.freightTerms || '').toUpperCase().indexOf('COLLECT') >= 0; },
+            'ctrlProp14.xml': function (d) { var _b = String(d.blRequire || '').toUpperCase(); return _b.indexOf('分单') >= 0 || _b.indexOf('HAWB') >= 0; },
+            'ctrlProp15.xml': function (d) { return String(d.showHs || '').trim() === '显示'; },
+            'ctrlProp16.xml': function (d) { return String(d.showHs || '').trim() === '不显示'; },
+            'ctrlProp17.xml': function (d) { return String(d.specialCargo == null ? '无' : d.specialCargo).trim() === '无' || String(d.specialCargo || '').trim() === ''; },
+            'ctrlProp19.xml': function (d) { return String(d.specialCargo || '').trim() === '含电池'; },
+            'ctrlProp22.xml': function (d) { return String(d.specialCargo || '').trim() === '磁性'; },
+            'ctrlProp24.xml': function (d) { return String(d.docsAttach || '').indexOf('COMMERCIAL INVOICE') >= 0; },
+            'ctrlProp25.xml': function (d) { return String(d.docsAttach || '').indexOf('PACKING LIST') >= 0; },
+            'ctrlProp27.xml': function (d) { return String(d.docsAttach || '').indexOf('DECLARATION ELEMENTS') >= 0; },
+            'ctrlProp28.xml': function (d) { return String(d.docsAttach || '').indexOf('POWER OF ATTORNEY') >= 0; },
+            'ctrlProp29.xml': function (d) { return String(d.docsAttach || '').indexOf('MSDS') >= 0; }
+          };
+          for (var pn in TICK_RULES) {
+            var _tp = 'xl/ctrlProps/' + pn;
+            if (!E[_tp]) continue;
+            try {
+              if (TICK_RULES[pn](ctrlData)) {
+                var _px = await readEntry(E, _tp);
+                if (_px && _px.indexOf('checked=') < 0) {
+                  setText(E, _tp, _px.replace('<formControlPr ', '<formControlPr checked="Checked" '));
+                  rep.ticked = (rep.ticked || 0) + 1;
+                }
+              }
+            } catch (eTk) {}
           }
         }
 
