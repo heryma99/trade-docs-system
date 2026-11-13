@@ -6972,8 +6972,8 @@
       document.getElementById('bw-next2').onclick = function () {
         // v1.6.79 必填校验：带 * 字段未填不得进入下一步
         var _reqMiss = [];
-        if (!val('bw-shipper')) _reqMiss.push('SHIPPER 托运人');
-        if (!val('bw-consignee')) _reqMiss.push('CONSIGNEE 收货人');
+        if (!val('bw-shipper-q')) _reqMiss.push('SHIPPER 托运人'); // v1.6.95：组合框改造后读新输入框（旧下拉已删除，必填校验漏改导致已填仍报错）
+        if (!val('bw-consignee-q')) _reqMiss.push('CONSIGNEE 收货人');
         if ((!_cm || _cm.pol) && !val('bw-pol')) _reqMiss.push('起运港 POL');
         if ((!_cm || _cm.pod) && !val('bw-pod')) _reqMiss.push('目的港 POD');
         if (!val('bw-freight')) _reqMiss.push('运费条款');
