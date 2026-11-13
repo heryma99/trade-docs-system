@@ -6799,9 +6799,16 @@
         }).join('');
       }
       function _partyId(type, inputId, allowSame) {
-        var _t = ((document.getElementById(inputId) || {}).value || '').trim();
+        var _el = document.getElementById(inputId);
+        var _t = ((_el || {}).value || '').trim();
+        var _pid = (_el && _el.dataset) ? _el.dataset.pid : '';
+        if (allowSame && _pid === '__SAME__') return '';
         if (allowSame && (_t === 'SAME AS CONSIGNEE' || _t === 'SAME AS CONSIGNEE（同收货人）')) return '';
         if (!_t) return '';
+        if (_pid && _pid !== '__SAME__') {
+          var _p0 = parties.filter(function (p) { return p.type === type && p.id === _pid; })[0];
+          if (_p0) return _p0.id;
+        }
         var _ps = parties.filter(function (p) { return p.type === type && p.name === _t; });
         if (!_ps.length) _ps = parties.filter(function (p) { return p.type === type && p.name.indexOf(_t) >= 0; });
         return _ps.length ? _ps[0].id : '';
@@ -6826,15 +6833,15 @@
 
 
 
-        '<div><label class="req">SHIPPER 托运人</label><input id="bw-shipper-q" list="bw-shipper-list" placeholder="输入名称选择" style="width:100%;padding:4px 8px" value="' + esc(_pName('shipper', w.shipperId)) + '"><datalist id="bw-shipper-list">' + optsDl('shipper') + '</datalist></div>' +
+        '<div style="position:relative"><label class="req">SHIPPER 托运人</label><input id="bw-shipper-q" autocomplete="off" placeholder="输入名称模糊搜索" style="width:100%;padding:4px 8px" value="' + esc(_pName('shipper', w.shipperId)) + '" data-pid="' + esc(w.shipperId || '') + '"></div>' +
 
 
 
-        '<div><label class="req">CONSIGNEE 收货人</label><input id="bw-consignee-q" list="bw-consignee-list" placeholder="输入名称选择" style="width:100%;padding:4px 8px" value="' + esc(_pName('consignee', w.consigneeId)) + '"><datalist id="bw-consignee-list">' + optsDl('consignee') + '</datalist></div>' +
+        '<div style="position:relative"><label class="req">CONSIGNEE 收货人</label><input id="bw-consignee-q" autocomplete="off" placeholder="输入名称模糊搜索" style="width:100%;padding:4px 8px" value="' + esc(_pName('consignee', w.consigneeId)) + '" data-pid="' + esc(w.consigneeId || '') + '"></div>' +
 
 
 
-        '<div><label>NOTIFY 通知人</label><input id="bw-notify-q" list="bw-notify-list" placeholder="留空=同收货人" style="width:100%;padding:4px 8px" value="' + (w.notifyId ? esc(_pName('notify', w.notifyId)) : 'SAME AS CONSIGNEE') + '"><datalist id="bw-notify-list"><option value="SAME AS CONSIGNEE">（不选=同收货人）</option>' + optsDl('notify') + '</datalist></div>' +
+        '<div style="position:relative"><label>NOTIFY 通知人</label><input id="bw-notify-q" autocomplete="off" placeholder="留空=同收货人" style="width:100%;padding:4px 8px" value="' + (w.notifyId ? esc(_pName('notify', w.notifyId)) : 'SAME AS CONSIGNEE') + '" data-pid="' + (w.notifyId ? esc(w.notifyId) : '__SAME__') + '"></div>' +
 
 
 
@@ -6936,6 +6943,88 @@
           if (_el && _el.parentNode) _el.parentNode.style.display = 'none';
         });
       }
+      // v1.6.96：模糊建议组件——输入越多越精确，按 匹配精确度 排序（精确>前缀>包含>子序列）
+      function _fuzzyAttach(inputId, getType, allowSame) {
+        var inp = document.getElementById(inputId);
+        if (!inp) return;
+        var wrap = inp.parentNode;
+        wrap.style.position = 'relative';
+        var dd = document.createElement('div');
+        dd.style.cssText = 'display:none;position:absolute;top:100%;left:0;right:0;z-index:60;background:#fff;border:1px solid #cdd6e0;border-radius:4px;box-shadow:0 6px 18px rgba(30,60,100,.18);max-height:240px;overflow:auto;font-size:12.5px;color:#222;';
+        wrap.appendChild(dd);
+        var all = parties.filter(function (p) { return p.type === getType; }).map(function (p) {
+          return { id: p.id, name: p.name || '', sub: [p.company, p.country, p.city, p.warehouseCode].filter(Boolean).join(' · ') };
+        });
+        if (allowSame) all.unshift({ id: '', name: 'SAME AS CONSIGNEE', sub: '（不选=同收货人）', same: true });
+        var view = [], active = -1;
+        function score(q, t) {
+          var ql = q.toLowerCase(), tl = t.toLowerCase();
+          if (!ql) return 50;
+          if (tl === ql) return 100;
+          if (tl.indexOf(ql) === 0) return 80;
+          if (tl.indexOf(ql) >= 0) return 60;
+          var ti = 0;
+          for (var i = 0; i < ql.length; i++) { ti = tl.indexOf(ql[i], ti); if (ti < 0) return -1; ti++; }
+          return 40;
+        }
+        function hl(t, q) {
+          if (!q) return esc(t);
+          var i = t.toLowerCase().indexOf(q.toLowerCase());
+          if (i < 0) return esc(t);
+          return esc(t.slice(0, i)) + '<b style="color:#1f4e79">' + esc(t.slice(i, i + q.length)) + '</b>' + esc(t.slice(i + q.length));
+        }
+        function paint() {
+          Array.prototype.forEach.call(dd.children, function (row, i) {
+            if (!row.dataset || row.dataset.idx === undefined) return;
+            row.style.background = (i - 0 === active - 0 && row.dataset.idx !== undefined && i - 0 === active - 0) ? (i - 0 === active - 0 ? '#eef5ff' : '') : '';
+          });
+        }
+        function render(q) {
+          q = (q || '').trim();
+          view = all.map(function (it) { return { it: it, sc: Math.max(score(q, it.name), it.sub ? score(q, it.sub) : -1) }; })
+            .filter(function (x) { return x.sc >= 0; })
+            .sort(function (a, b) { return b.sc - a.sc; })
+            .slice(0, 8)
+            .map(function (x) { return x.it; });
+          if (!view.length) {
+            dd.innerHTML = '<div style="padding:8px 10px;color:#999">无匹配，请清空后重选</div>';
+            active = -1; dd.style.display = 'block'; return;
+          }
+          var html = view.map(function (it, i) {
+            return '<div data-idx="' + i + '" style="padding:6px 10px;cursor:pointer;border-bottom:1px solid #f0f2f5"><div style="font-weight:' + (it.same ? '600' : '500') + '">' + hl(it.name, q) + '</div>' + (it.sub ? '<div style="font-size:11px;color:#8a94a3">' + esc(it.sub) + '</div>' : '') + '</div>';
+          }).join('');
+          var more = all.filter(function (it) { return score(q, it.name) >= 0 || (it.sub && score(q, it.sub) >= 0); }).length - view.length;
+          if (more > 0) html += '<div style="padding:5px 10px;font-size:11px;color:#999">还有 ' + more + ' 条，继续输入收窄</div>';
+          dd.innerHTML = html;
+          Array.prototype.forEach.call(dd.children, function (row) {
+            if (row.dataset && row.dataset.idx !== undefined) {
+              row.onmousedown = function (e) { e.preventDefault(); choose(view[row.dataset.idx - 0]); };
+            }
+          });
+          active = -1;
+          dd.style.display = 'block';
+        }
+        function choose(it) {
+          inp.value = it.name;
+          if (it.same) inp.setAttribute('data-pid', '__SAME__');
+          else inp.setAttribute('data-pid', it.id);
+          dd.style.display = 'none';
+        }
+        inp.addEventListener('input', function () { inp.removeAttribute('data-pid'); render(inp.value); });
+        inp.addEventListener('focus', function () { render(inp.value); });
+        inp.addEventListener('blur', function () { setTimeout(function () { dd.style.display = 'none'; }, 180); });
+        inp.addEventListener('keydown', function (e) {
+          if (dd.style.display === 'none' || !view.length) return;
+          if (e.key === 'ArrowDown') { e.preventDefault(); active = Math.min(active + 1, view.length - 1); Array.prototype.forEach.call(dd.children, function (row, i) { if (row.dataset && row.dataset.idx !== undefined) row.style.background = (i === active ? '#eef5ff' : ''); }); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); active = Math.max(active - 1, 0); Array.prototype.forEach.call(dd.children, function (row, i) { if (row.dataset && row.dataset.idx !== undefined) row.style.background = (i === active ? '#eef5ff' : ''); }); }
+          else if (e.key === 'Enter') { e.preventDefault(); if (active >= 0 && view[active]) choose(view[active]); }
+          else if (e.key === 'Escape') dd.style.display = 'none';
+        });
+      }
+      _fuzzyAttach('bw-shipper-q', 'shipper', false);
+      _fuzzyAttach('bw-consignee-q', 'consignee', false);
+      _fuzzyAttach('bw-notify-q', 'notify', true);
+
       var _exHtml = '';
       _bkExtras.concat(_bkChecks).forEach(function (f) {
         // v1.6.89 支持 multi 多选（勾选组，容器 div 内 checkbox，收集器聚合为逗号串）
