@@ -355,6 +355,44 @@
           }
         } catch (eCT) {}
 
+        // B2.5) v1.7.1：ExcelJS 会整体丢弃 VML 部件（复选框的视觉形状层）——若输出无任何 vmlDrawing
+        //   而源模板有，则整部件搬运 + 补 legacyDrawing 引用 + sheet 关系 + Content_Types。
+        //   缺 VML 时控件只剩 <controls> 定义（无形状），Excel/WPS/预览器里复选框不可见（v1.6.22 起的隐性缺陷）。
+        try {
+          var hasVmlOut = false;
+          for (var vv1 in E) if (/^xl\/drawings\/vmlDrawing\d+\.vml$/.test(vv1)) { hasVmlOut = true; break; }
+          if (!hasVmlOut && srcEntries) {
+            var srcVml = [];
+            for (var vv2 in srcEntries) if (/^xl\/drawings\/vmlDrawing\d+\.vml$/.test(vv2)) srcVml.push(vv2);
+            srcVml.sort();
+            var osV = await sheetOrder(srcEntries), ooV = await sheetOrder(E);
+            for (var vi2 = 0; vi2 < srcVml.length && vi2 < Math.min(osV.length, ooV.length); vi2++) {
+              var vb2 = await readEntryBytes(srcEntries, srcVml[vi2]);
+              if (!vb2) continue;
+              var outVml = 'xl/drawings/vmlDrawing' + (vi2 + 1) + '.vml';
+              setBytes(E, outVml, vb2); rep.vmlParts = (rep.vmlParts || 0) + 1;
+              var oPathV = ooV[vi2].path;
+              var oXmlV = await readEntry(E, oPathV);
+              var oRelP = oPathV.replace(/([^/]+)$/, '_rels/$1.rels');
+              var rOv = await readEntry(E, oRelP);
+              if (rOv === null) rOv = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
+              if (/<legacyDrawing /.test(oXmlV)) continue;
+              var nidV = 'rId' + (maxRid(rOv) + 1);
+              var newRelV = '<Relationship Id="' + nidV + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing' + (vi2 + 1) + '.vml"/>';
+              setText(E, oRelP, rOv.replace('</Relationships>', newRelV + '</Relationships>'));
+              var o2V;
+              if (/<drawing [^>]*\/>/.test(oXmlV)) o2V = oXmlV.replace(/(<drawing [^>]*\/>)/, '$1<legacyDrawing r:id="' + nidV + '"/>');
+              else o2V = oXmlV.replace('</worksheet>', '<legacyDrawing r:id="' + nidV + '"/></worksheet>');
+              setText(E, oPathV, o2V);
+            }
+            // Content_Types：确保有 vml 的 Default 声明
+            var ctV = await readEntry(E, '[Content_Types].xml');
+            if (ctV && ctV.toLowerCase().indexOf('extension="vml"') < 0) {
+              setText(E, '[Content_Types].xml', ctV.replace('</Types>', '<Default Extension="vml" ContentType="application/vnd.openxmlformats-officedocument.vmlDrawing"/></Types>'));
+            }
+          }
+        } catch (eVM) {}
+
         // B3) 按 sheet 顺序映射，注入 <controls> + rels
         var os = await sheetOrder(srcEntries), oo = await sheetOrder(E);
         for (var si = 0; si < Math.min(os.length, oo.length); si++) {
