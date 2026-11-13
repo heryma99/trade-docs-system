@@ -1001,7 +1001,7 @@
         A4: 'shipper', A8: 'consignee', A12: 'notify', A16: 'pol', E16: 'pod',
         F4: 'customsTitle', H5: 'entrustCustoms', J5: 'customsType', H6: 'customsDocStatus',
         F8: 'pickupTrucking', F12: 'tradeChargeTxt', A18: 'blRequire', E18: 'showHs', I18: 'specialCargo',
-        C20: 'boxCount', E20: 'nameBi', G20: 'gwNum', I20: 'volumeNum'
+        C20: 'boxCount', E20: 'nameBiHs', G20: 'gwNum', I20: 'volumeNum', A30: 'docsChecklistTxt'
       } },
     { name: 'CEVA', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }, { key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
       B37: 'crd', B53: 'remark',
@@ -1134,6 +1134,17 @@
         });
         return pb;
       }
+      if (spec === 'nameBiHs') {
+        var pbH = [];
+        (items || []).forEach(function (it) {
+          var cn = String((it._nameCn != null && it._nameCn !== '') ? it._nameCn : (it.nameCn || '')).trim();
+          var en = String((it._name != null && it._name !== '') ? it._name : (it.nameEn || '')).trim();
+          var hs = String(it.hsCode || '').trim();
+          var v4 = (cn + (en ? ' (' + en + ')' : '') + (hs ? ' ' + hs : '')).trim();
+          if (v4 && pbH.indexOf(v4) < 0) pbH.push(v4);
+        });
+        return pbH.join(String.fromCharCode(10));
+      }
       if (spec === 'nameBi') return _biPairs().join(String.fromCharCode(10));
       if (spec === 'nameBi@line') return { __lines: _biPairs() };
       if (spec === 'pol') return String(data.pol || '');
@@ -1162,6 +1173,12 @@
       if (spec === 'specialCargo') return String(data.specialCargo || '无');
       if (spec === 'tradeChargeTxt') { var _tc = []; if (data.incoterms) _tc.push('贸易条款：' + data.incoterms); if (data.freightTerms) _tc.push('费用条款：' + (String(data.freightTerms).indexOf('PREPAID') >= 0 ? '预付' : '到付')); return _tc.join(String.fromCharCode(10)); }
       if (spec === 'customsType') return String(data.customsType || '');
+      if (spec === 'docsChecklistTxt') {
+        var _copts = ['COMMERCIAL INVOICE 发票', 'PACKING LIST 装箱单', 'CUSTOMS DECLARATION 报关单', 'POWER OF ATTORNEY 报关委托书', 'DECLARATION ELEMENTS 申报要素', 'MSDS/磁检报告'];
+        var _ch = String(data.docsAttach || '').split(/[、,，;；]/).map(function (x) { return x.trim(); });
+        var _line = _copts.map(function (o) { return (_ch.indexOf(o) >= 0 ? '☑' : '☐') + ' ' + o; }).join('   ');
+        return '附件资料清单DOCUMENTS CHECKLIST：' + String.fromCharCode(10) + _line;
+      }
       var mEt = spec.match(/^etd@inline:(.+)$/);
       if (mEt) { var et2 = String(data.etd || ''); return mEt[1] + et2; }
       if (spec === 'notify') { var ny0 = data.notify || {}; return [ny0.name, ny0.address].filter(Boolean).join(String.fromCharCode(10)); }
@@ -3977,6 +3994,9 @@
         ],
         HARVEST: [
           { key: 'cargoNature', label: '货物属性（敏感货申报）', type: 'select', options: ['普货', '含电池', '磁性', '液体/粉末', '马达', '危险品'], def: '普货' }
+        ],
+        FORTUNES: [
+          { key: 'docsAttach', label: '附件资料清单（可多选）', type: 'multi', options: ['COMMERCIAL INVOICE 发票', 'PACKING LIST 装箱单', 'CUSTOMS DECLARATION 报关单', 'POWER OF ATTORNEY 报关委托书', 'DECLARATION ELEMENTS 申报要素', 'MSDS/磁检报告'] }
         ],
         GEODIS: [], ANHAI: []
       };
