@@ -740,6 +740,11 @@
       containerType: meta.containerType || '', containerQty: meta.containerQty || '',
       freightTerms: meta.freightTerms || '',
       shippingMarks: meta.shippingMarks || 'N/M',
+      marks: (String(meta.shippingMarks || '') === 'N/M') ? '' : String(meta.shippingMarks || ''),
+      nameBiHs: (function () { var pb = []; (items || []).forEach(function (it) { var cn = String((it._nameCn != null && it._nameCn !== '') ? it._nameCn : (it.nameCn || '')).trim(); var en = String((it._name != null && it._name !== '') ? it._name : (it.nameEn || '')).trim(); var hs = String(it.hsCode || '').trim(); var v4 = (cn + (en ? ' (' + en + ')' : '') + (hs ? ' ' + hs : '')).trim(); if (v4 && pb.indexOf(v4) < 0) pb.push(v4); }); return pb.join(String.fromCharCode(10)); })(),
+      dimsTxt: (function () { var ds = []; (items || []).forEach(function (it) { var d = String(it.dims || '').trim(); if (d && ds.indexOf(d) < 0) ds.push(d); }); return ds.join(String.fromCharCode(10)); })(),
+      batteryQty: meta.batteryQty || '', cargoBattery: meta.cargoBattery || '',
+      truckerName: meta.truckerName || '', truckerVehicle: meta.truckerVehicle || '', truckerPhone: meta.truckerPhone || '',
       currency: currency,
       remark: meta.remark || '',
       dangerous: meta.dangerous || 'NON-DANGEROUS / GENERAL CARGO',
@@ -1124,6 +1129,27 @@
       if (spec === 'volumeNum') { var vv2 = Number(totals.volume) || 0; return vv2 > 0 ? _formNum(vv2, 4) : ''; }
       if (spec === 'boxCountNum') { var bc2 = Math.round(Number(totals.boxCount) || 0); return bc2 > 0 ? String(bc2) : ''; }
       // nameBi / nameBi@line：中文+空格+英文（COH F 列 / WELLFAST W42 的双语一格形态）
+      function _biPairsHs() {
+        var pb = [];
+        (items || []).forEach(function (it) {
+          var cn = String((it._nameCn != null && it._nameCn !== '') ? it._nameCn : (it.nameCn || '')).trim();
+          var en = String((it._name != null && it._name !== '') ? it._name : (it.nameEn || '')).trim();
+          var hs = String(it.hsCode || '').trim();
+          var v4 = (cn + (en ? ' (' + en + ')' : '') + (hs ? ' ' + hs : '')).trim();
+          if (v4 && pb.indexOf(v4) < 0) pb.push(v4);
+        });
+        return pb;
+      }
+      function _dimsTxt() {
+        var ds = [];
+        (items || []).forEach(function (it) {
+          var d = String(it.dims || '').trim();
+          if (d && ds.indexOf(d) < 0) ds.push(d);
+        });
+        return ds.join(String.fromCharCode(10));
+      }
+      var _nameBiHs = _biPairsHs().join(String.fromCharCode(10));
+      var _dimsTxtAll = _dimsTxt();
       function _biPairs() {
         var pb = [];
         (items || []).forEach(function (it) {
@@ -1173,6 +1199,10 @@
       if (spec === 'specialCargo') return String(data.specialCargo || '无');
       if (spec === 'tradeChargeTxt') { var _tc = []; if (data.incoterms) _tc.push('贸易条款：' + data.incoterms); if (data.freightTerms) _tc.push('费用条款：' + (String(data.freightTerms).indexOf('PREPAID') >= 0 ? '预付' : '到付')); return _tc.join(String.fromCharCode(10)); }
       if (spec === 'customsType') return String(data.customsType || '');
+      if (spec === 'batteryQty') return String(data.batteryQty || '');
+      if (spec === 'truckerName') return String(data.truckerName || '');
+      if (spec === 'truckerVehicle') return String(data.truckerVehicle || '');
+      if (spec === 'truckerPhone') return String(data.truckerPhone || '');
       if (spec === 'docsChecklistTxt') {
         var _copts = ['COMMERCIAL INVOICE 发票', 'PACKING LIST 装箱单', 'CUSTOMS DECLARATION 报关单', 'POWER OF ATTORNEY 报关委托书', 'DECLARATION ELEMENTS 申报要素', 'MSDS/磁检报告'];
         var _ch = String(data.docsAttach || '').split(/[、,，;；]/).map(function (x) { return x.trim(); });
@@ -1556,8 +1586,8 @@
       } else if (ps.lines.cols && ps.lines.cols.goodsCombined) {
         var txt = list.map(function (g) {
           var parts = [];
-          if (g.nameCn) parts.push(g.nameCn);
-          if (g.nameEn && g.nameEn !== g.nameCn) parts.push(g.nameEn);
+          var _pnm = g.nameCn + (g.nameEn && g.nameEn !== g.nameCn ? ' (' + g.nameEn + ')' : '');
+          if (_pnm.trim()) parts.push(_pnm.trim()); // v1.7.0：括号式「中文 (英文)」与业务件一致
           if (g.hs) parts.push(g.hs);
           return parts.join(' ');
         }).filter(Boolean).join('\n');
@@ -1632,9 +1662,9 @@
     // ③ 货描：一行一个「品名 + HS」。品名分行、件数/重量/体积仍只有一个数（用户铁律）。
     if (byKind.nameEn) {
       var lines = list.map(function (g) {
-        var nm = g.nameCn && g.nameEn && g.nameCn !== g.nameEn ? (g.nameCn + ' ' + g.nameEn) : (g.nameEn || g.nameCn || '');
+        var nm = g.nameCn && g.nameEn && g.nameCn !== g.nameEn ? (g.nameCn + ' (' + g.nameEn + ')') : (g.nameEn || g.nameCn || '');
         var hs = g.hs || '';
-        return hs ? (nm + ' ' + hs) : nm;
+        return hs ? (nm + ' ' + hs) : nm; // v1.7.0：统一业务件括号式「中文 (英文) HS」
       }).filter(Boolean);
       if (lines.length) _bkSetCell(ws, start, byKind.nameEn, lines.join('\n'));
     }
@@ -2556,7 +2586,8 @@
     { key: 'blType', labels: ['正本提单', '电放提单', 'SEA WAYBILL'], map: { '正本提单': '正本提单', '电放提单': '电放提单', 'SEA WAYBILL': 'SEA WAYBILL' } },
     { key: 'blType', labels: ['Bill  of Lading  提单正本', 'Telex-release  提单电放'], map: { '正本提单': 'Bill  of Lading  提单正本', '电放提单': 'Telex-release  提单电放' } },
     { key: 'invoiceType', labels: ['增值税普通发票', '增值税专用发票'], map: { '增值税普通发票': '增值税普通发票', '增值税专用发票': '增值税专用发票' } },
-    { key: 'docsAttach', multi: true, labels: ['Commercial Invoice', 'Customs Invoice', 'Proforma Invoice', 'Packing List', 'Interim Footwear Invoice'], map: { 'Commercial Invoice': 'Commercial Invoice', 'Customs Invoice': 'Customs Invoice', 'Proforma Invoice': 'Proforma Invoice', 'Packing List': 'Packing List', 'Interim Footwear Invoice': 'Interim Footwear Invoice' }, rows: [40, 55] },
+    { key: 'docsAttach', multi: true, labels: ['Commercial Invoice', 'Customs Invoice', 'Proforma Invoice', 'Packing List', 'Declaration', 'Quota Statement', 'Others', 'Export Licence', 'Certificate of Origin  ', 'Form “A”  ', 'Visa', 'Interim Footwear Invoice'], map: { 'Commercial Invoice': 'Commercial Invoice', 'Customs Invoice': 'Customs Invoice', 'Proforma Invoice': 'Proforma Invoice', 'Packing List': 'Packing List', 'Declaration': 'Declaration', 'Quota Statement': 'Quota Statement', 'Others': 'Others', 'Export Licence': 'Export Licence', 'Certificate of Origin': 'Certificate of Origin  ', 'Form A': 'Form “A”  ', 'Visa': 'Visa', 'Interim Footwear Invoice': 'Interim Footwear Invoice' }, rows: [42, 52] },
+    { key: 'cargoBattery', labels: ['Without Battery', 'Lithium ION batteries in compliance with Section IA or IB of PI 965 / PI 966 or PI 967', 'Lithium METAL batteries in compliance with Section IA or IB of PI 969 or PI 970'], map: { 'Without Battery': 'Without Battery', 'Lithium ION (PI 965 / PI 966 or PI 967)': 'Lithium ION batteries in compliance with Section IA or IB of PI 965 / PI 966 or PI 967', 'Lithium METAL (PI 969 or PI 970)': 'Lithium METAL batteries in compliance with Section IA or IB of PI 969 or PI 970' }, rows: [15, 21] },
     // v1.6.90 第二批：SFE/OVD 运费（Prepaid/Collect 精确标签两模板共用）、SFE 提单方式、OVD/RSD 随附单证多选
     { key: 'freightTerms', labels: ['Prepaid', 'Collect'], map: { 'FREIGHT COLLECT': 'Collect', 'FREIGHT PREPAID': 'Prepaid' } },
     { key: 'blType', labels: ['Original Bill of Lading :', 'Telex Release :'], map: { '正本提单': 'Original Bill of Lading :', '电放提单': 'Telex Release :' }, rows: [60, 75] },
@@ -2820,6 +2851,7 @@
 
     // ① 抓取模板原始样式快照（边框/底色/字体/对齐），用于末尾 1:1 还原，
     //    避免 ExcelJS 写回时空值带样式的单元格丢边框。
+    var phAssert = {}; // v1.7.0：表单级占位符解析值登记（防后续填充覆写）
     var origStyles = {};
     ws.eachRow({ includeEmpty: true }, function (row, rn) {
       row.eachCell({ includeEmpty: true }, function (cell, cn) {
@@ -3245,6 +3277,12 @@
         if (/^\{\{\s*items\./.test(s)) return; // 明细占位符只在明细区展开，跳过
         var num = isPureNumericPh(s, data);
         cell.value = (num !== null) ? num : replaceInString(s, data);
+        // v1.7.0：登记解析值——后续标签/预设填充若覆写占位格，末尾按登记值重新断言
+        try {
+          var _rv = ws.getCell(cell.row, cell.column).value;
+          var _rt = (_rv && _rv.richText) ? _rv.richText.map(function (t) { return t.text; }).join('') : String(_rv == null ? '' : _rv);
+          if (_rt && _rt.indexOf('{{') < 0) phAssert[cell.row + ':' + cell.column] = _rt;
+        } catch (ePa) {}
       });
     });
 
@@ -3361,6 +3399,18 @@
     // v1.6.33（仅订舱单）：复选框组文本符号 ☑/☐（KLN 型指纹模板；放最后，自守卫=格值仍等于标签原文才写）
     if (IS_BOOKING) {
       try { applyCheckboxGroups(ws, data); } catch (e) {}
+    }
+    // v1.7.0：表单级占位符断言——标签/明细/预设填充后，凡被覆写的占位格按登记值恢复
+    if (IS_BOOKING) {
+      Object.keys(phAssert).forEach(function (k2) {
+        var p2 = k2.split(':');
+        try {
+          var c2 = ws.getCell(Number(p2[0]), Number(p2[1]));
+          var v2 = c2.value;
+          var t2 = (v2 && v2.richText) ? v2.richText.map(function (t) { return t.text; }).join('') : String(v2 == null ? '' : v2);
+          if (t2 !== phAssert[k2]) c2.value = phAssert[k2];
+        } catch (e2) {}
+      });
     }
     // v1.4.60：统计「用户录入了但本模板装不下」的字段，交 UI 显式提示（不静默丢弃）
     try {
@@ -3969,7 +4019,13 @@
           { key: 'invoiceType', label: '发票类型', type: 'select', options: ['增值税普通发票', '增值税专用发票'], def: '增值税普通发票' }
         ],
         DETRANS: [
-          { key: 'docsAttach', label: '随附单证（可多选）', type: 'multi', options: ['Commercial Invoice', 'Customs Invoice', 'Proforma Invoice', 'Packing List', 'Interim Footwear Invoice'] }
+          { key: 'docsAttach', label: '随附单证（可多选）', type: 'multi', options: ['Commercial Invoice', 'Customs Invoice', 'Proforma Invoice', 'Packing List', 'Declaration', 'Quota Statement', 'Others', 'Export Licence', 'Certificate of Origin', 'Form A', 'Visa', 'Interim Footwear Invoice'] },
+          { key: 'cargoBattery', label: '电池类型（SPECIAL HANDLING）', type: 'select', options: ['Without Battery', 'Lithium ION (PI 965 / PI 966 or PI 967)', 'Lithium METAL (PI 969 or PI 970)'], def: '' },
+          { key: 'batteryQty', label: '带电件数（选填）', type: 'text' },
+          { key: 'pickupTrucking', label: '提货地址/联系人/时间（选填）', type: 'text', def: '提货地址：东莞市厚街镇恒通路6号达科动力产业园3号楼6楼\n联系人：赵华龙 13265062595\n提货时间：周一-周六 9:00-11:30 14:00-17:00' },
+          { key: 'truckerName', label: 'TRUCKER NAME 司机姓名（自入仓填）', type: 'text' },
+          { key: 'truckerVehicle', label: 'VEHICLE NUMBER 车牌（自入仓填）', type: 'text' },
+          { key: 'truckerPhone', label: 'TRUCKER PHONE 电话（自入仓填）', type: 'text' }
         ],
         CHARTERLINK: [
           { key: 'shipMode', label: '装运条款', type: 'select', options: ['FCL/FCL', 'LCL/LCL', 'FCL/LCL', 'LCL/FCL'], def: 'FCL/FCL' }
