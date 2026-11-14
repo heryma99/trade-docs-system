@@ -7546,7 +7546,8 @@
             entrustCustoms: _bkD.entrustCustoms, customsDocStatus: _bkD.customsDocStatus,
             customsType: _bkD.customsType, incoterms: _bkD.incoterms, freightTerms: _bkD.freightTerms,
             showHs: _bkD.showHs, specialCargo: _bkD.specialCargo, docsAttach: _bkD.docsAttach,
-            blRequire: _bkD.blRequire, entrustPickup: _bkD.entrustPickup
+            blRequire: _bkD.blRequire, entrustPickup: _bkD.entrustPickup, docsAttachCeva: _bkD.docsAttachCeva,
+            serviceMode: _bkD.serviceMode, serviceScope: _bkD.serviceScope
           } });
         } else {
           await exporter.download(w._wb, fname);
