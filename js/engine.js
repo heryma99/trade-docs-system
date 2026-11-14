@@ -726,6 +726,7 @@
       blType: meta.blType || '',
       invoiceType: meta.invoiceType || '',
       docsAttach: meta.docsAttach || '',
+      docsAttachCeva: meta.docsAttachCeva || '',
       clearanceMode: meta.clearanceMode || '',
       docsCustoms: meta.docsCustoms || '',
       cargoNature: meta.cargoNature || '',
@@ -938,7 +939,7 @@
     } },
     { name: 'HARVEST', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }], cells: {
       A2: 'shipper@lines', A4: 'shipperTel', A10: 'consignee@lines',
-      B18: 'flight', A37: 'cargoNature',
+      B18: 'flight', I36: 'cargoNature',
       A30: 'orderNos@line:SO:', C30: 'boxCount', D30: 'gw', F30: 'nameDesc@line'
     } },
     { name: 'UNITEX', mode: 'air', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }, { key: 'flight', label: '航班号', type: 'text' }], cells: {
@@ -1012,7 +1013,7 @@
         K8: 'pickupTrucking', F12: 'tradeChargeTxt', A18: 'blRequire', I18: 'specialCargo',
         C20: 'boxCount', E20: 'nameBiHs', G20: 'gwNum', I20: 'volumeNum', A30: 'docsChecklistTxt'
       } },
-    { name: 'CEVA', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }, { key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
+    { name: 'CEVA', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }, { key: 'crd', label: '货好日期 CRD', type: 'date' }, { key: 'docsAttachCeva', label: '随附单证（可多选）', type: 'multi', options: ['箱单', '发票', '产地证', '出口许可证', '进口许可证', '危险品声明', '其他'] }], cells: {
       B37: 'crd', B53: 'remark',
       A6: 'shipper', A14: 'consignee',
       J7: 'etd@inline:ETD:',
@@ -1200,6 +1201,8 @@
       if (spec === 'customsDocStatus') return String(data.customsDocStatus || '资料已齐');
       if (spec === 'pickupTrucking') return String(data.pickupTrucking || '');
       if (spec === 'entrustPickup') return String(data.entrustPickup || '');
+      // v1.7.4：HARVEST 货物属性（此前 valOf 缺分支导致选中值从未写入模板）
+      if (spec === 'cargoNature') return String(data.cargoNature || '');
       if (spec === 'blRequire') return String(data.blRequire || '');
       if (spec === 'showHs') return String(data.showHs || '不显示');
       // v1.7.1：无/含电池/磁性 → 由 zipPost 复选框勾选表达（普货/带电/磁性），不写文字；化工品/其它保留文字写入
