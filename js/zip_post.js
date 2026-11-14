@@ -327,6 +327,24 @@
             'ctrlProp28.xml': function (d) { return String(d.docsAttach || '').indexOf('POWER OF ATTORNEY') >= 0; },
             'ctrlProp29.xml': function (d) { return String(d.docsAttach || '').indexOf('MSDS') >= 0; }
           },
+          // MANOR：v1.7.7 新增。prop8/9/10=提单类型（COL House 正本/Surrendered 电放/Seaway Bill）；
+          //   prop2-7=装运方式条（LCL/CY-CY/CFS-CY/CY-CFS/CY-FO/CFS-CFS）；prop14-16=Port to Port、prop17=Door to Door；
+          //   prop1 空白选项、prop11-13 船公司（JRC/Herma/Other-TBA）无系统字段 → 不映射。
+          MANOR: {
+            'ctrlProp2.xml':  function (d) { return String(d.serviceMode || '') === 'LCL'; },
+            'ctrlProp3.xml':  function (d) { return String(d.serviceMode || '') === 'CY - CY'; },
+            'ctrlProp4.xml':  function (d) { return String(d.serviceMode || '') === 'CFS - CY'; },
+            'ctrlProp5.xml':  function (d) { return String(d.serviceMode || '') === 'CY - CFS'; },
+            'ctrlProp6.xml':  function (d) { return String(d.serviceMode || '') === 'CY - FO'; },
+            'ctrlProp7.xml':  function (d) { return String(d.serviceMode || '') === 'CFS - CFS'; },
+            'ctrlProp8.xml':  function (d) { return String(d.blType || '') === '正本提单'; },
+            'ctrlProp9.xml':  function (d) { return String(d.blType || '') === '电放提单'; },
+            'ctrlProp10.xml': function (d) { return String(d.blType || '') === 'SEA WAYBILL'; },
+            'ctrlProp14.xml': function (d) { return String(d.serviceScope || '') === 'Port to Port'; },
+            'ctrlProp15.xml': function (d) { return String(d.serviceScope || '') === 'Port to Port'; },
+            'ctrlProp16.xml': function (d) { return String(d.serviceScope || '') === 'Port to Port'; },
+            'ctrlProp17.xml': function (d) { return String(d.serviceScope || '') === 'Door to Door'; }
+          },
           // CEVA：v1.7.5 新增。随附单证区 prop1-6/17 + Payment Type 预付/到付两组 prop7/8、prop12/13。
           //   prop9/14 第三方、prop22/23 付款买单/账期、r25-26 提货/出口报关/保险、r14/r30-34/r60 无数据字段 → 不映射。
           CEVA: {
