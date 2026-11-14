@@ -1040,11 +1040,48 @@
     // v1.6.83：存量校准 O1——KLN 与 KEAS 原版（Booking_SI_VGM Form）逐格差分 0 漂移（差分清单 2026-11-11），
     //   补 9 格字段入口；坐标均为合并区主格，静态勾选区（FCL/LCL、提单方式、币种、发票类型）一律不写。
     //   keepDetail:true —— 表头区走表单直写、明细区继续走 KLN 明细预设逐行展开（两者共存）。
+    // v1.7.5：GEODIS 重建后补表单直写（模板已按原版还原 + {{占位符}}；直写在最后覆盖，确定性最强）
+    { name: 'GEODIS', mode: 'sea', keepDetail: true, cells: {
+      C3: 'shipperName', C4: 'shipperAddr',
+      C13: 'consigneeName', C14: 'consigneeAddr', C24: 'notifyName',
+      O2: 'shipperName', O12: 'consigneeName', O23: 'notifyName'
+    } },
     { name: 'KLN', mode: 'sea', keepDetail: true, extraFields: [{ key: 'soNo', label: 'S/O 号（选填）', type: 'text' }, { key: 'crd', label: '货好日期 CRD', type: 'date' }, { key: 'placeOfReceipt', label: '收货地点', type: 'text' }, { key: 'finalDest', label: '最终目的地（选填）', type: 'text' }], cells: {
       K2: 'soNo', K4: 'crd', H17: 'incoterms', A23: 'vessel',
       A26: 'placeOfReceipt', E26: 'pol', A29: 'pod', E29: 'finalDest',
       A36: 'marks'
-    } }
+    } },
+    // v1.7.5：CHR 重建（原版 0449 三表：主表+ISF+税务采集表，业务样张数据已清）。
+    //   主表：明细区 r31-44 走既有 BOOKING_DETAIL_PRESETS CHR（keepDetail）；r53-70 制造商明细表
+    //   用 item:@line 逐行写（PO#/Item#/Description/Qty/HTS）；ISF/税务两 sheet 走 preset.sheets 按名映射。
+    //   originCn：ISF 9.0 Country of origin / 制造商表 COO 固定 'CN'（深圳出运）。
+    { name: 'CHR', mode: 'sea', keepDetail: true,
+      extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }, { key: 'placeOfReceipt', label: '出口收货地', type: 'text' }, { key: 'finalDest', label: '目的地（选填）', type: 'text' }],
+      cells: {
+        A5: 'shipperName', A6: 'shipperAddr',
+        A14: 'consignee@lines',
+        A20: 'notify',
+        H14: 'blType', H16: 'shipperName', H18: 'currency',
+        A29: 'vessel', C29: 'placeOfReceipt', F29: 'pol', G29: 'pod', H29: 'finalDest',
+        A33: 'marks',
+        B54: 'item:orderNo@line', C54: 'item:sku@line', D54: 'item:nameEn@line', F54: 'item:qty@line', G54: 'item:hsCode@line', H54: 'originCn',
+        B81: 'pickupTrucking', B83: 'specialCargo'
+      },
+      sheets: {
+        'ISF Template': { cells: {
+          C3: 'shipperName', C4: 'shipperAddr',
+          G5: 'shipperName', G6: 'shipperAddr',
+          C10: 'shipperName', C11: 'shipperAddr',
+          G12: 'consigneeName', G13: 'consigneeAddr',
+          C17: 'consigneeName', C18: 'consigneeAddr',
+          C35: 'originCn', G35: 'hsCode@line',
+          C43: 'vessel', C44: 'etd', G46: 'orderNos'
+        } },
+        '税务发票信息采集表TAX INV. INFORMATION': { cells: {
+          B6: 'shipperName', B8: 'shipperAddr', D9: 'shipperTel'
+        } }
+      }
+    }
   ];
 
   function _matchBookingFormPreset(ws, carrier) {
@@ -1203,6 +1240,12 @@
       if (spec === 'entrustPickup') return String(data.entrustPickup || '');
       // v1.7.4：HARVEST 货物属性（此前 valOf 缺分支导致选中值从未写入模板）
       if (spec === 'cargoNature') return String(data.cargoNature || '');
+      // v1.7.5：CHR ISF 9.0 Country of origin / 制造商表 COO（深圳出运固定 CN）
+      if (spec === 'originCn') return 'CN';
+      // v1.7.5：CHR 补 blType/currency/orderNos 简单值语义（此前 valOf 缺分支，preset 引用返回空）
+      if (spec === 'blType') return String(data.blType || '');
+      if (spec === 'currency') return String(data.currency || '');
+      if (spec === 'orderNos') return String(data.orderNos || '');
       if (spec === 'blRequire') return String(data.blRequire || '');
       if (spec === 'showHs') return String(data.showHs || '不显示');
       // v1.7.1：无/含电池/磁性 → 由 zipPost 复选框勾选表达（普货/带电/磁性），不写文字；化工品/其它保留文字写入
@@ -3368,6 +3411,14 @@
     }
     if (IS_BOOKING && _bkForm) {
       _writeBookingFormPreset(ws, _bkForm, data);
+      // v1.7.5：多 sheet 模板按名映射（CHR：ISF Template / 税务发票信息采集表）——
+      //   preset.sheets = { sheetName: { cells: {...} } }，值语义与主表共用（valOf），逐格写入。
+      if (_bkForm.sheets) {
+        Object.keys(_bkForm.sheets).forEach(function (sn) {
+          var w2 = (wb.worksheets || []).filter(function (x) { return x.name === sn; })[0];
+          if (w2) _writeBookingFormPreset(w2, { cells: _bkForm.sheets[sn].cells || _bkForm.sheets[sn] }, data);
+        });
+      }
     }
     // ⑥ 把源模板 logo 贴回输出 workbook（预览与导出都能显示）
     addLogo(wb, ws, options.logo);
