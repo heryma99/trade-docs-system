@@ -727,6 +727,8 @@
       invoiceType: meta.invoiceType || '',
       docsAttach: meta.docsAttach || '',
       docsAttachCeva: meta.docsAttachCeva || '',
+      serviceMode: meta.serviceMode || '',
+      serviceScope: meta.serviceScope || '',
       clearanceMode: meta.clearanceMode || '',
       docsCustoms: meta.docsCustoms || '',
       cargoNature: meta.cargoNature || '',
@@ -927,7 +929,10 @@
    *    nameEn@line / nameCn@line  品名从该格起向下逐行（RXO 纵排）
    *    crd                        货好日（商单易暂无该字段，留白——见阶段3方案第五节） */
   var BOOKING_FORM_PRESETS = [
-    { name: 'MANOR', mode: 'sea', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
+    // v1.7.5：MANOR 控件勾选映射接入（17 表单控件，captions 实证：LCL/CY-CY/CFS-CY/CY-CFS/CY-FO/CFS-CFS/
+    //   COL House B/L/Surrendered B/L/Seaway Bill/JRC/Herma/Other-TBA/Port to Port×3/Door to Door）。
+    //   ActiveX 部分=纯文字标签（无勾选状态），无需同步。
+    { name: 'MANOR', mode: 'sea', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }, { key: 'blType', label: '提单类型', type: 'select', options: ['正本提单', '电放提单', 'SEA WAYBILL'], def: '正本提单' }, { key: 'serviceMode', label: '装运方式', type: 'select', options: ['LCL', 'CY - CY', 'CFS - CY', 'CY - CFS', 'CY - FO', 'CFS - CFS'] }, { key: 'serviceScope', label: '服务类型', type: 'select', options: ['Port to Port', 'Door to Door'] }], cells: {
       B7: 'shipper', B18: 'crd', C25: 'boxCount',
       E23: 'nameCn@1', F23: 'nameCn@2', E24: 'nameEn@1', F24: 'nameEn@2',
       G24: 'gw', H23: 'volume', E25: 'hsCode', F25: 'hsCode'
