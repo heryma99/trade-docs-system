@@ -298,11 +298,11 @@
           }
         }
 
-        // B1.5) v1.7.1 表单复选框自动勾选（FORTUNES）：按用户选择把物流商托书上的 ☐ 控件置为 Checked。
-        //   映射表 = 线上模板 tpl_booking_fortunes.xlsx 的 ctrlProp 部件 ↔ VML 文字标签逐一锚点比对（29/29 实证）。
-        //   只勾选、从不取消 —— 模板默认勾选（MAWB主单 ctrlProp13）原样保留。
-        if (ctrlData && String(ctrlData.carrier || '').trim().toUpperCase() === 'FORTUNES') {
-          var TICK_RULES = {
+        // B1.5) v1.7.1/v1.7.5 表单复选框自动勾选（按承运商映射表）：按用户选择把托书上的 ☐ 控件置为 Checked。
+        //   映射表 = 各线上模板 ctrlProp 部件 ↔ VML 文字标签逐一锚点比对实证（FORTUNES 29/29、CEVA 13/46 可映射）。
+        //   只勾选、从不取消 —— 模板默认勾选原样保留。
+        var TICK_RULES_BY_CARRIER = {
+          FORTUNES: {
             'ctrlProp1.xml':  function (d) { return String(d.entrustCustoms || '').trim() === '委托报关'; },
             'ctrlProp2.xml':  function (d) { return String(d.entrustCustoms || '').trim() === '自行报关'; },
             'ctrlProp3.xml':  function (d) { return String(d.customsType || '').indexOf('单证') >= 0; },
@@ -326,7 +326,26 @@
             'ctrlProp27.xml': function (d) { return String(d.docsAttach || '').indexOf('DECLARATION ELEMENTS') >= 0; },
             'ctrlProp28.xml': function (d) { return String(d.docsAttach || '').indexOf('POWER OF ATTORNEY') >= 0; },
             'ctrlProp29.xml': function (d) { return String(d.docsAttach || '').indexOf('MSDS') >= 0; }
-          };
+          },
+          // CEVA：v1.7.5 新增。随附单证区 prop1-6/17 + Payment Type 预付/到付两组 prop7/8、prop12/13。
+          //   prop9/14 第三方、prop22/23 付款买单/账期、r25-26 提货/出口报关/保险、r14/r30-34/r60 无数据字段 → 不映射。
+          CEVA: {
+            'ctrlProp1.xml':  function (d) { return String(d.docsAttachCeva || '').indexOf('箱单') >= 0; },
+            'ctrlProp2.xml':  function (d) { return String(d.docsAttachCeva || '').indexOf('发票') >= 0; },
+            'ctrlProp3.xml':  function (d) { return String(d.docsAttachCeva || '').indexOf('产地证') >= 0; },
+            'ctrlProp4.xml':  function (d) { return String(d.docsAttachCeva || '').indexOf('出口许可证') >= 0; },
+            'ctrlProp5.xml':  function (d) { return String(d.docsAttachCeva || '').indexOf('危险品声明') >= 0; },
+            'ctrlProp6.xml':  function (d) { return String(d.docsAttachCeva || '').indexOf('其他') >= 0; },
+            'ctrlProp17.xml': function (d) { return String(d.docsAttachCeva || '').indexOf('进口许可证') >= 0; },
+            'ctrlProp7.xml':  function (d) { return String(d.freightTerms || '').toUpperCase().indexOf('PREPAID') >= 0; },
+            'ctrlProp8.xml':  function (d) { return String(d.freightTerms || '').toUpperCase().indexOf('COLLECT') >= 0; },
+            'ctrlProp12.xml': function (d) { return String(d.freightTerms || '').toUpperCase().indexOf('PREPAID') >= 0; },
+            'ctrlProp13.xml': function (d) { return String(d.freightTerms || '').toUpperCase().indexOf('COLLECT') >= 0; }
+          }
+        };
+        var _carrierKey = String((ctrlData && ctrlData.carrier) || '').trim().toUpperCase();
+        var TICK_RULES = TICK_RULES_BY_CARRIER[_carrierKey] || null;
+        if (TICK_RULES) {
           var tickedProps = [];
           for (var pn in TICK_RULES) {
             var _tp = 'xl/ctrlProps/' + pn;
