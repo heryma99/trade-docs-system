@@ -808,6 +808,36 @@
       })(),
       totals: totals,
       boxTypes: boxTypes, // v1.6.20：箱型汇总（订舱单尺寸列）
+      // v1.7.8：按订单拆分统计（orderNos 行序对齐；订舱单多订单逐行展开 perOrder spec 用）。
+      //   有装箱清单 → 按箱分组（boxCount=箱数、gw=箱毛重和、volume=长宽高/1e6，口径与 boxTypes 一致）；
+      //   无装箱清单 → 按聚合 items 的 orderNo 兜底（仅 gw 可得）。纯新增字段，不改既有 totals 语义。
+      orderStats: (function () {
+        var _m = {};
+        var _bx = (packing && packing.boxes) || [];
+        if (_bx.length) {
+          _bx.forEach(function (b) {
+            var on = String(b.orderNo == null ? '' : b.orderNo).trim();
+            if (!on) return;
+            var s = _m[on] || (_m[on] = { orderNo: on, boxCount: 0, gw: 0, volume: 0 });
+            s.boxCount += 1;
+            s.gw += Number(b.gw) || 0;
+            var L = Number(b.length || b.lengthCm) || 0, W = Number(b.width || b.widthCm) || 0, Hh = Number(b.height || b.heightCm) || 0;
+            if (L && W && Hh) s.volume += (L * W * Hh) / 1000000;
+          });
+        } else {
+          (items || []).forEach(function (it) {
+            var on = String(it.orderNo == null ? '' : it.orderNo).trim();
+            if (!on) return;
+            var s = _m[on] || (_m[on] = { orderNo: on, boxCount: 0, gw: 0, volume: 0 });
+            s.gw += (it._rowGw !== undefined ? it._rowGw : it.gw) || 0;
+          });
+        }
+        Object.keys(_m).forEach(function (k) { _m[k].gw = round(_m[k].gw, 2); _m[k].volume = round(_m[k].volume, 4); });
+        return orderList.map(function (on) {
+          var k = String(on == null ? '' : on).trim();
+          return _m[k] || { orderNo: k, boxCount: 0, gw: 0, volume: 0 };
+        });
+      })(),
       amountInWords: amountInWords(totals.amount, currency)
     };
   }
@@ -985,8 +1015,11 @@
       M36: 'gwNum', O36: 'volumeNum'
     } },
     { name: 'ASOS', mode: 'sea', extraFields: [{ key: 'pickup', label: '提货时间', type: 'datetime-local' }, { key: 'cutoff', label: '截仓时间', type: 'datetime-local' }], cells: {
-      B12: 'customsType', A16: 'pickup', B16: 'cutoff', F52: 'remark',
-      C16: 'orderNos@line', E16: 'boxCountNum', F16: 'gwNum', G16: 'volumeNum'
+      /* v1.7.8：多订单逐行展开（真实案例 BOOKING_1978183_1978182：orderNos@line 展开 SO 行后，
+       *   兄弟字段只写首行且首行误用两单合计 totals，第二订单 1978182 行仅剩 SO 号）。
+       *   A16/B16/E16/F16/G16 切到 perOrder/lines spec——单订单口径逐字节不变。 */
+      B12: 'customsType', A16: 'pickup@lines', B16: 'cutoff@lines', F52: 'remark',
+      C16: 'orderNos@line', E16: 'boxCountNum@perOrder', F16: 'gwNum@perOrder', G16: 'volumeNum@perOrder'
     } },
     { name: 'OVD', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }], cells: {
       B3: 'shipper', B9: 'consignee', B24: 'orderNos@cell:SO：', E25: 'nameEn@join:、',
@@ -1175,6 +1208,32 @@
       }
       if (spec === 'volumeNum') { var vv2 = Number(totals.volume) || 0; return vv2 > 0 ? _formNum(vv2, 4) : ''; }
       if (spec === 'boxCountNum') { var bc2 = Math.round(Number(totals.boxCount) || 0); return bc2 > 0 ? String(bc2) : ''; }
+      // v1.7.8：多订单逐行展开——按 orderStats 对齐 orderNos 行序（ASOS 真实案例 BOOKING_1978183_1978182）。
+      //   单订单（orderNos 仅 1 个）→ 退化为既有 totals 单格口径（零漂移）；订单无装箱数据 → 该行留空。
+      function _perOrderLines(field, fmt, totalVal) {
+        var _ons = String(data.orderNos || '').split(/,\s*/).filter(Boolean);
+        if (_ons.length <= 1) return totalVal > 0 ? fmt(totalVal) : '';
+        var _st = data.orderStats || [];
+        var _vals = _ons.map(function (on) {
+          var _r = null;
+          for (var i = 0; i < _st.length; i++) { if (String(_st[i].orderNo || '').trim() === on) { _r = _st[i]; break; } }
+          var v = _r ? (Number(_r[field]) || 0) : 0;
+          return v > 0 ? fmt(v) : '';
+        });
+        var _any = false;
+        for (var ia = 0; ia < _vals.length; ia++) { if (_vals[ia] !== '') { _any = true; break; } }
+        return _any ? { __lines: _vals } : '';
+      }
+      if (spec === 'boxCountNum@perOrder') return _perOrderLines('boxCount', function (v) { return String(Math.round(v)); }, Math.round(Number(totals.boxCount) || 0));
+      if (spec === 'gwNum@perOrder') return _perOrderLines('gw', function (v) { return _formNum(v, 2); }, Number(totals.gw) || 0);
+      if (spec === 'volumeNum@perOrder') return _perOrderLines('volume', function (v) { return _formNum(v, 4); }, Number(totals.volume) || 0);
+      if (spec === 'pickup@lines' || spec === 'cutoff@lines') {
+        var _pk = (spec === 'pickup@lines') ? 'pickup' : 'cutoff';
+        var _pv = String(data[_pk] || '').replace('T', ' ');
+        var _onsP = String(data.orderNos || '').split(/,\s*/).filter(Boolean);
+        if (_onsP.length <= 1) return _pv; // 单订单：与既有 'pickup'/'cutoff' spec 完全一致
+        return _pv ? { __lines: _onsP.map(function () { return _pv; }) } : '';
+      }
       // nameBi / nameBi@line：中文+空格+英文（COH F 列 / WELLFAST W42 的双语一格形态）
       function _biPairsHs() {
         var pb = [];
@@ -2394,6 +2453,11 @@
     //   证据：全量扫描 6 家订舱单模板，PASS1 误清的静态文字仅 3 种（GID CODE/出单方式/Shipping Order）。
     var BOOKING_STATIC_HEADER_RE = /^(gid\s*code|shipping\s*order|出单方式|正本提单|电放提单|sea\s*waybill|original\s*b\/?l|telex\s*release|装卸方式|本地费用\s*支付币种|cy\s*\/\s*cy|cy\s*\/\s*dr|cfs\s*\/\s*cfs|cfs\s*\/\s*cy|service\s*mode|bl\s*type|提单类型|prepaid|collect|exw|foa|fob|cif|others|cny|hkd|usd|freight\s*term|trade\s*term|currency|付款币种|_{3,}\s*x\s*\d{2}'?\s*(gp|hq)?|.*manufacturer.*|.*制造商.*)$/i;
 
+    // v1.7.8：订舱单模板预填的功能性邮箱（真实案例 BOOKING_1978183_1978182：ASOS B10
+    //   violet.jia@lns.maersk.com 被当样本残留清空——ExcelJS 往返实证非丢格，是本 PASS1 误清）。
+    //   邮箱是物流商收件联系途径而非业务残留，一律保留。仅订舱单 scope，不影响发票/申报模板。
+    var BOOKING_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
     // PASS 1：清理值列里的样本残留（非占位符、非标签、非静态文本）。
     // 合并单元格成员只保留包含标签词的静态文本；具体样本数据（如旧地址、旧公司名）仍清空。
     // v1.4.50：兼容无 {{}} 占位符模板——按 mapFieldLabel label 右侧值格也清；label 右侧的值合并区（主格+从属格）也清（之前 mergedCell skip 会跳过整片合并区导致样本残留）
@@ -2419,6 +2483,7 @@
         if (inLabelRange) {
           if (mergedSubordinate[r1 + ',' + col]) return; // 合并从属格不参与清理
           if (KEEP.test(s)) return; // 含保留词不动
+          if (isBooking && BOOKING_EMAIL_RE.test(String(s).trim())) return; // v1.7.8：功能性邮箱保留
           // v1.6.22：若「该格左侧最近的 label」与「该格」之间夹着模板静态文字，则该格处于静态表头区，
           //   不是 label 的值格，不得清空（修盲扫 12 格导致 6 家模板 15 处静态文字被误删）。
           var nearestLabelCol = 0;
@@ -2448,7 +2513,7 @@
         // v1.4.63：valueCols 清空也要跳合并从属格（同样的联动问题）
         if (mergedSubordinate[r1 + ',' + col]) return;
         // v1.6.34（仅订舱单）：valueCols 清空同样要过静态表头保护词典——CHR 的 CY/CY、BL Type 等复选框标签在值列上，此前被此路径清空
-        if (valueCols[col] && !KEEP.test(s) && !_cbIsLabel(s) && !CB_BRACKET_ADDRS[String(cell.address || '').toUpperCase()] && !(isBooking && BOOKING_STATIC_HEADER_RE.test(String(s).replace(/\s+/g, ' ').trim()))) cell.value = null; // v1.6.28: null 替代 ''（防挡邻格溢出；v1.6.89 加 CB 保护）
+        if (valueCols[col] && !KEEP.test(s) && !_cbIsLabel(s) && !CB_BRACKET_ADDRS[String(cell.address || '').toUpperCase()] && !(isBooking && BOOKING_STATIC_HEADER_RE.test(String(s).replace(/\s+/g, ' ').trim())) && !(isBooking && BOOKING_EMAIL_RE.test(String(s).trim()))) cell.value = null; // v1.6.28: null 替代 ''（防挡邻格溢出；v1.6.89 加 CB 保护；v1.7.8 加邮箱保护）
       });
     }
 
