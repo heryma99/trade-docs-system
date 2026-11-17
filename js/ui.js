@@ -3289,7 +3289,7 @@
 
 
 
-        ['invoice', '发票'], ['booking', '订舱单'], ['packing', '装箱单'], ['declare', '申报']
+        ['invoice', '发票'], ['booking', '订舱单'], ['booking_word', '订舱单(Word)'], ['packing', '装箱单'], ['declare', '申报']
 
 
 
@@ -3297,7 +3297,11 @@
 
 
 
-      return '<tr><td>' + esc(t.name) + (t.builtin ? ' <span class="badge gray">内置</span>' : '') + '</td>' +
+      var isWord = t.kind === 'booking_word';
+
+
+
+      return '<tr><td>' + esc(t.name) + (t.builtin ? ' <span class="badge gray">内置</span>' : '') + (isWord ? ' <span class="badge gray">Word</span>' : '') + '</td>' +
 
 
 
@@ -3317,11 +3321,10 @@
 
 
 
-        '<td><button class="btn sm ghost tp-prev" data-id="' + t.id + '">预览</button> ' +
-
-
-
-        '<button class="btn sm ghost tp-map" data-id="' + t.id + '">字段</button> ' +
+        '<td>' + (isWord
+          ? '<button class="btn sm ghost tp-dl" data-id="' + t.id + '">下载</button> '
+          : '<button class="btn sm ghost tp-prev" data-id="' + t.id + '">预览</button> ' +
+        '<button class="btn sm ghost tp-map" data-id="' + t.id + '">字段</button> ') +
 
 
 
@@ -3397,7 +3400,7 @@
 
 
 
-      '<div><label class="req">类型</label><select id="tp-kind"><option value="invoice">发票</option><option value="booking">订舱单(BOOKING FORM)</option><option value="packing">装箱单(PACKING LIST)</option><option value="declare">申报/买单要素</option></select></div>' +
+      '<div><label class="req">类型</label><select id="tp-kind"><option value="invoice">发票</option><option value="booking">订舱单(BOOKING FORM)</option><option value="booking_word">订舱单(Word·仅下载填写)</option><option value="packing">装箱单(PACKING LIST)</option><option value="declare">申报/买单要素</option></select></div>' +
 
 
 
@@ -3405,7 +3408,7 @@
 
 
 
-      '<div><label class="req">模板文件(.xlsx / .xls / .csv)</label><input type="file" id="tp-file" accept=".xlsx,.xls,.csv"></div></div>' +
+      '<div><label class="req">模板文件(.xlsx / .xls / .csv / .doc / .docx)</label><input type="file" id="tp-file" accept=".xlsx,.xls,.csv,.doc,.docx"></div></div>' +
 
 
 
@@ -3454,6 +3457,62 @@
 
 
         var buf = await f.arrayBuffer();
+
+
+
+        // v1.7.8 Word 模板分支：跳过 ExcelJS 解析/占位符扫描，原样入库（仅下载填写，不参与自动生成）
+
+
+
+        if (kind === 'booking_word' || /\.(docx?|DOCX?)$/.test(f.name)) {
+
+
+
+          autoSyncToTeam(); // v1.5.22 模板变更自动同步
+
+
+
+          await db.put('templates', {
+
+
+
+            name: name, kind: 'booking_word', carrier: carrier, status: 'active', format: 'word',
+
+
+
+            fileBuf: buf, fileName: f.name, fileSize: buf.byteLength || buf.length || 0,
+
+
+
+            uploadedAt: Date.now(),
+
+
+
+            mapping: { required: [], labelMap: [] }
+
+
+
+          });
+
+
+
+          window.__lastTplUpload = { ok: true, name: name, kind: 'booking_word', size: (buf.byteLength || buf.length || 0), word: true };
+
+
+
+          toast('Word 模板已上传（原样保存，仅支持下载填写）', 'ok');
+
+
+
+          render();
+
+
+
+          return;
+
+
+
+        }
 
 
 
@@ -3524,6 +3583,22 @@
     };
 
 
+
+    // v1.7.8 Word 模板下载（原样 fileBuf → blob 下载）
+    document.querySelectorAll('.tp-dl').forEach(function (b) {
+      b.onclick = async function () {
+        var t = await db.get('templates', b.dataset.id);
+        var buf = t.fileBuf;
+        if (!buf) { toast('模板文件缺失（fileBuf 为空），请重新上传或等待同步', 'err'); return; }
+        var blob = new Blob([buf], { type: /\.(docx)$/i.test(t.fileName || '') ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/msword' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = t.fileName || (t.name + '.doc');
+        document.body.appendChild(a); a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 800);
+        toast('已下载：' + (t.fileName || t.name), 'ok');
+      };
+    });
 
     document.querySelectorAll('.tp-prev').forEach(function (b) {
 
@@ -9087,7 +9162,8 @@
 
 
 
-    m.filePath = SYNC_TPL_DIR + t.id + '.xlsx';
+    // v1.7.8 Word 模板：按原始扩展名落盘（.doc/.docx），其余保持 .xlsx
+    m.filePath = SYNC_TPL_DIR + t.id + (t.format === 'word' ? (/\.(docx)$/i.test(t.fileName || '') ? '.docx' : '.doc') : '.xlsx');
 
 
 
