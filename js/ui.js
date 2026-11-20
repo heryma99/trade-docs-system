@@ -3289,7 +3289,7 @@
 
 
 
-        ['invoice', '发票'], ['booking', '订舱单'], ['booking_word', '订舱单(Word)'], ['packing', '装箱单'], ['declare', '申报']
+        ['invoice', '发票'], ['booking', '订舱单'], ['booking_word', '订舱单(下载填写)'], ['packing', '装箱单'], ['declare', '申报']
 
 
 
@@ -3301,7 +3301,13 @@
 
 
 
-      return '<tr><td>' + esc(t.name) + (t.builtin ? ' <span class="badge gray">内置</span>' : '') + (isWord ? ' <span class="badge gray">Word</span>' : '') + '</td>' +
+      var _ext = /\.(docx?|xlsx?|csv)$/i.exec(t.fileName || '');
+
+      var _fmtBadge = _ext ? _ext[1].toUpperCase() : '原样';
+
+
+
+      return '<tr><td>' + esc(t.name) + (t.builtin ? ' <span class="badge gray">内置</span>' : '') + (isWord ? ' <span class="badge gray">' + _fmtBadge + '</span>' : '') + '</td>' +
 
 
 
@@ -3400,7 +3406,7 @@
 
 
 
-      '<div><label class="req">类型</label><select id="tp-kind"><option value="invoice">发票</option><option value="booking">订舱单(BOOKING FORM)</option><option value="booking_word">订舱单(Word·仅下载填写)</option><option value="packing">装箱单(PACKING LIST)</option><option value="declare">申报/买单要素</option></select></div>' +
+      '<div><label class="req">类型</label><select id="tp-kind"><option value="invoice">发票</option><option value="booking">订舱单(BOOKING FORM)</option><option value="booking_word">订舱单(下载填写·Word/Excel)</option><option value="packing">装箱单(PACKING LIST)</option><option value="declare">申报/买单要素</option></select></div>' +
 
 
 
@@ -3460,7 +3466,7 @@
 
 
 
-        // v1.7.8 Word 模板分支：跳过 ExcelJS 解析/占位符扫描，原样入库（仅下载填写，不参与自动生成）
+        // v1.7.8/v1.8.0 下载填写分支：跳过 ExcelJS 解析/占位符扫描，原样入库（仅下载填写，不参与自动生成）
 
 
 
@@ -3476,7 +3482,7 @@
 
 
 
-            name: name, kind: 'booking_word', carrier: carrier, status: 'active', format: 'word',
+            name: name, kind: 'booking_word', carrier: carrier, status: 'active', format: 'raw',
 
 
 
@@ -3496,11 +3502,11 @@
 
 
 
-          window.__lastTplUpload = { ok: true, name: name, kind: 'booking_word', size: (buf.byteLength || buf.length || 0), word: true };
+          window.__lastTplUpload = { ok: true, name: name, kind: 'booking_word', size: (buf.byteLength || buf.length || 0), raw: true };
 
 
 
-          toast('Word 模板已上传（原样保存，仅支持下载填写）', 'ok');
+          toast('模板已上传（原样保存，仅支持下载填写）', 'ok');
 
 
 
@@ -3590,7 +3596,9 @@
         var t = await db.get('templates', b.dataset.id);
         var buf = t.fileBuf;
         if (!buf) { toast('模板文件缺失（fileBuf 为空），请重新上传或等待同步', 'err'); return; }
-        var blob = new Blob([buf], { type: /\.(docx)$/i.test(t.fileName || '') ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/msword' });
+        var _mimes = { docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', doc: 'application/msword', xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
+        var _e = (/\.([a-z0-9]+)$/i.exec(t.fileName || '') || [null, 'xls'])[1].toLowerCase();
+        var blob = new Blob([buf], { type: _mimes[_e] || 'application/octet-stream' });
         var a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = t.fileName || (t.name + '.doc');
@@ -9162,8 +9170,9 @@
 
 
 
-    // v1.7.8 Word 模板：按原始扩展名落盘（.doc/.docx），其余保持 .xlsx
-    m.filePath = SYNC_TPL_DIR + t.id + (t.format === 'word' ? (/\.(docx)$/i.test(t.fileName || '') ? '.docx' : '.doc') : '.xlsx');
+    // v1.7.8/v1.8.0 下载填写模板：按原始文件扩展名落盘（.doc/.docx/.xls/.xlsx），无扩展名则 .xlsx
+    var _mExt = (/\.([A-Za-z0-9]+)$/.exec(t.fileName || '') || [null, 'xlsx'])[1].toLowerCase();
+    m.filePath = SYNC_TPL_DIR + t.id + '.' + _mExt;
 
 
 
