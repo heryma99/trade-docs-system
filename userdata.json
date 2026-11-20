@@ -2395,6 +2395,25 @@
      "labelMap": [],
      "fileBufBroken": true
     }
+   },
+   {
+    "id": "tpl_raw_ait",
+    "name": "AIT爱意特-海运BKG(空白)",
+    "kind": "booking_word",
+    "carrier": "AIT爱意特",
+    "status": "active",
+    "isSeed": false,
+    "updatedAt": 1795143098155,
+    "createdAt": 1795143098155,
+    "filePath": "templates/tpl_raw_ait.xls",
+    "fileSize": 45056,
+    "fileName": "AIT SZ 海运BKG.xls",
+    "format": "raw",
+    "mapping": {
+     "required": [],
+     "labelMap": [],
+     "fileBufBroken": true
+    }
    }
   ]
  }
