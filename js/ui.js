@@ -9216,7 +9216,9 @@
 
 
 
-    var fname = tpl.id + '.xlsx';
+    // v1.8.1 下载填写模板：推送文件名按原始扩展名（.doc/.docx/.xls/.xlsx），不再硬编码 .xlsx
+    var _pExt = (/\.([A-Za-z0-9]+)$/.exec(tpl.fileName || tpl.filePath || '') || [null, 'xlsx'])[1].toLowerCase();
+    var fname = tpl.id + '.' + _pExt;
 
 
 
@@ -10116,7 +10118,8 @@
 
 
 
-        var fetched = await Promise.all(needFetch.map(function (mt) { return _fetchTplFile(mt.id + '.xlsx').then(function (buf) { return { mt: mt, buf: buf }; }); }));
+        // v1.8.1 关键修复：拉取文件名取自云端元数据 filePath 的扩展名（.doc/.docx/.xls/.xlsx），不再硬编码 .xlsx
+        var fetched = await Promise.all(needFetch.map(function (mt) { var _f = (mt.filePath && mt.filePath.indexOf('/') >= 0) ? mt.filePath.slice(mt.filePath.lastIndexOf('/') + 1) : (mt.id + '.xlsx'); return _fetchTplFile(_f).then(function (buf) { return { mt: mt, buf: buf }; }); }));
 
 
 
