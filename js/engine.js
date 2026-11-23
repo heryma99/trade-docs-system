@@ -464,10 +464,17 @@
         // ②展示值=箱级归并(spec.gw/nw，每箱首行称重值铺满该箱全部行，与通用申报要素类按行模板口径一致)
         // ③箱级与行级都无值时回退主数据单件×该行数量（对齐非箱模式既有回退），杜绝净毛重 0
         it._rowGw = Number(b.gw) || 0; it._rowNw = Number(b.nw) || 0;
-        it.gw = (spec.gw || it._rowGw) || round((d.gw || 0) * it.qty, 3);
-        it.nw = (spec.nw || it._rowNw) || round((d.nw || 0) * it.qty, 3);
-        it.boxNw = it.nw;
         it._weightSource = (spec.gw || spec.nw || it._rowGw || it._rowNw) ? 'packing' : 'master';
+        // v1.8.2（用户 2026-11-23 拍板，仅 kind=invoice 且 carrier=通用 的发票线）：行级净重=主数据单件×数量（2位小数）；
+        // 非通用发票线维持 v1.6.64 口径（箱级归并铺满→行级→主数据回退），零影响
+        it._rawFill = (opts.kind === 'invoice' && opts.templateCarrier === '通用');
+        if (it._rawFill && (d.nw || 0) > 0) {
+          it.nw = round((d.nw || 0) * it.qty, 2);
+        } else {
+          it.nw = (spec.nw || it._rowNw) || round((d.nw || 0) * it.qty, 3);
+        }
+        it.gw = (spec.gw || it._rowGw) || round((d.gw || 0) * it.qty, 3);
+        it.boxNw = it.nw;
         // v1.4.60：保留排序键（订单号 + 装箱清单原始行序）
         it.orderNo = String(b.orderNo == null ? '' : b.orderNo).trim();
         it._ri = _ri;
@@ -503,6 +510,16 @@
           it.boxNo = on + '-' + raw;
         });
       })();
+      // v1.8.2（仅通用发票线 _rawFill，用户需求）：箱号/毛重/纸箱规格/体积(重) 每箱仅首行显示，非首行置空；
+      // 纯展示层去重——_rowGw/_rowNw/_boxNoRaw 存档与 totals 行级累加不受影响，箱数首行标记（v1.4.62）照旧
+      if (opts.kind === 'invoice' && opts.templateCarrier === '通用') {
+        items.forEach(function (it) {
+          if (!it._firstOfBox) {
+            it.boxNo = ''; it.gw = ''; it.dims = ''; it.boxSpec = '';
+            it.volume = ''; it.volumeWeight = '';
+          }
+        });
+      }
     } else {
       // 明细合并（跨订单同SKU同价合并）
       var agg = {};
@@ -615,7 +632,8 @@
       } else {
         it._weightSource = 'packing';
       }
-      totals.qty += it.qty; totals.amount += it.amount; totals.nw += (it._rowNw !== undefined ? it._rowNw : it.nw); totals.gw += (it._rowGw !== undefined ? it._rowGw : it.gw); totals.volumeWeight += (Number(it.volumeWeight) || 0);
+      // v1.8.2：_rawFill（通用发票线）净重合计=各行展示值之和（主数据单件×数量），与行显示严格一致
+      totals.qty += it.qty; totals.amount += it.amount; totals.nw += (it._rawFill ? it.nw : (it._rowNw !== undefined ? it._rowNw : it.nw)); totals.gw += (it._rowGw !== undefined ? it._rowGw : it.gw); totals.volumeWeight += (Number(it.volumeWeight) || 0);
     });
     totals.amount = round(totals.amount, 2); totals.nw = round(totals.nw, 3); totals.gw = round(totals.gw, 3); totals.volumeWeight = round(totals.volumeWeight, 3);
     if (packing) {
