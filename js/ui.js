@@ -6435,6 +6435,8 @@
 
       kind: kind, orders: orders, packing: packing, meta: w.meta, boxMode: boxMode,
 
+      templateCarrier: (tpl && tpl.carrier) || '',
+
 
 
       shipper: shipper || {}, consignee: consignee || {}, notify: notify, declareMap: declareMap,
