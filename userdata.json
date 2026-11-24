@@ -2347,17 +2347,18 @@
     "carrier": "Grand Freight",
     "status": "active",
     "isSeed": false,
-    "updatedAt": 1794888505838,
+    "updatedAt": 1795517626792,
     "createdAt": 1794888505838,
-    "filePath": "templates/tpl_word_gfsd.doc",
-    "fileSize": 58053,
-    "fileName": "空运Booking Form-GrandFreight.doc",
+    "filePath": "templates/tpl_word_gfsd.docx",
+    "fileSize": 39283,
+    "fileName": "GrandFreight空运托书_模板.docx",
     "format": "word",
     "mapping": {
      "required": [],
      "labelMap": [],
      "fileBufBroken": true
-    }
+    },
+    "docxPreset": "gfsd_v1"
    },
    {
     "id": "tpl_word_bah",
@@ -2366,17 +2367,18 @@
     "carrier": "BAH巴林线",
     "status": "active",
     "isSeed": false,
-    "updatedAt": 1794888505838,
+    "updatedAt": 1795517626792,
     "createdAt": 1794888505838,
-    "filePath": "templates/tpl_word_bah.doc",
-    "fileSize": 301187,
-    "fileName": "订舱单-巴林线BAH.doc",
+    "filePath": "templates/tpl_word_bah.docx",
+    "fileSize": 262776,
+    "fileName": "巴林空运订舱单_模板.docx",
     "format": "word",
     "mapping": {
      "required": [],
      "labelMap": [],
      "fileBufBroken": true
-    }
+    },
+    "docxPreset": "bah_v1"
    },
    {
     "id": "tpl_word_yh",
@@ -2385,17 +2387,18 @@
     "carrier": "长帆LONGSAIL",
     "status": "active",
     "isSeed": false,
-    "updatedAt": 1794888505838,
+    "updatedAt": 1795517626792,
     "createdAt": 1794888505838,
-    "filePath": "templates/tpl_word_yh.doc",
-    "fileSize": 60416,
-    "fileName": "空运出口BOOKING格式-长帆.doc",
+    "filePath": "templates/tpl_word_yh.docx",
+    "fileSize": 49722,
+    "fileName": "长帆空运托书_模板.docx",
     "format": "word",
     "mapping": {
      "required": [],
      "labelMap": [],
      "fileBufBroken": true
-    }
+    },
+    "docxPreset": "yh_v1"
    },
    {
     "id": "tpl_raw_ait",
