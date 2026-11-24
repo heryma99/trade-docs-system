@@ -7246,9 +7246,20 @@
         (ctx.data.items || []).forEach(function (it) { var ds = String(it.dims || '').trim(); if (ds && !uniqDims[ds]) { uniqDims[ds] = 1; dimLines.push(ds); } });
         var cnEnSet = {}, comLines = [];
         (ctx.data.items || []).forEach(function (it) { var k = (String(it.nameCn || '').trim() + ' ' + String(it.nameEn || '').trim()).trim(); if (k && !cnEnSet[k]) { cnEnSet[k] = 1; comLines.push(k); } });
+        // v1.8.7 导出前空值提醒（防静默缺数）
+        var _emptyWarn = [];
+        (function () {
+          var d0 = ctx.data || {};
+          if (!((d0.shipper || {}).contact)) _emptyWarn.push('联系人');
+          if (!((d0.shipper || {}).tel)) _emptyWarn.push('电话');
+          if (!((d0.consignee || {}).name)) _emptyWarn.push('收货人（step1 未选或主数据缺）');
+          if (!d0.pod) _emptyWarn.push('目的港');
+          if (!d0.tradeTerm) _emptyWarn.push('贸易条款');
+        })();
         var wordHtml = '<h2>③ Word 托书导出（大田样板）</h2><div class="card">' +
           '<p><b>模板：</b>' + esc(tpl.name) + '（原版式 Word，数据自动填充，导出 .docx）</p>' +
           '<p><b>订单：</b>' + (ctx.orders || []).length + ' 票　<b>装箱清单：</b>' + (w.packingId ? '已导入' : '未导入') + '</p>' +
+          (_emptyWarn.length ? '<p class="vres warn">⚠️ 以下字段数据源为空，导出将留空（请确认主数据/step1 是否维护）：' + _emptyWarn.map(esc).join('、') + '</p>' : '') +
           '<p class="hint">导出的 Word 托书将自动填充：Shipper/Consignee/Notify、PO# 订单号、货好时间、贸易条款、PP/CC、起运/目的港、总件数/毛重/品名汇总/尺寸；传真、航班号、特殊要求、提货地址留待人工填写</p>' +
           '<button class="btn ok" id="bw-word-export">导出 Word 托书 (.docx)</button> ' +
           '<button class="btn ghost" id="bw-word-back">← 回上一步</button></div>';
@@ -7262,7 +7273,8 @@
               contact: (d.shipper && d.shipper.contact) || '', tel: (d.shipper && d.shipper.tel) || '',
               shipperEn: [(d.shipper && d.shipper.name), (d.shipper && d.shipper.address)].filter(Boolean).join('\n'),
               shipperCn: (d.shipper && d.shipper.nameCn) || '',
-              poList: poLines.join('\n'),
+              // v1.8.7 修复：PO# 从订单列表取全量（此前 items 合并后 orderNo 丢失导致缺单）
+              poList: (ctx.orders || []).map(function (o) { return String(o.orderNo || o.id || '').trim(); }).filter(Boolean).join('\n'),
               cargoReadyDate: (w.meta && w.meta.cargoReadyDate) || '',
               tradeTerm: d.tradeTerm || '',
               freightPpcc: /collect|到付/i.test(d.freightTerms || '') ? 'CC' : 'PP',
@@ -7270,6 +7282,8 @@
               podCode: (String(d.pod || '').match(/\b[A-Z]{3}\b/) || [''])[0],
               destCountry: d.destCountry || '',
               pol: d.pol || '',
+              consigneeBlock: [(d.consignee && d.consignee.name), (d.consignee && d.consignee.address)].filter(Boolean).join('\n'),
+              notifyBlock: d.notify ? [(d.notify.name), (d.notify.address)].filter(Boolean).join('\n') : 'SAME AS CONSIGNEE',
               totalCtns: ((d.totals && d.totals.boxCount) || 0) + 'CTNS',
               commoditySummary: comLines.join('\n'),
               totalGw: Math.round(((d.totals && d.totals.gw) || 0) * 100) / 100,
