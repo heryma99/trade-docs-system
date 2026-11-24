@@ -6777,7 +6777,7 @@
 
 
 
-      var _allBkTpls = (await db.all('templates')).filter(function (t) { return t.kind === 'booking' && t.status === 'active'; });
+      var _allBkTpls = (await db.all('templates')).filter(function (t) { return (t.kind === 'booking' || (t.kind === 'booking_word' && t.docxPreset)) && t.status === 'active'; });
 
 
 
@@ -7235,6 +7235,60 @@
 
 
       var tpl = await db.get('templates', w.templateId);
+
+
+
+      // v1.8.6 Word 托书导出分支（docxtemplater，大田样板）：跳过 xlsx 校验/预览，直接出 Word 托书
+      if (tpl && tpl.kind === 'booking_word' && tpl.docxPreset) {
+        var uniqOrd = {}, poLines = [];
+        (ctx.data.items || []).forEach(function (it) { var on = String(it.orderNo || '').trim(); if (on && !uniqOrd[on]) { uniqOrd[on] = 1; poLines.push(on); } });
+        var uniqDims = {}, dimLines = [];
+        (ctx.data.items || []).forEach(function (it) { var ds = String(it.dims || '').trim(); if (ds && !uniqDims[ds]) { uniqDims[ds] = 1; dimLines.push(ds); } });
+        var cnEnSet = {}, comLines = [];
+        (ctx.data.items || []).forEach(function (it) { var k = (String(it.nameCn || '').trim() + ' ' + String(it.nameEn || '').trim()).trim(); if (k && !cnEnSet[k]) { cnEnSet[k] = 1; comLines.push(k); } });
+        var wordHtml = '<h2>③ Word 托书导出（大田样板）</h2><div class="card">' +
+          '<p><b>模板：</b>' + esc(tpl.name) + '（原版式 Word，数据自动填充，导出 .docx）</p>' +
+          '<p><b>订单：</b>' + (ctx.orders || []).length + ' 票　<b>装箱清单：</b>' + (w.packingId ? '已导入' : '未导入') + '</p>' +
+          '<p class="hint">导出的 Word 托书将自动填充：Shipper/Consignee/Notify、PO# 订单号、货好时间、贸易条款、PP/CC、起运/目的港、总件数/毛重/品名汇总/尺寸；传真、航班号、特殊要求、提货地址留待人工填写</p>' +
+          '<button class="btn ok" id="bw-word-export">导出 Word 托书 (.docx)</button> ' +
+          '<button class="btn ghost" id="bw-word-back">← 回上一步</button></div>';
+        var body = document.getElementById('bwiz-body');
+        body.innerHTML = wordHtml;
+        document.getElementById('bw-word-back').onclick = function () { w.step = 2; render(); };
+        document.getElementById('bw-word-export').onclick = async function () {
+          try {
+            var d = ctx.data;
+            var wd = {
+              contact: (d.shipper && d.shipper.contact) || '', tel: (d.shipper && d.shipper.tel) || '',
+              shipperEn: [(d.shipper && d.shipper.name), (d.shipper && d.shipper.address)].filter(Boolean).join('\n'),
+              shipperCn: (d.shipper && d.shipper.nameCn) || '',
+              poList: poLines.join('\n'),
+              cargoReadyDate: (w.meta && w.meta.cargoReadyDate) || '',
+              tradeTerm: d.tradeTerm || '',
+              freightPpcc: /collect|到付/i.test(d.freightTerms || '') ? 'CC' : 'PP',
+              podFull: d.pod || '',
+              podCode: (String(d.pod || '').match(/\b[A-Z]{3}\b/) || [''])[0],
+              destCountry: d.destCountry || '',
+              pol: d.pol || '',
+              totalCtns: ((d.totals && d.totals.boxCount) || 0) + 'CTNS',
+              commoditySummary: comLines.join('\n'),
+              totalGw: Math.round(((d.totals && d.totals.gw) || 0) * 100) / 100,
+              dimsSummary: dimLines.join('\n')
+            };
+            var z = new PizZip(new Uint8Array(tpl.fileBuf));
+            var doc = new window.docxtemplater(z, { linebreaks: true, delimiters: { start: '{{', end: '}}' } });
+            doc.render(wd);
+            var blob = new Blob([doc.getZip().generate({ type: 'arraybuffer' })], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = (w.carrier ? w.carrier + '_' : '') + '空运托书_' + (d.invoiceNo || '') + '.docx';
+            document.body.appendChild(a); a.click();
+            setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 800);
+            toast('Word 托书已导出：' + a.download, 'ok');
+          } catch (e) { toast('Word 导出失败: ' + e.message, 'err'); }
+        };
+        return;
+      }
 
 
 
