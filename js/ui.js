@@ -7271,13 +7271,14 @@
             var d = ctx.data;
             var wd = {
               contact: (d.shipper && d.shipper.contact) || '', tel: (d.shipper && d.shipper.tel) || '',
+              shipperName: (d.shipper && d.shipper.name) || '', shipperAddress: (d.shipper && d.shipper.address) || '',
               shipperEn: [(d.shipper && d.shipper.name), (d.shipper && d.shipper.address)].filter(Boolean).join('\n'),
               shipperCn: (d.shipper && d.shipper.nameCn) || '',
-              // v1.8.7 修复：PO# 从订单列表取全量（此前 items 合并后 orderNo 丢失导致缺单）
               poList: (ctx.orders || []).map(function (o) { return String(o.orderNo || o.id || '').trim(); }).filter(Boolean).join('\n'),
+              hsSummary: (function () { var s = {}, a = []; (d.items || []).forEach(function (it) { var h = String(it.hsCode || '').trim(); if (h && !s[h]) { s[h] = 1; a.push(h); } }); return a.join('、'); })(),
               cargoReadyDate: (w.meta && w.meta.cargoReadyDate) || '',
               tradeTerm: d.tradeTerm || '',
-              freightPpcc: /collect|到付/i.test(d.freightTerms || '') ? 'CC' : 'PP',
+              freightPpcc: /collect|到付/i.test(d.freightTerms || '') ? 'CC（到付）' : 'PP（预付）',
               podFull: d.pod || '',
               podCode: (String(d.pod || '').match(/\b[A-Z]{3}\b/) || [''])[0],
               destCountry: d.destCountry || '',
@@ -7285,12 +7286,14 @@
               consigneeBlock: [(d.consignee && d.consignee.name), (d.consignee && d.consignee.address)].filter(Boolean).join('\n'),
               notifyBlock: d.notify ? [(d.notify.name), (d.notify.address)].filter(Boolean).join('\n') : 'SAME AS CONSIGNEE',
               totalCtns: ((d.totals && d.totals.boxCount) || 0) + 'CTNS',
+              totalCtnsLower: ((d.totals && d.totals.boxCount) || 0) + 'ctns',
               commoditySummary: comLines.join('\n'),
               totalGw: Math.round(((d.totals && d.totals.gw) || 0) * 100) / 100,
+              totalVolume: Math.round(((d.totals && d.totals.volume) || 0) * 1000) / 1000,
               dimsSummary: dimLines.join('\n')
             };
             var z = new PizZip(new Uint8Array(tpl.fileBuf));
-            var doc = new window.docxtemplater(z, { linebreaks: true, delimiters: { start: '{{', end: '}}' } });
+            var doc = new window.docxtemplater(z, { linebreaks: true, delimiters: { start: '{{', end: '}}' }, nullGetter: function () { return ''; } });
             doc.render(wd);
             var blob = new Blob([doc.getZip().generate({ type: 'arraybuffer' })], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
             var a = document.createElement('a');
