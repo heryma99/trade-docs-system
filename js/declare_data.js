@@ -4,5 +4,5 @@ window.TD = window.TD || {};
 
 window.TD.declareData = window.TD.declareData || [];
 
-window.TD.declareMirrorVer = '20261109-151'; // 申报主数据镜像版本：页面打开时本地低于此版本即自动全量同步
+window.TD.declareMirrorVer = '20261110-151'; // 申报主数据镜像版本：页面打开时本地低于此版本即自动全量同步
 
