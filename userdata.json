@@ -2327,10 +2327,10 @@
     "carrier": "大田",
     "status": "active",
     "isSeed": false,
-    "updatedAt": 1795516105349,
+    "updatedAt": 1795516847518,
     "createdAt": 1794888505838,
     "filePath": "templates/tpl_word_datian.docx",
-    "fileSize": 19278,
+    "fileSize": 19302,
     "fileName": "大田空运托书_模板.docx",
     "format": "word",
     "mapping": {
