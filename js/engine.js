@@ -1057,7 +1057,10 @@
     } },
     { name: 'CHARTERLINK', mode: 'sea', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
       A1: 'shipper@inline:Shipper托運人 (名稱, 地址, 電話 & 傳真)       ', D40: 'crd', A12: 'consignee', B30: 'boxCount', F31: 'gwNum', H30: 'volumeNum',
-      C32: 'nameCn@line', D32: 'nameEn@line', E32: 'hsCode@line'
+      C32: 'nameCn@line', D32: 'nameEn@line', E32: 'hsCode@line',
+      /* v1.9.6 反馈修复：D15/D21 運費付款方式标记、D25 提单要求、C42 提货地址（固定仓，J2/J3/J5） */
+      D15: 'freightTerms@inline:預付  (  )      到付  (  )   ← ', D21: 'freightTerms@inline:裝貨港費用付款方式 預付  (  )      到付 ( )   ← ',
+      D25: 'blRequire', C42: 'pickup@inline:提货地址/提货要求：'
     } },
     { name: 'VENTANA', mode: 'sea', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
       A2: 'shipperName', A4: 'shipperAddr', A14: 'notifyName', A15: 'notifyAddr', F47: 'crd',
@@ -1125,10 +1128,15 @@
       N40: 'gwNum', Q40: 'volumeNum'
     } },
     { name: 'COH', mode: 'sea', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
-      C56: 'marks', C78: 'crd',
+      B57: 'marks', C78: 'crd',
       C20: 'shipperName', C21: 'shipperAddr', C30: 'consigneeName', C31: 'consigneeAddr',
       D59: 'boxCountNum', F59: 'nameBi@line', J59: 'hsCode@line',
-      K60: 'gwNum', N60: 'volumeNum'
+      K60: 'gwNum', N60: 'volumeNum',
+      /* v1.9.6 反馈修复（C1-C8）：Notify 逐票、Booking Party=订仓人我司、含电池/海运费/本地费/报关方式标记、按票 PO#（J78，替换 K78 样张） */
+      B39: 'notifyName', B40: 'notifyAddr',
+      B11: 'shipperName', B12: 'shipperAddr', F15: 'shipperTel',
+      L24: 'electrifiedMark', L28: 'freightTerms', L30: 'freightTerms', L33: 'entrustCustoms',
+      J78: 'orderNos'
     } },
     { name: 'WELLFAST', mode: 'sea', cells: {
       C8: 'shipper', C17: 'consignee', C32: 'pol', C35: 'pod', D39: 'marks', C57: 'remark',
@@ -1239,6 +1247,9 @@
       if (spec === 'volume') { var vv = Number(totals.volume) || 0; return vv > 0 ? _formNum(vv, 4) + 'cbm' : ''; }
       if (spec === 'hsCode') return hsSeq[0] || '';
       if (spec === 'hsCode6') { var h = String(hsSeq[0] || ''); return h ? h.slice(0, 6) : ''; }
+            // v1.9.6：通用 @inline 处理器（此前仅 etd/shipper 两个特例，任意键 @inline 会返回空——嘉林 D15/D21/C42 案例）
+      var mInl = spec.match(/^([\w.]+)@inline:([\s\S]+)$/);
+      if (mInl) { var _iv = valOf(mInl[1]); return mInl[2] + String(_iv == null ? '' : _iv); }
       if (spec === 'crd') return String(data.crd || '');
       // v1.9.3：v1.9.0 增量键全部补 valOf 分支（此前缺分支导致 preset 引用返回空——UNITEX H38 案例）
       if (spec === 'notifyBlock') return String(data.notifyBlock || '');
@@ -1251,6 +1262,7 @@
       if (spec === 'nameEnSummary') return String(data.nameEnSummary || '');
       if (spec === 'hsSummary') return String(data.hsSummary || '');
       if (spec === 'dimsSummary') return String(data.dimsSummary || '');
+      if (spec === 'freightTerms') return String(data.freightTerms || '');
       if (spec === 'commodityInline') return String(data.commodityInline || '');
       if (spec === 'brandShort') return String(data.brandShort || '');
       if (spec === 'electrifiedMark') return String(data.electrifiedMark || '');
