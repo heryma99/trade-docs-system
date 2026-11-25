@@ -1037,7 +1037,7 @@
     { name: 'HARVEST', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }], cells: {
       A2: 'shipper@lines', A4: 'shipperTel', A10: 'consignee@lines',
       B18: 'flight', I36: 'cargoNature',
-      A30: 'orderNos@line:SO:', C30: 'boxCount', D30: 'gw', F30: 'nameDesc@line'
+      A30: 'orderNos@line:SO:', C30: 'boxCount', D30: 'gw', F30: 'nameBiQtyDims@line' /* v1.9.7 中文+数量+尺寸 */
     } },
     { name: 'UNITEX', mode: 'air', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }, { key: 'flight', label: '航班号', type: 'text' }], cells: {
       A3: 'shipperName', A14: 'consignee', D15: 'remark', B31: 'crd', B39: 'incoterms', A39: 'orderNos@line',
@@ -1478,6 +1478,22 @@
           ln = ln.trim(); if (ln) spRows.push(ln);
         });
         return { __lines: spRows };
+      }
+      if (spec === 'nameBiQtyDims@line') {
+        // v1.9.7 HARVEST 反馈：品名列需含中文品名+数量+尺寸（原 nameDesc@line 只有英文+HS）
+        var _qd = [];
+        (items || []).forEach(function (it) {
+          var cn = String((it._nameCn != null && it._nameCn !== '') ? it._nameCn : (it.nameCn || '')).trim();
+          var en = String((it._name != null && it._name !== '') ? it._name : (it.nameEn || '')).trim();
+          var qty = String(it.qty != null && it.qty !== '' ? it.qty : '').trim();
+          var dm = String(it.dims || '').trim();
+          var seg = (cn + ' ' + en).trim();
+          if (qty) seg += ' 数量:' + qty;
+          if (dm) seg += ' 尺寸:' + dm;
+          if (String(it.hsCode || '').trim()) seg += ' HS:' + String(it.hsCode).trim();
+          if (seg.trim() && _qd.indexOf(seg) < 0) _qd.push(seg.trim());
+        });
+        return { __lines: _qd };
       }
       if (spec === 'nameDesc@line') {
         // 纯净品名 + 空格 + HS（Harvest 等模板的「品名 HS」同格习惯），按 items 顺序配对去重
