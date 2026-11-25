@@ -1091,6 +1091,7 @@
       J26: 'boxCountNum', J28: 'gwNum', J30: 'volumeNum'
     } },
     { name: 'FORTUNES', mode: 'air',
+      extraFields: [{ key: 'docsAttach', label: '随附单证（可多选）', type: 'multi', options: ['DOCUMENTS CHECKLIST', 'COMMERCIAL INVOICE', 'DECLARATION ELEMENTS', 'POWER OF ATTORNEY', 'MSDS'] }],
       /* v1.6.87：基于物流商原始模板（0464_BOOKING 托书模板.xlsx，2026-11-09）黄色必填区（FFFF00 23 格）全量校准。
        * v1.7.1：修正三处通用标签扫描溢出（F7「提货/拖车」标题 / K8 空白格 / I15「货好时间 CRD」标签被收货人地址与 POD 误写）；
        *   pickupTrucking 写入目标 F8→K8（保留 F8 物流商 5 行填空模板原样）；
@@ -1112,7 +1113,8 @@
         A20: 'marks', I16: 'crd',
         A4: 'shipper', A8: 'consignee', A12: 'notify', A16: 'pol', E16: 'pod',
         F4: 'customsTitle',
-        K8: 'pickupTrucking', F12: 'tradeChargeTxt', A18: 'blRequire', I18: 'specialCargo',
+        /* v1.9.4 反馈修复：提货信息原写 K8 孤立格（运营指出错位），改组装 F8 提货/拖车 5 行标签格 */
+        F8: 'fortunesPickupBlock', F12: 'tradeChargeTxt', A18: 'blRequire', I18: 'specialCargo',
         C20: 'boxCount', E20: 'nameBiHs', G20: 'gwNum', I20: 'volumeNum', A30: 'docsChecklistTxt'
       } },
     { name: 'CEVA', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }, { key: 'crd', label: '货好日期 CRD', type: 'date' }, { key: 'docsAttachCeva', label: '随附单证（可多选）', type: 'multi', options: ['箱单', '发票', '产地证', '出口许可证', '进口许可证', '危险品声明', '其他'] }], cells: {
@@ -1383,6 +1385,31 @@
       if (spec === 'entrustCustoms') return String(data.entrustCustoms || '委托报关');
       if (spec === 'customsDocStatus') return String(data.customsDocStatus || '资料已齐');
       if (spec === 'pickupTrucking') return String(data.pickupTrucking || '');
+      // v1.9.4：FORTUNES F8 提货/拖车 5 行组装（标签+固定仓信息+委托状态；pickupTrucking 有值则替换地址段）
+      if (spec === 'fortunesPickupBlock') {
+        var _ep = String(data.entrustPickup || '否');
+        var _pt = String(data.pickupTrucking || '').trim();
+        var _base = '是否委托我们提货：' + _ep + String.fromCharCode(10) +
+          '提货/装货地址：' + String.fromCharCode(10) +
+          '联系人/电话：' + String.fromCharCode(10) +
+          '预计装货或送仓时间：' + String.fromCharCode(10) +
+          '装货车辆要求：';
+        var _rows = _base.split(String.fromCharCode(10));
+        var _defAddr = '东莞市厚街镇恒通路6号达科动力产业园3号楼6楼';
+        var _defContact = '赵华龙 13265062595';
+        var _defTime = '周一~周六 9:00-11:30 14:00-17:00';
+        if (_pt) {
+          _rows[1] = '提货/装货地址：' + (_pt.split('|')[0] || _defAddr);
+          _rows[2] = '联系人/电话：' + (_pt.split('|')[1] || _defContact);
+          _rows[3] = '预计装货或送仓时间：' + (_pt.split('|')[2] || _defTime);
+        } else {
+          // v1.9.4 拍板「提货信息固定」：无特殊要求时固定仓提货信息
+          _rows[1] = '提货/装货地址：' + _defAddr;
+          _rows[2] = '联系人/电话：' + _defContact;
+          _rows[3] = '预计装货或送仓时间：' + _defTime;
+        }
+        return _rows.join(String.fromCharCode(10));
+      }
       if (spec === 'entrustPickup') return String(data.entrustPickup || '');
       // v1.7.4：HARVEST 货物属性（此前 valOf 缺分支导致选中值从未写入模板）
       if (spec === 'cargoNature') return String(data.cargoNature || '');
