@@ -1033,7 +1033,7 @@
     { name: 'RXO', mode: 'air', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }, { key: 'flight', label: '航班号', type: 'text' }], cells: {
       A32: 'marks',
       A3: 'shipper', A10: 'consignee@lines', C33: 'boxCount', D33: 'nameEn@line', D41: 'nameCn@line',
-      F32: 'gw', G32: 'volume', B42: 'hsCode6', C41: 'crd'
+      B7: 'shipperTel', F32: 'gw', G32: 'volume', B42: 'hsCode6', C41: 'crd'
     } },
     { name: 'HARVEST', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }], cells: {
       A2: 'shipper@lines', A4: 'shipperTel', A10: 'consignee@lines',
@@ -1041,7 +1041,7 @@
       A30: 'orderNos@line:SO:', C30: 'boxCount', D30: 'gw', F30: 'nameBiQtyDims@line' /* v1.9.7 中文+数量+尺寸 */
     } },
     { name: 'UNITEX', mode: 'air', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }, { key: 'flight', label: '航班号', type: 'text' }], cells: {
-      A3: 'shipperName', A14: 'consignee', D15: 'remark', B31: 'crd', B39: 'incoterms', A39: 'orderNos@line',
+      A3: 'shipperName', A9: 'shipperTel', A14: 'consignee', D15: 'remark', B31: 'crd', B39: 'incoterms', A39: 'orderNos@line',
       C38: 'nameCn@line', D38: 'nameEn@line', E38: 'hsCode@line',
       F38: 'boxCount', G38: 'gwNum',
       /* v1.9.3 反馈修复：A38 唛头（以填写为准，原漏配导致唛头写错位覆盖原信息）+ H38 体积尺寸（未显示） */
@@ -1054,6 +1054,7 @@
       B23: 'marks', E32: 'crd',
       A3: 'shipper@lines', A10: 'consignee@lines',
       A22: 'pol', D22: 'pod', A26: 'orderNos@line:SO： ', C26: 'boxCount',
+      A33: 'totalCtns', /* v1.9.11 总数样张 2074pcs 烙死 → 动态件数 */
       D26: 'nameEn@join:/', D27: 'hs@join:/', I26: 'gwNum', K27: 'volumeNum', E31: 'incoterms'
     } },
     { name: 'CHARTERLINK', mode: 'sea', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }], cells: {
@@ -1135,6 +1136,7 @@
       D59: 'boxCountNum', F59: 'nameBi@line', J59: 'hsCode@line',
       K60: 'gwNum', N60: 'volumeNum',
       /* v1.9.6 反馈修复（C1-C8）：Notify 逐票、Booking Party=订仓人我司、含电池/海运费/本地费/报关方式标记、按票 PO#（J78，替换 K78 样张） */
+      H26: 'shipperTel', /* v1.9.11 电话动态化 */
       B39: 'notifyName', B40: 'notifyAddr',
       B11: 'shipperName', B12: 'shipperAddr', F15: 'shipperTel',
       L24: 'electrifiedMark', L28: 'freightTerms', L30: 'freightTerms', L33: 'entrustCustoms',
@@ -1257,6 +1259,10 @@
       if (spec === 'notifyBlock') return String(data.notifyBlock || '');
       if (spec === 'consigneeBlock') return String(data.consigneeBlock || '');
       if (spec === 'volDimsSummary') return String(data.volDimsSummary || '');
+      if (spec === 'totalCtns') return String(data.totalCtns || '');
+      if (spec === 'totalGw') return String(data.totalGw || '');
+      if (spec === 'totalVolume') return String(data.totalVolume || '');
+      if (spec === 'totalCtnsLower') return String(data.totalCtnsLower || '');
       if (spec === 'tradeTerm') return String(data.tradeTerm || '');
       if (spec === 'podCode') return String(data.podCode || '');
       if (spec === 'magneticMark') return String(data.magneticMark || '');
