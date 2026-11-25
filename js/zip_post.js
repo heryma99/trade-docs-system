@@ -327,10 +327,10 @@
             'ctrlProp28.xml': function (d) { return String(d.docsAttach || '').indexOf('POWER OF ATTORNEY') >= 0; },
             'ctrlProp29.xml': function (d) { return String(d.docsAttach || '').indexOf('MSDS') >= 0; }
           },
-          // MANOR：v1.7.7 新增。prop8/9/10=提单类型（COL House 正本/Surrendered 电放/Seaway Bill）；
+          // RHENUS：v1.7.7 新增。prop8/9/10=提单类型（COL House 正本/Surrendered 电放/Seaway Bill）；
           //   prop2-7=装运方式条（LCL/CY-CY/CFS-CY/CY-CFS/CY-FO/CFS-CFS）；prop14-16=Port to Port、prop17=Door to Door；
           //   prop1 空白选项、prop11-13 船公司（JRC/Herma/Other-TBA）无系统字段 → 不映射。
-          MANOR: {
+          RHENUS: {
             'ctrlProp2.xml':  function (d) { return String(d.serviceMode || '') === 'LCL'; },
             'ctrlProp3.xml':  function (d) { return String(d.serviceMode || '') === 'CY - CY'; },
             'ctrlProp4.xml':  function (d) { return String(d.serviceMode || '') === 'CFS - CY'; },
