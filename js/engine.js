@@ -769,6 +769,7 @@
       podCode: (String(meta.pod || '').match(/\b[A-Z]{3}\b/) || [''])[0],
       volDimsSummary: (Math.round((totals.volume || 0) * 1000) / 1000) + 'CBM\n' + _dimLines.join('\n'),
       dimsSummary: _dimLines.join('\n'),
+      modsSo: meta.modsSo || '',
       poLine1: _poLines[0] || '', poLine2: _poLines[1] || '', poLine3: _poLines[2] || '',
       poLine4: _poLines[3] || '', poLine5: _poLines[4] || '', poLine6: _poLines[5] || '',
       poLine7: _poLines[6] || '', poLine8: _poLines[7] || '',
@@ -1081,12 +1082,13 @@
       A28: 'vessel', N71: 'etd',
       M36: 'gwNum', O36: 'volumeNum'
     } },
-    { name: 'ASOS', mode: 'sea', extraFields: [{ key: 'pickup', label: '提货时间', type: 'datetime-local' }, { key: 'cutoff', label: '截仓时间', type: 'datetime-local' }], cells: {
+    { name: 'ASOS', mode: 'sea', extraFields: [{ key: 'pickup', label: '提货时间', type: 'datetime-local' }, { key: 'cutoff', label: '截仓时间', type: 'datetime-local' }, { key: 'modsSo', label: '*MODS SO（ASOS 委托号，多票用 | 分隔，按订单顺序）', type: 'text' }], cells: {
       /* v1.7.8：多订单逐行展开（真实案例 BOOKING_1978183_1978182：orderNos@line 展开 SO 行后，
        *   兄弟字段只写首行且首行误用两单合计 totals，第二订单 1978182 行仅剩 SO 号）。
        *   A16/B16/E16/F16/G16 切到 perOrder/lines spec——单订单口径逐字节不变。 */
       B12: 'customsType', A16: 'pickup@lines', B16: 'cutoff@lines', F52: 'remark',
-      C16: 'orderNos@line', E16: 'boxCountNum@perOrder', F16: 'gwNum@perOrder', G16: 'volumeNum@perOrder'
+      /* v1.9.9 反馈：C16 *MODS SO 列应填 ASOS 委托号（完全替代 SO 显示；未填时回退系统 SO 号） */
+      C16: 'modsSo@line', E16: 'boxCountNum@perOrder', F16: 'gwNum@perOrder', G16: 'volumeNum@perOrder'
     } },
     { name: 'OVD', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }], cells: {
       B3: 'shipper', B9: 'consignee', B24: 'orderNos@cell:SO：', E25: 'nameEn@join:、',
@@ -1263,6 +1265,16 @@
       if (spec === 'hsSummary') return String(data.hsSummary || '');
       if (spec === 'dimsSummary') return String(data.dimsSummary || '');
       if (spec === 'freightTerms') return String(data.freightTerms || '');
+      if (spec === 'modsSo') return String(data.modsSo || '');
+      if (spec === 'modsSo@line') {
+        var _ms = String(data.modsSo || '').trim();
+        if (_ms) {
+          var _arr = _ms.split(/[|，,\n]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+          if (_arr.length) return { __lines: _arr };
+        }
+        var _fb = String(valOf('orderNos'));
+        return { __lines: _fb ? _fb.split(',').map(function (s) { return s.trim(); }).filter(Boolean) : [] };
+      }
       if (spec === 'commodityInline') return String(data.commodityInline || '');
       if (spec === 'brandShort') return String(data.brandShort || '');
       if (spec === 'electrifiedMark') return String(data.electrifiedMark || '');
