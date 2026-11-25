@@ -767,6 +767,8 @@
       totalCtns: (totals.boxCount || 0) + 'CTNS',
       totalCtnsLower: (totals.boxCount || 0) + 'ctns',
       podCode: (String(meta.pod || '').match(/\b[A-Z]{3}\b/) || [''])[0],
+      volDimsSummary: (Math.round((totals.volume || 0) * 1000) / 1000) + 'CBM\n' + _dimLines.join('\n'),
+      dimsSummary: _dimLines.join('\n'),
       poLine1: _poLines[0] || '', poLine2: _poLines[1] || '', poLine3: _poLines[2] || '',
       poLine4: _poLines[3] || '', poLine5: _poLines[4] || '', poLine6: _poLines[5] || '',
       poLine7: _poLines[6] || '', poLine8: _poLines[7] || '',
@@ -1040,7 +1042,9 @@
     { name: 'UNITEX', mode: 'air', extraFields: [{ key: 'crd', label: '货好日期 CRD', type: 'date' }, { key: 'flight', label: '航班号', type: 'text' }], cells: {
       A3: 'shipperName', A14: 'consignee', D15: 'remark', B31: 'crd', B39: 'incoterms', A39: 'orderNos@line',
       C38: 'nameCn@line', D38: 'nameEn@line', E38: 'hsCode@line',
-      F38: 'boxCount', G38: 'gwNum'
+      F38: 'boxCount', G38: 'gwNum',
+      /* v1.9.3 反馈修复：A38 唛头（以填写为准，原漏配导致唛头写错位覆盖原信息）+ H38 体积尺寸（未显示） */
+      A38: 'marks', H38: 'volDimsSummary'
     } },
     { name: 'RSD', mode: 'air', extraFields: [{ key: 'flight', label: '航班号', type: 'text' }], cells: {
       A3: 'shipper', A9: 'consignee', E23: 'flight', G23: 'remark', D27: 'nameDesc', H27: 'gwNum'
@@ -1133,7 +1137,8 @@
       A2: 'shipper', A8: 'consignee',
       A14: 'orderNos@cell:SO:', E15: 'boxCountNum',
       G14: 'nameCn@join: ', G15: 'nameEn@join: ', G16: 'hs@join: ',
-      H14: 'gwNum', N15: 'volumeNum'
+      H14: 'gwNum', N15: 'volumeNum',
+      M14: 'dimsSummary', M15: 'volumeNum' /* v1.9.3 反馈：尺寸/体积未显示（S3/S4） */
     } },
     // v1.6.83：存量校准 O1——KLN 与 KEAS 原版（Booking_SI_VGM Form）逐格差分 0 漂移（差分清单 2026-11-11），
     //   补 9 格字段入口；坐标均为合并区主格，静态勾选区（FCL/LCL、提单方式、币种、发票类型）一律不写。
@@ -1232,7 +1237,24 @@
       if (spec === 'volume') { var vv = Number(totals.volume) || 0; return vv > 0 ? _formNum(vv, 4) + 'cbm' : ''; }
       if (spec === 'hsCode') return hsSeq[0] || '';
       if (spec === 'hsCode6') { var h = String(hsSeq[0] || ''); return h ? h.slice(0, 6) : ''; }
-      if (spec === 'crd') return String(data.crd || ''); // 商单易暂无 CRD 字段 → ''（留白手填）
+      if (spec === 'crd') return String(data.crd || '');
+      // v1.9.3：v1.9.0 增量键全部补 valOf 分支（此前缺分支导致 preset 引用返回空——UNITEX H38 案例）
+      if (spec === 'notifyBlock') return String(data.notifyBlock || '');
+      if (spec === 'consigneeBlock') return String(data.consigneeBlock || '');
+      if (spec === 'volDimsSummary') return String(data.volDimsSummary || '');
+      if (spec === 'tradeTerm') return String(data.tradeTerm || '');
+      if (spec === 'podCode') return String(data.podCode || '');
+      if (spec === 'magneticMark') return String(data.magneticMark || '');
+      if (spec === 'nameCnSummary') return String(data.nameCnSummary || '');
+      if (spec === 'nameEnSummary') return String(data.nameEnSummary || '');
+      if (spec === 'hsSummary') return String(data.hsSummary || '');
+      if (spec === 'dimsSummary') return String(data.dimsSummary || '');
+      if (spec === 'commodityInline') return String(data.commodityInline || '');
+      if (spec === 'brandShort') return String(data.brandShort || '');
+      if (spec === 'electrifiedMark') return String(data.electrifiedMark || '');
+      if (spec === 'totalCtnsLower') return String(data.totalCtnsLower || '');
+      for (var _pi = 1; _pi <= 8; _pi++) { if (spec === 'poLine' + _pi) return String(data['poLine' + _pi] || ''); }
+      for (var _di = 1; _di <= 8; _di++) { if (spec === 'dimsLine' + _di) return String(data['dimsLine' + _di] || ''); } // 商单易暂无 CRD 字段 → ''（留白手填）
       if (spec === 'gwNum') { var g2 = Number(totals.gw) || 0; return g2 > 0 ? _formNum(g2, 2) : ''; }
       if (spec === 'incoterms') return String(data.incoterms || '');
       if (spec === 'orderNos@line') {
