@@ -1381,7 +1381,8 @@
       if (spec === 'consigneeAddr') { var cn3 = data.consignee || {}; return String(cn3.address || ''); }
       if (spec === 'shipperName') { var sp2 = data.shipper || {}; return String(sp2.name || ''); }
       if (spec === 'flight') return String(data.flight || '');
-      if (spec === 'marks') { var mk = data.shippingMarks || ''; return (mk === 'N/M') ? '' : String(mk); }
+      /* v1.9.7 凯迪拍板：唛头二选一——有唛头用唛头，无唛头（含 N/M）用委托号兜底 */
+      if (spec === 'marks') { var mk = String(data.shippingMarks || ''); if (mk === 'N/M' || !mk) mk = String(data.invoiceNo || ''); return mk; }
       if (spec === 'remark') return String(data.remark || '');
       if (spec === 'pickup') return String(data.pickup || '').replace('T', ' '); // datetime-local 值规范化
       if (spec === 'cutoff') return String(data.cutoff || '').replace('T', ' ');
