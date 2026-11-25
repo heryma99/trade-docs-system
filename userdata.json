@@ -2418,6 +2418,60 @@
      "labelMap": [],
      "fileBufBroken": true
     }
+   },
+   {
+    "id": "tpl_booking_awot",
+    "name": "AWOT-空运托书",
+    "kind": "booking",
+    "carrier": "AWOT",
+    "status": "active",
+    "isSeed": false,
+    "updatedAt": 1795574479006,
+    "createdAt": 1795574479006,
+    "filePath": "templates/tpl_booking_awot.xlsx",
+    "fileSize": 20059,
+    "fileName": "tpl_booking_awot.xlsx",
+    "mapping": {
+     "required": [],
+     "labelMap": [],
+     "fileBufBroken": true
+    }
+   },
+   {
+    "id": "tpl_booking_sanco",
+    "name": "SANCO-空运订舱委托书",
+    "kind": "booking",
+    "carrier": "SANCO",
+    "status": "active",
+    "isSeed": false,
+    "updatedAt": 1795574479006,
+    "createdAt": 1795574479006,
+    "filePath": "templates/tpl_booking_sanco.xlsx",
+    "fileSize": 25537,
+    "fileName": "tpl_booking_sanco.xlsx",
+    "mapping": {
+     "required": [],
+     "labelMap": [],
+     "fileBufBroken": true
+    }
+   },
+   {
+    "id": "tpl_booking_huana",
+    "name": "华纳-海运托书(SO FORM)",
+    "kind": "booking",
+    "carrier": "华纳物流",
+    "status": "active",
+    "isSeed": false,
+    "updatedAt": 1795574479006,
+    "createdAt": 1795574479006,
+    "filePath": "templates/tpl_booking_huana.xlsx",
+    "fileSize": 41586,
+    "fileName": "tpl_booking_huana.xlsx",
+    "mapping": {
+     "required": [],
+     "labelMap": [],
+     "fileBufBroken": true
+    }
    }
   ]
  }
