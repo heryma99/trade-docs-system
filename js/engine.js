@@ -719,6 +719,25 @@
     shipper = fillPartyDefaults(shipper);
     consignee = fillPartyDefaults(consignee);
     notify = notify ? fillPartyDefaults(notify) : { name: 'SAME AS CONSIGNEE', address: '' };
+    // v1.9.0 通用汇总/分布字段（纯增量键：下载填写类转自动填充的新货代模板使用；既有模板零影响）
+    var _sum = { cn: {}, en: {}, hs: {}, mag: false, dims: {} };
+    (items || []).forEach(function (it) {
+      var cn = String(it.nameCn || '').trim(); if (cn && !_sum.cn[cn]) _sum.cn[cn] = 1;
+      var en = String(it.nameEn || '').trim(); if (en && !_sum.en[en]) _sum.en[en] = 1;
+      var hs = String(it.hsCode || '').trim(); if (hs && !_sum.hs[hs]) _sum.hs[hs] = 1;
+      var ds = String(it.dims || '').trim(); if (ds && !_sum.dims[ds]) _sum.dims[ds] = 1;
+      if (String(it.magnetic || '') === '是' || /磁/.test(String(it.productNature || ''))) _sum.mag = true;
+    });
+    var _poLines = (orderList || []);
+    var _dimLines = Object.keys(_sum.dims);
+    var _pairs = [];
+    (items || []).forEach(function (it) {
+      var k = (String(it.nameCn || '').trim() + ' ' + String(it.nameEn || '').trim()).trim();
+      if (k && _pairs.indexOf(k) < 0) _pairs.push(k);
+    });
+    var _brand = ((items || [])[0] && items[0].brand) || '';
+    var _elec = '否';
+    (items || []).forEach(function (it) { if (String(it.electrified || '') === '是') _elec = '是'; });
     return {
       deferMissing: opts.deferMode ? _deferMissing : [],
       kind: opts.kind || 'invoice',
@@ -731,6 +750,29 @@
       pickup: meta.pickup || '',
       cutoff: meta.cutoff || '',
       soNo: meta.soNo || '',
+      tradeTerm: tradeTerm || '',
+      // v1.9.0 增量字段
+      nameCnSummary: Object.keys(_sum.cn).join('、'),
+      nameEnSummary: Object.keys(_sum.en).join('、'),
+      hsSummary: Object.keys(_sum.hs).join('、'),
+      magneticMark: _sum.mag ? '磁性' : '',
+      commodityInline: _pairs.join('、'),
+      brandShort: _brand,
+      electrifiedMark: _elec,
+      // v1.9.0 补齐：块字段与总量/代码键（docx 与 xlsx 模板共用）
+      consigneeBlock: [consignee.name, consignee.address].filter(Boolean).join('\n'),
+      notifyBlock: [notify.name, notify.address].filter(Boolean).join('\n'),
+      totalGw: Math.round((totals.gw || 0) * 100) / 100,
+      totalVolume: Math.round((totals.volume || 0) * 1000) / 1000,
+      totalCtns: (totals.boxCount || 0) + 'CTNS',
+      totalCtnsLower: (totals.boxCount || 0) + 'ctns',
+      podCode: (String(meta.pod || '').match(/\b[A-Z]{3}\b/) || [''])[0],
+      poLine1: _poLines[0] || '', poLine2: _poLines[1] || '', poLine3: _poLines[2] || '',
+      poLine4: _poLines[3] || '', poLine5: _poLines[4] || '', poLine6: _poLines[5] || '',
+      poLine7: _poLines[6] || '', poLine8: _poLines[7] || '',
+      dimsLine1: _dimLines[0] || '', dimsLine2: _dimLines[1] || '', dimsLine3: _dimLines[2] || '',
+      dimsLine4: _dimLines[3] || '', dimsLine5: _dimLines[4] || '', dimsLine6: _dimLines[5] || '',
+      dimsLine7: _dimLines[6] || '', dimsLine8: _dimLines[7] || '',
       placeOfReceipt: meta.placeOfReceipt || '',
       finalDest: meta.finalDest || '',
       entrustCustoms: meta.entrustCustoms || '',
