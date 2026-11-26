@@ -603,15 +603,19 @@
       if (!boxMode) {
         var pk = pkAgg[sku];
         var d = _dec(sku); // v1.6.44 大小写不敏感
+        /* v1.9.12 第三级重量兜底：主数据缺单件净重/毛重 → 飞书聚水潭商品资料镜像（window.TD.feishuWeightData，克已归一 kg） */
+        var _fw = (typeof window !== 'undefined' && window.TD && window.TD.feishuWeightData) ? window.TD.feishuWeightData[sku] : null;
+        var _fwNw = (_fw && _fw.nwKg > 0) ? _fw.nwKg : 0;
+        var _fwGw = (_fw && _fw.gwKg > 0) ? _fw.gwKg : 0;
         if (pk && pk.qty > 0) {
           // 装箱清单有该 SKU：优先用清单毛净重量；若清单无「毛重/净重」列（值为 0/空），回退到主数据（申报信息）重量，避免 G.W./N.W. 变 0
-          it.nw = pk.nw ? round(pk.nw * (it.qty / pk.qty), 3) : round((d.nw || 0) * it.qty, 3);
-          it.gw = pk.gw ? round(pk.gw * (it.qty / pk.qty), 3) : round((d.gw || 0) * it.qty, 3);
-          it._weightSource = (pk.gw || pk.nw) ? 'packing' : 'master';
+          it.nw = pk.nw ? round(pk.nw * (it.qty / pk.qty), 3) : round((d.nw || _fwNw || 0) * it.qty, 3);
+          it.gw = pk.gw ? round(pk.gw * (it.qty / pk.qty), 3) : round((d.gw || _fwGw || 0) * it.qty, 3);
+          it._weightSource = (pk.gw || pk.nw) ? 'packing' : (d.nw || d.gw ? 'master' : (_fwNw || _fwGw ? 'feishu' : 'none'));
         } else {
-          it.nw = round((d.nw || 0) * it.qty, 3);
-          it.gw = round((d.gw || 0) * it.qty, 3);
-          it._weightSource = d.nw ? 'master' : 'none';
+          it.nw = round((d.nw || _fwNw || 0) * it.qty, 3);
+          it.gw = round((d.gw || _fwGw || 0) * it.qty, 3);
+          it._weightSource = (d.nw || d.gw) ? 'master' : ((_fwNw || _fwGw) ? 'feishu' : 'none');
         }
         if (ba) {
           it.boxCount = ba.count; it.ctns = ba.count;
